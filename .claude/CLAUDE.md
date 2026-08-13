@@ -11,10 +11,13 @@ conda activate yolov8
 # 安装依赖（如未安装）
 pip install flask opencv-python numpy pandas scipy matplotlib ultralytics filterpy scikit-learn openai
 
+# 配置 API Key（可选，用于 AI 问答）
+# 编辑 .env 文件，填入 MIMO_API_KEY
+
 # 启动
 cd pendulum_web
 python app.py
-# 或双击 启动服务器.bat（自动激活 yolov8 环境 + MIMO API 环境变量）
+# 或双击 启动服务器.bat（自动读取 .env 配置）
 ```
 
 服务运行在 `http://127.0.0.1:5000`，支持局域网访问。
@@ -24,7 +27,8 @@ python app.py
 ```
 pendulum_web/
 ├── app.py                          # Flask 主入口，路由 + SSE 流式处理 + AI 问答
-├── 启动服务器.bat                   # Windows 启动脚本（含 MIMO API 环境变量）
+├── .env                            # API 配置文件（不会上传到 GitHub）
+├── 启动服务器.bat                   # Windows 启动脚本（自动读取 .env）
 ├── 停止服务器.bat                   # 停止服务
 ├── processors/
 │   ├── __init__.py                 # 导出 process_danbai / process_cizuni / process_niubai
@@ -45,7 +49,7 @@ pendulum_web/
 
 ## 前端架构
 
-单页 HTML，6 种主题（dark/ocean/sunset/forest/amethyst/light），顶部模式切换：**🔬 数据分析** / **📚 阻尼实验教学**。
+单页 HTML：6 种主题（dark/ocean/sunset/forest/amethyst/light），顶部模式切换：**数据分析** / **阻尼实验教学**。
 
 ### 数据分析模式
 
@@ -63,8 +67,7 @@ pendulum_web/
 ### 前端公式渲染系统
 
 共享函数（在 `index.html` 中）：
-
-- `unicodeToLatex(text)` — Unicode 数学符号（√ θ ω β ζ ₀₁₂₃ 等）转 LaTeX 命令
+- `unicodeToLatex(text)` — Unicode 数学符号（≈ π ω β θ ∝ 等）转 LaTeX 命令
 - `wrapBareLatex(text)` — 裸 LaTeX 命令自动包裹 `$...$`（调用 unicodeToLatex）
 - `renderKaTeXinHTML(html)` — HTML 字符串中的 `$...$` / `$$...$$` 渲染为 KaTeX
 - `convertNoteToLatex(text)` — 理论笔记专用，转 LaTeX 并包裹
@@ -76,7 +79,7 @@ AI 聊天中：先解码 `&lt;` `&gt;`，再 Unicode→LaTeX，再包裹裸命�
 
 使用 `openai` Python 包调用 mimo v2.5（兼容 OpenAI API 格式）。
 
-环境变量（已配置在 `启动服务器.bat`）：
+配置方式（存储在 `.env` 文件中，不会上传到 GitHub）：
 - `MIMO_API_KEY` — API 密钥
 - `MIMO_BASE_URL` — `https://token-plan-cn.xiaomimimo.com/v1`
 - `MIMO_MODEL` — `mimo-v2.5`
@@ -85,9 +88,26 @@ System prompt 要求 AI 用 Markdown 格式回答，公式用 `$...$` / `$$...$$
 
 ## 三种摆的处理流程
 
-1. **单摆** (`danbai`) — 3 点标定（悬挂点 + 竖直参考），Savitzky-Golay 滤波 → 零交叉检测 → 等角度重采样 → 周期拟合
-2. **磁阻尼摆** (`cizuni`) — 3 点标定（2 竖直参考 + 转轴），高斯平滑 → 角度计算 → 支持欠阻尼/临界阻尼/过阻尼
-3. **扭摆** (`niubai`) — 5 点标定（原点 + XY 轴 + 标尺参考），卡尔曼滤波（RTS 平滑）→ 角度提取
+1. **单摆** (danbai_processor.py)
+   - YOLO 逐帧检测（`conf=0.25, iou=0.45, imgsz=1280`），最近邻跟踪避免目标跳变
+   - 角度计算 → 在线平滑 → 提前停止 → Savitzky-Golay 滤波
+   - 零偏校正 → 零交叉检测 → 等角度重采样 → 包络提取
+   - 输出 CSV + PNG
+
+2. **磁阻尼摆** (cizuni_processor.py)
+   - YOLO 逐帧检测，`sample_step` 降采样（保证 ≥80 数据点）
+   - 角度计算（支持 flip）→ 高斯平滑（σ=0.8）
+   - 输出双面板图，支持中文字体回退
+   - 内部每次重新创建 YOLO 模型（避免 CUDA 上下文冲突）
+
+3. **扭摆** (niubai_processor.py)
+   - 像素坐标 → 物理坐标（米）→ 角度计算（atan2 + 相位展开）
+   - 卡尔曼滤波（前向 + RTS 后向平滑，`q=1.0, r=0.1`）
+   - 零基线 → 周期提取 → 提前停止
+   - 输出 CSV + 双面板图
+
+4. **符号回归** (symbolic_regression.py)
+   - 纯 scipy。三种阻尼拟合 + ODE 验证 + 物理项库拟合
 
 ## 交互模拟参数
 
@@ -95,7 +115,7 @@ System prompt 要求 AI 用 Markdown 格式回答，公式用 `$...$` / `$$...$$
 - 固有频率 ω₀：0.5 ~ 20 rad/s
 - 初始角度 θ₀：0 ~ 20°
 - 画布固定比例尺：±25°
-- 三种阻尼类型自动切换（ζ < 1 欠阻尼 / ζ ≈ 1 临界阻尼 / ζ > 1 过阻尼）
+- 三种阻尼类型自动切换（ζ < 1 欠阻尼 / ζ = 1 临界阻尼 / ζ > 1 过阻尼）
 
 ## API 端点
 
@@ -130,7 +150,7 @@ YOLOv8 模型按优先级查找：本地路径 → 项目 `models/` 目录。
 
 ### cizuni_processor.py — 磁阻尼摆
 
-1. YOLO 逐帧检测，`sample_step` 降采样（保证 ≥180 数据点）
+1. YOLO 逐帧检测，`sample_step` 降采样（保证 ≥80 数据点）
 2. 角度计算（支持 flip）→ 高斯平滑（σ=0.8）
 3. 输出双面板图，支持中文字体回退
 4. 内部每次重新创建 YOLO 模型（避免 CUDA 上下文冲突）
@@ -160,9 +180,10 @@ YOLOv8 模型按优先级查找：本地路径 → 项目 `models/` 目录。
 
 ## Git 自动提交与推送规则
 
-本项目由 agent 维护，**每完成一个有意义的最小改动单元后，必须自动 commit 并 push 到 GitHub**，保持远程与本地同步。
+本项目由 agent 维护：**每完成一个有意义的最小改动单元后，必须自动 commit 并 push 到 GitHub**，保持远程与本地同步。
 
 ### 执行命令
+
 ```bash
 git add -A
 git commit -m "简洁描述改动内容"
@@ -170,20 +191,25 @@ git push
 ```
 
 ### commit message 规范
+
 - 用中文写明改了什么
 - 不超过 30 个字
-- 示例："补充依赖与模型权重"、"修复上传类型校验"
+- 示例：补充依赖与模型权重、修复上传类型校验
 
 ### 提交时机
+
 - 完成一个完整的功能/修复/文档改动后提交一次，**不要每保存一次就提交**
 - 攒够一个「有意义的最小改动单元」（一个功能、一个 bug 修复、一段文档）再提交
 - commit 后紧跟 push，保持 GitHub 同步
 
 ### 禁止提交的内容（提交前务必检查）
-- API key、token、密码等任何敏感凭据
+
+- API key、token、密码等任何敏感凭证
 - `uploads/`、`__pycache__/`、`*.pyc`、`server.pid`、`.env`（已在 .gitignore 忽略）
 - 本地调试用的临时文件
 
 ### push 凭据
+
 - 远程地址：`https://github.com/qiaoyuzheng0804-create/pendulum_web.git`
-- 凭据通过 git credential helper 提供，**严禁把 token 写进任何会提交到 git 的文件**
+- 凭据通过 git credential helper 提供
+- **严禁把 token 写进任何会提交到 git 的文件**

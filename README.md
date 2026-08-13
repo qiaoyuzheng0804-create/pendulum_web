@@ -1,13 +1,13 @@
 # Pendulum Motion Analysis Web App
 
-Flask + YOLOv8 实验视频分析平台。上传摆的实验视频，自动追踪摆球轨迹、拟合运动方程、输出阻尼参数和周期。内置阻尼实验教学模块（理论、实验指导、交互模拟、AI 问答）。
+Flask + YOLOv8 实验视频分析平台。上传摆的实验视频，自动追踪摆球轨迹、拟合运动方程、输出阻尼参数和周期。内含阻尼实验教学模块（理论、实验指导、交互模拟、AI 问答）。
 
 ## 功能特性
 
 - **三种摆的实验分析**
-  - 单摆（danbai）：3 点标定 + Savitzky-Golay 滤波 + 零交叉检测 + 周期拟合
-  - 磁阻尼摆（cizuni）：高斯平滑 + 角度计算，支持欠阻尼 / 临界阻尼 / 过阻尼
-  - 扭摆（niubai）：卡尔曼滤波（RTS 平滑）+ 角度提取
+  - 单摆 (danbai)：3 点标定 + Savitzky-Golay 滤波 + 零交叉检测 + 周期拟合
+  - 磁阻尼摆 (cizuni)：高斯平滑 + 角度计算，支持欠阻尼 / 临界阻尼 / 过阻尼
+  - 扭摆 (niubai)：卡尔曼滤波（RTS 平滑）+ 角度提取
 - **阻尼实验教学模块**
   - 理论知识：阻尼分类、微分方程、参数物理意义
   - 实验指导：器材清单、拍摄要点、标定说明、FAQ
@@ -17,10 +17,10 @@ Flask + YOLOv8 实验视频分析平台。上传摆的实验视频，自动追�
 
 ## 技术栈
 
-- 后端：Flask + YOLOv8（ultralytics）
-- 视频 / 数值：OpenCV、NumPy、SciPy、pandas、Matplotlib
-- 滤波：Savitzky-Golay、高斯、卡尔曼（filterpy）
-- 拟合：符号回归（纯 SciPy）+ 参数拟合
+- 后端：Flask + YOLOv8 (ultralytics)
+- 视频 / 数值：OpenCV、NumPy、SciPy、pandas、matplotlib
+- 滤波：Savitzky-Golay、高斯、卡尔曼 (filterpy)
+- 拟合：符号回归 (纯 SciPy) 参数拟合
 - 前端：原生 HTML / JS + marked.js + KaTeX
 - AI：OpenAI 兼容 API
 
@@ -40,21 +40,23 @@ pip install -r requirements.txt
 
 | 实验 | 模型文件 |
 |------|---------|
-| 单摆（danbai） | `models/danbai_best.pt` |
-| 磁阻尼摆（cizuni） | `models/cizuni_best.pt` |
-| 扭摆（niubai） | `models/niubai_best.pt` |
+| 单摆 (danbai) | `models/danbai_best.pt` |
+| 磁阻尼摆 (cizuni) | `models/cizuni_best.pt` |
+| 扭摆 (niubai) | `models/niubai_best.pt` |
 
 `app.py` 启动时会优先使用本地训练路径，找不到则回退到 `models/` 目录。若要换成自己训练的权重，直接替换对应 `.pt` 文件即可。
 
 ### 3. 配置 AI 问答（可选）
 
-设置环境变量：
+编辑项目根目录的 `.env` 文件，填入你的 API Key：
 
-- `MIMO_API_KEY` — API 密钥
-- `MIMO_BASE_URL` — 默认 `https://token-plan-cn.xiaomimimo.com/v1`
-- `MIMO_MODEL` — 默认 `mimo-v2.5`
+```env
+MIMO_API_KEY=your_api_key_here
+MIMO_BASE_URL=https://token-plan-cn.xiaomimimo.com/v1
+MIMO_MODEL=mimo-v2.5
+```
 
-Windows 下可在 `启动服务器.bat` 的 `set MIMO_API_KEY=` 后填入你的 key。
+> **安全提示**：`.env` 文件已在 `.gitignore` 中排除，不会被上传到 GitHub。
 
 ### 4. 启动
 
@@ -70,8 +72,9 @@ python app.py
 ```
 pendulum_web/
 ├── app.py                  # Flask 主入口：路由 + SSE 流式处理 + AI 问答
+├── .env                    # API 配置文件（不会上传到 GitHub）
 ├── requirements.txt        # Python 依赖清单
-├── 启动服务器.bat           # Windows 启动脚本
+├── 启动服务器.bat           # Windows 启动脚本（自动读取 .env）
 ├── 停止服务器.bat           # 停止服务
 ├── models/                 # YOLOv8 权重（三种摆各一个 .pt）
 ├── processors/
@@ -110,7 +113,8 @@ pendulum_web/
 - Session 30 分钟自动清理
 - 处理结果有缓存（视频 MD5 + 参数 hash）
 
-## 安全性说明
+## 安全说明
 
 - 文件上传：仅接受 `.mp4/.avi/.mov/.mkv/.webm/.m4v` 视频格式，单文件上限 1 GB（超出返回 413）
+- API 密钥：存储在 `.env` 文件中，已通过 `.gitignore` 排除，不会上传到 GitHub
 - 生产部署：本项目默认用 Flask 内置服务器（`debug=False`），仅适合局域网/教学使用；若部署到公网，建议用 Gunicorn + Nginx 反向代理，并启用 HTTPS

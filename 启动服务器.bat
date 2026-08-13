@@ -8,17 +8,21 @@ if exist server.pid (
     del server.pid >nul 2>&1
 )
 
+:: Load environment variables from .env file
+if exist .env (
+    for /f "usebackq tokens=1,* delims==" %%a in (".env") do (
+        set "%%a=%%b"
+    )
+)
+
 :: Start server with yolov8 conda environment
 set PYTHON=D:\anaconda\envs\yolov8\python.exe
 
-:: MIMO AI API - set your own key below (do NOT commit the real key to Git)
-set MIMO_API_KEY=
+:: Check if API key is configured
 if "%MIMO_API_KEY%"=="" (
-    echo [WARN] MIMO_API_KEY not set. AI Q&A feature will be disabled.
-    echo        Edit this file and put your key after "set MIMO_API_KEY=".
+    echo [WARN] MIMO_API_KEY not set. AI Q^&A feature will be disabled.
+    echo        Edit .env file and set your API key.
 )
-set MIMO_BASE_URL=https://token-plan-cn.xiaomimimo.com/v1
-set MIMO_MODEL=mimo-v2.5
 
 start "" /min "%PYTHON%" app.py
 
