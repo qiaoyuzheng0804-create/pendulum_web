@@ -150,10 +150,40 @@ YOLOv8 模型按优先级查找：本地路径 → 项目 `models/` 目录。
 
 - 服务器启动时预加载 YOLO 模型，首次启动较慢
 - `_process_lock` 确保同一时刻只有一个 YOLO 处理任务
-- Session 30 分钟自动清理，超过 4 GB 被 Flask 拒绝
+- Session 30 分钟自动清理，超过 1 GB 被 Flask 拒绝
 - 处理结果有缓存（视频 MD5 + 参数 hash）
 - `KMP_DUPLICATE_LIB_OK=TRUE` 解决 PyTorch 与 OpenCV 冲突
 - 扭摆依赖 `filterpy`，AI 问答依赖 `openai`
 - 新增实验：在 `teaching/` 添加 JSON 文件，在 `app.py` 的 `allowed` 集合注册
 - 前端输出目录由用户指定，需确保可写
 - 所有处理器 CSV 格式：`time_s, angle_deg`（前两列）
+
+## Git 自动提交与推送规则
+
+本项目由 agent 维护，**每完成一个有意义的最小改动单元后，必须自动 commit 并 push 到 GitHub**，保持远程与本地同步。
+
+### 执行命令
+```bash
+git add -A
+git commit -m "简洁描述改动内容"
+git push
+```
+
+### commit message 规范
+- 用中文写明改了什么
+- 不超过 30 个字
+- 示例："补充依赖与模型权重"、"修复上传类型校验"
+
+### 提交时机
+- 完成一个完整的功能/修复/文档改动后提交一次，**不要每保存一次就提交**
+- 攒够一个「有意义的最小改动单元」（一个功能、一个 bug 修复、一段文档）再提交
+- commit 后紧跟 push，保持 GitHub 同步
+
+### 禁止提交的内容（提交前务必检查）
+- API key、token、密码等任何敏感凭据
+- `uploads/`、`__pycache__/`、`*.pyc`、`server.pid`、`.env`（已在 .gitignore 忽略）
+- 本地调试用的临时文件
+
+### push 凭据
+- 远程地址：`https://github.com/qiaoyuzheng0804-create/pendulum_web.git`
+- 凭据通过 git credential helper 提供，**严禁把 token 写进任何会提交到 git 的文件**
