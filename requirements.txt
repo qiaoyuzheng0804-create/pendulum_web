@@ -1,0 +1,23 @@
+# Web framework
+flask
+
+# Computer vision / video
+opencv-python
+ultralytics
+
+# Numerical & data processing
+numpy
+pandas
+scipy
+
+# Plotting
+matplotlib
+
+# Filters (torsional pendulum Kalman filter)
+filterpy
+
+# Symbolic regression / fitting
+scikit-learn
+
+# AI Q&A (OpenAI-compatible client)
+openai

@@ -39,12 +39,15 @@ from processors.symbolic_regression import (
 
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
-app.config["MAX_CONTENT_LENGTH"] = 4 * 1024 * 1024 * 1024  # 4 GB
+app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024 * 1024  # 1 GB
 
 # ---------- Paths ----------
 BASE_DIR = Path(os.path.dirname(os.path.abspath(__file__)))
 UPLOAD_FOLDER = BASE_DIR / "uploads"
 UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
+
+# 上传文件扩展名白名单（同时防任意文件类型与路径穿越）
+ALLOWED_VIDEO_EXTS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v"}
 
 # ---------- Model paths ----------
 _LOCAL_PATHS = {
@@ -74,7 +77,7 @@ MIMO_API_KEY = os.environ.get("MIMO_API_KEY", "")
 MIMO_BASE_URL = os.environ.get("MIMO_BASE_URL", "https://api.xiaomimimo.com/v1")
 MIMO_MODEL = os.environ.get("MIMO_MODEL", "mimo-v2.5")
 
-MIMO_SYSTEM_PROMPT = """你是一位物理实验教学助手，专注于阻尼振动实验教学。你的知识范围包括：
+MIMO_SYSTEM_PROMPT = r"""你是一位物理实验教学助手，专注于阻尼振动实验教学。你的知识范围包括：
 1. 阻尼振动的物理原理和数学推导（微分方程、解析解、参数物理意义）
 2. 单摆、磁阻尼摆、扭摆等实验的操作指导和数据分析
 3. 振动、阻尼、周期、频率、阻尼比等相关物理概念
@@ -241,7 +244,7 @@ def get_calibration_spec(motion_type):
 
 @app.errorhandler(413)
 def too_large(e):
-    return jsonify({"error": "文件过大，最大支持 4 GB。"}), 413
+    return jsonify({"error": "文件过大，最大支持 1 GB。"}), 413
 
 
 @app.route("/api/upload_video", methods=["POST"])
@@ -259,7 +262,9 @@ def upload_video():
         return jsonify({"error": f"Invalid motion type: {motion_type}"}), 400
 
     session_id = str(uuid.uuid4())
-    ext = os.path.splitext(file.filename)[1] or ".mp4"
+    ext = os.path.splitext(file.filename)[1].lower() or ".mp4"
+    if ext not in ALLOWED_VIDEO_EXTS:
+        return jsonify({"error": f"不支持的文件类型：{ext}。请上传常见视频格式（.mp4/.avi/.mov/.mkv/.webm/.m4v）。"}), 400
     video_path = str(UPLOAD_FOLDER / f"{session_id}{ext}")
     file.save(video_path)
 

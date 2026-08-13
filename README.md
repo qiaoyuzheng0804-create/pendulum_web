@@ -31,12 +31,20 @@ Flask + YOLOv8 实验视频分析平台。上传摆的实验视频，自动追�
 ```bash
 conda create -n yolov8 python=3.8 -y
 conda activate yolov8
-pip install flask opencv-python numpy pandas scipy matplotlib ultralytics filterpy scikit-learn openai
+pip install -r requirements.txt
 ```
 
 ### 2. 配置模型
 
-将 YOLOv8 权重文件（`.pt`）放入项目 `models/` 目录，或在 `app.py` 中配置本地模型路径。三种摆各需要一个检测模型（权重文件默认不随仓库分发）。
+三种摆的 YOLOv8 权重已随仓库提供，位于 `models/` 目录：
+
+| 实验 | 模型文件 |
+|------|---------|
+| 单摆（danbai） | `models/danbai_best.pt` |
+| 磁阻尼摆（cizuni） | `models/cizuni_best.pt` |
+| 扭摆（niubai） | `models/niubai_best.pt` |
+
+`app.py` 启动时会优先使用本地训练路径，找不到则回退到 `models/` 目录。若要换成自己训练的权重，直接替换对应 `.pt` 文件即可。
 
 ### 3. 配置 AI 问答（可选）
 
@@ -62,8 +70,10 @@ python app.py
 ```
 pendulum_web/
 ├── app.py                  # Flask 主入口：路由 + SSE 流式处理 + AI 问答
+├── requirements.txt        # Python 依赖清单
 ├── 启动服务器.bat           # Windows 启动脚本
 ├── 停止服务器.bat           # 停止服务
+├── models/                 # YOLOv8 权重（三种摆各一个 .pt）
 ├── processors/
 │   ├── __init__.py
 │   ├── danbai_processor.py     # 单摆处理
@@ -97,5 +107,10 @@ pendulum_web/
 
 - 服务器启动时预加载 YOLO 模型，首次启动较慢
 - 同一时刻仅运行一个 YOLO 处理任务（`_process_lock`）
-- Session 30 分钟自动清理，上传超过 4 GB 被拒绝
+- Session 30 分钟自动清理
 - 处理结果有缓存（视频 MD5 + 参数 hash）
+
+## 安全性说明
+
+- 文件上传：仅接受 `.mp4/.avi/.mov/.mkv/.webm/.m4v` 视频格式，单文件上限 1 GB（超出返回 413）
+- 生产部署：本项目默认用 Flask 内置服务器（`debug=False`），仅适合局域网/教学使用；若部署到公网，建议用 Gunicorn + Nginx 反向代理，并启用 HTTPS

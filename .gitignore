@@ -3,6 +3,7 @@ __pycache__/
 uploads/
 server.pid
 *.pt
+!models/*.pt
 .env
 .claude/settings.local.json
 .claude/conversation_log.md
