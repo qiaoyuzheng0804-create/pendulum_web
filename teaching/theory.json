@@ -1,0 +1,127 @@
+{
+  "title": "阻尼振动理论",
+  "sections": [
+    {
+      "heading": "什么是阻尼振动？",
+      "heading_en": "What is Damped Oscillation?",
+      "content": "当振动系统受到阻力（阻尼力）作用时，振动能量逐渐耗散，振幅随时间衰减，这种运动称为**阻尼振动**。阻尼力通常与速度成正比（粘滞阻尼）或与速度平方成正比（湍流阻尼）。",
+      "formula": "F_{\\text{damping}} = -b \\cdot v",
+      "note": "其中 b 为阻尼系数，v 为速度。负号表示阻尼力方向与运动方向相反。"
+    },
+    {
+      "heading": "阻尼振动微分方程",
+      "heading_en": "Equation of Motion",
+      "content": "对于一个具有恢复力和阻尼力的振动系统，由牛顿第二定律可得二阶常微分方程：",
+      "formula": "m \\ddot{\\theta} + b \\dot{\\theta} + k \\theta = 0",
+      "formula_display": "\\ddot{\\theta} + 2\\beta \\dot{\\theta} + \\omega_0^2 \\theta = 0",
+      "note": "其中：\n• ω₀ = √(k/m) 为固有角频率\n• β = b/(2m) 为阻尼系数\n• ζ = β/ω₀ 为阻尼比（无量纲）"
+    },
+    {
+      "heading": "三种阻尼类型",
+      "heading_en": "Three Types of Damping",
+      "content": "根据阻尼比 ζ 的大小，阻尼振动分为三种情况：",
+      "subsections": [
+        {
+          "title": "欠阻尼 (Underdamped) — ζ < 1",
+          "description": "系统仍做振荡运动，但振幅按指数规律衰减。这是最常见的实验情况。",
+          "solution": "\\theta(t) = \\theta_0 e^{-\\beta t} \\cos(\\omega_d t + \\varphi)",
+          "note": "ω_d = ω₀√(1−ζ²) 为阻尼振荡频率，低于固有频率 ω₀"
+        },
+        {
+          "title": "临界阻尼 (Critically Damped) — ζ = 1",
+          "description": "系统以最快速度回到平衡位置，不再振荡。是欠阻尼到过阻尼的分界点。",
+          "solution": "\\theta(t) = (A + Bt) e^{-\\omega_0 t}",
+          "note": "实际实验中很难精确达到 ζ=1，通常需要调节阻尼参数"
+        },
+        {
+          "title": "过阻尼 (Overdamped) — ζ > 1",
+          "description": "系统缓慢回到平衡位置，不发生振荡。阻尼力过大导致运动迟缓。",
+          "solution": "\\theta(t) = C_1 e^{-\\lambda_1 t} + C_2 e^{-\\lambda_2 t}",
+          "note": "λ₁,₂ = ω₀(ζ ∓ √(ζ²−1))，两个衰减常数均为正"
+        }
+      ]
+    },
+    {
+      "heading": "关键物理量",
+      "heading_en": "Key Physical Quantities",
+      "parameters": [
+        {
+          "symbol": "\\omega_0",
+          "name": "固有角频率",
+          "name_en": "Natural Angular Frequency",
+          "unit": "rad/s",
+          "meaning": "无阻尼时系统的振荡频率，由系统本身性质（质量、弹性系数等）决定",
+          "formula": "\\omega_0 = \\sqrt{\\frac{k}{m}}"
+        },
+        {
+          "symbol": "\\beta",
+          "name": "阻尼系数",
+          "name_en": "Damping Coefficient",
+          "unit": "s⁻¹",
+          "meaning": "描述阻尼强弱的物理量，β 越大振幅衰减越快",
+          "formula": "\\beta = \\frac{b}{2m}"
+        },
+        {
+          "symbol": "\\zeta",
+          "name": "阻尼比",
+          "name_en": "Damping Ratio",
+          "unit": "无量纲",
+          "meaning": "阻尼系数与固有频率之比，决定阻尼类型",
+          "formula": "\\zeta = \\frac{\\beta}{\\omega_0}"
+        },
+        {
+          "symbol": "\\omega_d",
+          "name": "阻尼振荡频率",
+          "name_en": "Damped Oscillation Frequency",
+          "unit": "rad/s",
+          "meaning": "欠阻尼时实际振荡的频率，低于固有频率",
+          "formula": "\\omega_d = \\omega_0 \\sqrt{1 - \\zeta^2}"
+        },
+        {
+          "symbol": "T",
+          "name": "周期",
+          "name_en": "Period",
+          "unit": "s",
+          "meaning": "完成一次全振动所需的时间",
+          "formula": "T = \\frac{2\\pi}{\\omega_d}"
+        },
+        {
+          "symbol": "Q",
+          "name": "品质因数",
+          "name_en": "Quality Factor",
+          "unit": "无量纲",
+          "meaning": "描述系统储能与耗能之比，Q 值越高阻尼越小",
+          "formula": "Q = \\frac{\\omega_0}{2\\beta} = \\frac{1}{2\\zeta}"
+        }
+      ]
+    },
+    {
+      "heading": "能量衰减",
+      "heading_en": "Energy Decay",
+      "content": "阻尼振动中，系统的机械能随时间按指数规律衰减：",
+      "formula": "E(t) = E_0 e^{-2\\beta t}",
+      "note": "经过一个时间常数 τ = 1/(2β) 后，能量衰减到初始值的 1/e ≈ 36.8%。\n经过约 5 个时间常数后，能量基本耗尽。"
+    },
+    {
+      "heading": "三种实验的物理模型",
+      "heading_en": "Physical Models of Three Experiments",
+      "subsections": [
+        {
+          "title": "单摆 — 空气阻力阻尼",
+          "content": "单摆在空气中摆动时，受到空气粘滞阻力和悬点摩擦力的作用。阻尼力近似与速度成正比，属于欠阻尼振荡。通过分析振幅衰减曲线，可以提取阻尼系数 β。",
+          "typical_zeta": "0.001 ~ 0.01"
+        },
+        {
+          "title": "磁阻尼摆 — 涡流阻尼",
+          "content": "导体摆锤在磁场中运动时，导体内产生感应涡流，涡流与磁场相互作用产生阻尼力。阻尼强度可通过改变磁场强度（调节磁铁间距）来控制，可以实现欠阻尼、临界阻尼和过阻尼三种状态。",
+          "typical_zeta": "0.01 ~ 2.0（可调范围大）"
+        },
+        {
+          "title": "扭摆 — 扭转弹性 + 介质阻尼",
+          "content": "扭摆通过弹性丝的扭转提供恢复力矩，摆轮在空气中或液体中转动时受到阻尼。可更换不同阻尼介质（空气、水、油等）来研究不同阻尼条件下的运动特性。",
+          "typical_zeta": "0.01 ~ 0.5"
+        }
+      ]
+    }
+  ]
+}

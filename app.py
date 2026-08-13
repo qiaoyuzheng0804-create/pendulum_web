@@ -1,0 +1,602 @@
+"""
+Pendulum Motion Analysis Web App
+=================================
+Flask-based web application for YOLOv8 pendulum video analysis.
+Supports: simple pendulum, magnetic damping pendulum, torsional pendulum.
+"""
+
+# Fix OpenMP runtime conflict between PyTorch (ultralytics) and OpenCV on Windows.
+# Must be set BEFORE any imports that load these libraries.
+import os as _os
+_os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+
+import os
+import sys
+import json
+import uuid
+import base64
+import hashlib
+import threading
+import traceback
+import time as _time
+from pathlib import Path
+from functools import lru_cache
+
+import cv2
+import numpy as np
+from flask import Flask, render_template, request, jsonify, Response, stream_with_context, send_from_directory
+
+# Add project root to sys.path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from processors.danbai_processor import process_danbai
+from processors.cizuni_processor import process_cizuni
+from processors.niubai_processor import process_niubai
+from processors.symbolic_regression import (
+    run_sr_danbai, run_sr_ci_underdamped, run_sr_ci_critical,
+    run_sr_ci_overdamped, run_sr_niubai
+)
+
+app = Flask(__name__)
+app.config["TEMPLATES_AUTO_RELOAD"] = True
+app.config["MAX_CONTENT_LENGTH"] = 4 * 1024 * 1024 * 1024  # 4 GB
+
+# ---------- Paths ----------
+BASE_DIR = Path(os.path.dirname(os.path.abspath(__file__)))
+UPLOAD_FOLDER = BASE_DIR / "uploads"
+UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
+
+# ---------- Model paths ----------
+_LOCAL_PATHS = {
+    "danbai": r"C:\Users\MECHREV\Desktop\yolov8\runs\detect\small_ball_yolov8_safe2\weights\best.pt",
+    "cizuni": r"C:\Users\MECHREV\Desktop\yolov8\runs\detect\cizuni\weights\best.pt",
+    "niubai": r"C:\Users\MECHREV\Desktop\yolov8\runs\detect\niubai\weights\best.pt",
+}
+_DEPLOY_PATHS = {
+    "danbai": str(BASE_DIR / "models" / "danbai_best.pt"),
+    "cizuni": str(BASE_DIR / "models" / "cizuni_best.pt"),
+    "niubai": str(BASE_DIR / "models" / "niubai_best.pt"),
+}
+MODEL_PATHS = {}
+for k in ["danbai", "cizuni", "niubai"]:
+    MODEL_PATHS[k] = _LOCAL_PATHS[k] if os.path.exists(_LOCAL_PATHS[k]) else _DEPLOY_PATHS[k]
+
+# ---------- Validate model files at startup ----------
+_missing = [k for k, p in MODEL_PATHS.items() if not os.path.exists(p)]
+if _missing:
+    print(f"[WARNING] Model files not found: {_missing}", flush=True)
+    print(f"  Checked paths:", flush=True)
+    for k in _missing:
+        print(f"    {k}: {MODEL_PATHS[k]}", flush=True)
+
+# ---------- MIMO AI configuration ----------
+MIMO_API_KEY = os.environ.get("MIMO_API_KEY", "")
+MIMO_BASE_URL = os.environ.get("MIMO_BASE_URL", "https://api.xiaomimimo.com/v1")
+MIMO_MODEL = os.environ.get("MIMO_MODEL", "mimo-v2.5")
+
+MIMO_SYSTEM_PROMPT = """你是一位物理实验教学助手，专注于阻尼振动实验教学。你的知识范围包括：
+1. 阻尼振动的物理原理和数学推导（微分方程、解析解、参数物理意义）
+2. 单摆、磁阻尼摆、扭摆等实验的操作指导和数据分析
+3. 振动、阻尼、周期、频率、阻尼比等相关物理概念
+4. YOLOv8 视频分析在物理实验中的应用
+
+回答格式要求：
+- 使用 Markdown 格式，支持标题(###)、加粗(**)、列表(-)、代码块(```)等
+- 数学公式用 LaTeX 格式：行内公式用 $...$，独立公式用 $$...$$
+- 例如：阻尼比 $\zeta = \frac{\beta}{\omega_0}$，微分方程 $$\ddot{\theta} + 2\beta\dot{\theta} + \omega_0^2\theta = 0$$
+- 回答应严谨但友好，适合大学物理实验教学场景
+- 适当使用表格对比不同阻尼类型的特征"""
+
+# ---------- Teaching content ----------
+TEACHING_DIR = BASE_DIR / "teaching"
+TEACHING_DIR.mkdir(parents=True, exist_ok=True)
+
+# ---------- Pre-load YOLO models into memory ----------
+print("Loading YOLO models...", flush=True)
+LOADED_MODELS = {}
+for _k, _path in MODEL_PATHS.items():
+    if os.path.exists(_path):
+        try:
+            from ultralytics import YOLO
+            LOADED_MODELS[_k] = YOLO(_path)
+            print(f"  [OK] {_k}: {_path}", flush=True)
+        except Exception as e:
+            print(f"  [FAIL] {_k}: {e}", flush=True)
+    else:
+        print(f"  [SKIP] {_k}: file not found", flush=True)
+print(f"Loaded {len(LOADED_MODELS)}/{len(MODEL_PATHS)} models.\n", flush=True)
+
+# ---------- Mutex: only one YOLO process at a time ----------
+_process_lock = threading.Lock()
+
+# ---------- Calibration specifications ----------
+CALIB_SPECS = {
+    "danbai": {
+        "name": "单摆 (Simple Pendulum)",
+        "num_points": 3,
+        "points": [
+            {"id": 0, "label": "悬挂点 / 圆心 (Center/Pivot)", "color": "#00ffff"},
+            {"id": 1, "label": "竖直方向起点 (Vertical Start)", "color": "#00ffff"},
+            {"id": 2, "label": "竖直方向终点 (Vertical End, 方向 start→end)", "color": "#ff5050"},
+        ],
+        "keys": ["center", "vertical_start", "vertical_end"],
+    },
+    "cizuni": {
+        "name": "磁阻尼摆 (Magnetic Damping Pendulum)",
+        "num_points": 3,
+        "points": [
+            {"id": 0, "label": "竖直参考点1 (Vertical Ref Point 1)", "color": "#00ffff"},
+            {"id": 1, "label": "竖直参考点2 (Vertical Ref Point 2)", "color": "#00ffff"},
+            {"id": 2, "label": "转轴点 / 原点 (Pivot / Origin)", "color": "#ff5050"},
+        ],
+        "keys": ["vertical_ref_1", "vertical_ref_2", "pivot"],
+    },
+    "niubai": {
+        "name": "扭摆 (Torsional Pendulum)",
+        "num_points": 5,
+        "points": [
+            {"id": 0, "label": "原点 (Origin)", "color": "#00ffff"},
+            {"id": 1, "label": "+X 轴端点 (+X Axis End)", "color": "#5050ff"},
+            {"id": 2, "label": "+Y 轴端点 (+Y Axis End)", "color": "#32dc32"},
+            {"id": 3, "label": "标尺参考点1 (Scale Ref Point 1)", "color": "#ffb41e"},
+            {"id": 4, "label": "标尺参考点2 (Scale Ref Point 2)", "color": "#ffb41e"},
+        ],
+        "keys": ["origin", "x_axis_end", "y_axis_end", "scale_p1", "scale_p2"],
+    },
+}
+
+# ---------- Session store ----------
+session_store = {}
+SESSION_TTL = 1800  # 30 minutes
+
+
+def cleanup_stale_sessions():
+    now = _time.time()
+    stale = [sid for sid, s in session_store.items() if now - s.get("created_at", now) > SESSION_TTL]
+    for sid in stale:
+        session = session_store.pop(sid)
+        vpath = session.get("video_path", "")
+        if vpath and os.path.exists(vpath):
+            try:
+                os.remove(vpath)
+            except Exception:
+                pass
+
+
+# ---------- Background cleanup timer ----------
+_cleanup_stop = threading.Event()
+
+
+def _cleanup_loop():
+    while not _cleanup_stop.wait(300):  # every 5 minutes
+        try:
+            cleanup_stale_sessions()
+        except Exception:
+            pass
+
+
+_cleanup_thread = threading.Thread(target=_cleanup_loop, daemon=True)
+_cleanup_thread.start()
+
+# ---------- Helpers ----------
+
+
+def get_first_frame_base64(video_path, max_width=1200):
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        raise RuntimeError(f"Cannot open video: {video_path}")
+    ok, frame = cap.read()
+    cap.release()
+    if not ok:
+        raise RuntimeError("Cannot read first frame.")
+
+    h, w = frame.shape[:2]
+    if w > max_width:
+        scale = max_width / w
+        frame = cv2.resize(frame, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+
+    _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
+    return base64.b64encode(buf).decode("utf-8"), frame.shape[1], frame.shape[0]
+
+
+def file_to_base64(path):
+    with open(path, "rb") as f:
+        return base64.b64encode(f.read()).decode("utf-8")
+
+
+def make_cache_key(video_path, calibration, params):
+    h = hashlib.md5()
+    h.update(json.dumps(calibration, sort_keys=True).encode())
+    h.update(json.dumps(params, sort_keys=True).encode())
+    try:
+        with open(video_path, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+    except Exception:
+        pass
+    return h.hexdigest()
+
+
+# ---------- Progress tracking ----------
+_progress = {}  # session_id -> {"current": int, "total": int}
+
+
+# ---------- Routes ----------
+
+@app.route("/")
+def index():
+    resp = app.make_response(render_template("index.html", calib_specs=CALIB_SPECS))
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
+
+
+@app.route("/api/calibration_spec/<motion_type>")
+def get_calibration_spec(motion_type):
+    if motion_type not in CALIB_SPECS:
+        return jsonify({"error": f"Unknown motion type: {motion_type}"}), 400
+    return jsonify(CALIB_SPECS[motion_type])
+
+
+@app.errorhandler(413)
+def too_large(e):
+    return jsonify({"error": "文件过大，最大支持 4 GB。"}), 413
+
+
+@app.route("/api/upload_video", methods=["POST"])
+def upload_video():
+    cleanup_stale_sessions()
+    if "video" not in request.files:
+        return jsonify({"error": "No video file provided."}), 400
+
+    file = request.files["video"]
+    if file.filename == "":
+        return jsonify({"error": "No file selected."}), 400
+
+    motion_type = request.form.get("motion_type", "")
+    if motion_type not in MODEL_PATHS:
+        return jsonify({"error": f"Invalid motion type: {motion_type}"}), 400
+
+    session_id = str(uuid.uuid4())
+    ext = os.path.splitext(file.filename)[1] or ".mp4"
+    video_path = str(UPLOAD_FOLDER / f"{session_id}{ext}")
+    file.save(video_path)
+
+    try:
+        frame_b64, disp_w, disp_h = get_first_frame_base64(video_path)
+    except Exception as e:
+        os.remove(video_path)
+        return jsonify({"error": f"Failed to read video: {str(e)}"}), 400
+
+    cap = cv2.VideoCapture(video_path)
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    cap.release()
+
+    session_store[session_id] = {
+        "video_path": video_path,
+        "motion_type": motion_type,
+        "original_filename": file.filename,
+        "total_frames": total_frames,
+        "created_at": _time.time(),
+    }
+
+    return jsonify({
+        "session_id": session_id,
+        "first_frame_base64": frame_b64,
+        "display_width": disp_w,
+        "display_height": disp_h,
+        "motion_type": motion_type,
+        "num_calib_points": CALIB_SPECS[motion_type]["num_points"],
+        "total_frames": total_frames,
+    })
+
+
+def _run_processing(session_id, data, progress_callback=None):
+    """Core processing logic shared by sync and SSE endpoints."""
+    output_dir = data.get("output_dir", "")
+    calibration_points = data.get("calibration_points", [])
+
+    skip_start_sec = float(data.get("skip_start_sec", 0))
+    skip_end_sec = float(data.get("skip_end_sec", 0))
+    slow_motion_factor = float(data.get("slow_motion_factor", 1.0))
+    flip_angle = bool(data.get("flip_angle", False))
+    known_physical_dist_m = float(data.get("known_physical_dist_m", 0.064))
+    target_cycles = int(data.get("target_cycles", 400))
+    samples_per_cycle = int(data.get("samples_per_cycle", 25))
+
+    if session_id not in session_store:
+        return None, {"error": "Invalid session. Please re-upload the video."}
+
+    session = session_store[session_id]
+    video_path = session["video_path"]
+    motion_type = session["motion_type"]
+
+    if not output_dir or not os.path.isdir(output_dir):
+        return None, {"error": f"Output directory does not exist: {output_dir}"}
+    if not os.access(output_dir, os.W_OK):
+        return None, {"error": f"Output directory is not writable: {output_dir}"}
+
+    spec = CALIB_SPECS[motion_type]
+    if len(calibration_points) != spec["num_points"]:
+        return None, {"error": f"Expected {spec['num_points']} calibration points, got {len(calibration_points)}."}
+
+    # Check cache
+    cache_params = {
+        "skip_start_sec": skip_start_sec, "skip_end_sec": skip_end_sec,
+        "slow_motion_factor": slow_motion_factor, "target_cycles": target_cycles,
+        "samples_per_cycle": samples_per_cycle, "known_physical_dist_m": known_physical_dist_m,
+        "damping_subtype": data.get("damping_subtype", "欠阻尼"),
+    }
+    cache_key = make_cache_key(video_path, calibration_points, cache_params)
+    if session_id in _progress and "cache" in _progress[session_id]:
+        cached = _progress[session_id]["cache"].get(cache_key)
+        if cached:
+            return cached, None
+
+    # Convert display coords to original image coords
+    cap = cv2.VideoCapture(video_path)
+    orig_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    orig_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    cap.release()
+
+    max_width = 1200
+    scale = max_width / orig_w if orig_w > max_width else 1.0
+
+    calibration = {}
+    for i, key in enumerate(spec["keys"]):
+        pt = calibration_points[i]
+        calibration[key] = [pt["x"] / scale, pt["y"] / scale]
+
+    # Progress callback for frame reporting
+    def _on_frame(current, total):
+        if progress_callback:
+            progress_callback(current, total)
+
+    model = LOADED_MODELS.get(motion_type)
+
+    try:
+        if motion_type == "danbai":
+            result = process_danbai(
+                video_path, output_dir, MODEL_PATHS[motion_type], calibration,
+                skip_initial_seconds=skip_start_sec,
+                slow_motion_factor=slow_motion_factor,
+                target_cycles=target_cycles,
+                model=model, progress_callback=_on_frame)
+        elif motion_type == "cizuni":
+            result = process_cizuni(
+                video_path, output_dir, MODEL_PATHS[motion_type], calibration,
+                skip_start_sec=skip_start_sec,
+                skip_end_sec=skip_end_sec,
+                slow_motion_factor=slow_motion_factor,
+                flip_angle=flip_angle,
+                model=model, progress_callback=_on_frame)
+        elif motion_type == "niubai":
+            result = process_niubai(
+                video_path, output_dir, MODEL_PATHS[motion_type], calibration,
+                skip_start_sec=skip_start_sec,
+                skip_end_sec=skip_end_sec,
+                slow_motion_factor=slow_motion_factor,
+                known_physical_dist_m=known_physical_dist_m,
+                num_cycles=target_cycles,
+                samples_per_cycle=samples_per_cycle,
+                model=model, progress_callback=_on_frame)
+        else:
+            return None, {"error": f"Unknown motion type: {motion_type}"}
+
+        # Plot preview as base64
+        plot_path = result.get("plot_path", "")
+        if plot_path and os.path.exists(plot_path):
+            result["plot_preview"] = file_to_base64(plot_path)
+
+        # Symbolic Regression
+        damping_subtype = data.get("damping_subtype", "欠阻尼")
+        csv_path = result.get("csv_path", "")
+        try:
+            if motion_type == "danbai":
+                sr_result = run_sr_danbai(csv_path, output_dir)
+            elif motion_type == "cizuni":
+                if damping_subtype == "临界阻尼":
+                    sr_result = run_sr_ci_critical(csv_path, output_dir)
+                elif damping_subtype == "过阻尼":
+                    sr_result = run_sr_ci_overdamped(csv_path, output_dir)
+                else:
+                    sr_result = run_sr_ci_underdamped(csv_path, output_dir)
+            elif motion_type == "niubai":
+                sr_result = run_sr_niubai(csv_path, output_dir)
+            else:
+                sr_result = None
+        except Exception as e:
+            print(f"Symbolic regression warning: {e}")
+            sr_result = {"error": str(e)}
+
+        if sr_result:
+            result["sr_result"] = sr_result
+
+        # Cache result
+        if session_id in _progress:
+            _progress[session_id].setdefault("cache", {})[cache_key] = result
+
+        return result, None
+
+    except Exception as e:
+        traceback.print_exc()
+        return None, {"error": f"Processing failed: {str(e)}"}
+
+
+@app.route("/api/process", methods=["POST"])
+def process_video():
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No JSON data provided."}), 400
+
+    session_id = data.get("session_id", "")
+    _progress[session_id] = {"current": 0, "total": 0, "cache": _progress.get(session_id, {}).get("cache", {})}
+
+    if not _process_lock.acquire(blocking=False):
+        return jsonify({"error": "服务器正忙，请稍后再试。"}), 503
+
+    try:
+        result, error = _run_processing(session_id, data)
+        if error:
+            return jsonify(error), 400
+        return jsonify({"success": True, "result": result, "output_dir": data.get("output_dir", "")})
+    finally:
+        _process_lock.release()
+        _progress.pop(session_id, None)
+
+
+@app.route("/api/process_stream", methods=["POST"])
+def process_stream():
+    """SSE endpoint: streams progress events + final result."""
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No JSON data provided."}), 400
+
+    session_id = data.get("session_id", "")
+
+    if not _process_lock.acquire(blocking=False):
+        return jsonify({"error": "服务器正忙，请稍后再试。"}), 503
+
+    def generate():
+        try:
+            _progress[session_id] = {"current": 0, "total": 0, "cache": _progress.get(session_id, {}).get("cache", {})}
+
+            def on_progress(current, total):
+                _progress[session_id]["current"] = current
+                _progress[session_id]["total"] = total
+
+            result, error = _run_processing(session_id, data, progress_callback=on_progress)
+
+            if error:
+                yield f"data: {json.dumps({'type': 'error', 'message': error['error']})}\n\n"
+            else:
+                yield f"data: {json.dumps({'type': 'result', 'result': result, 'output_dir': data.get('output_dir', '')})}\n\n"
+        finally:
+            _process_lock.release()
+            _progress.pop(session_id, None)
+
+    return Response(stream_with_context(generate()), mimetype="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.route("/api/progress/<session_id>")
+def get_progress(session_id):
+    p = _progress.get(session_id, {})
+    current = p.get("current", 0)
+    total = p.get("total", 1)
+    pct = min(int(current / total * 100), 100) if total > 0 else 0
+    return jsonify({"current": current, "total": total, "percent": pct})
+
+
+@app.route("/api/cleanup", methods=["POST"])
+def cleanup():
+    data = request.get_json() or {}
+    session_id = data.get("session_id", "")
+    if session_id in session_store:
+        session = session_store.pop(session_id)
+        vpath = session.get("video_path", "")
+        if os.path.exists(vpath):
+            try:
+                os.remove(vpath)
+            except Exception:
+                pass
+    return jsonify({"success": True})
+
+
+# ---------- Teaching & AI Chat ----------
+
+@app.route("/api/teaching_content/<topic>")
+def get_teaching_content(topic):
+    """Return teaching content JSON from the teaching/ directory."""
+    allowed = {"theory", "guide_danbai", "guide_cizuni", "guide_niubai"}
+    if topic not in allowed:
+        return jsonify({"error": f"Unknown topic: {topic}"}), 400
+    json_path = TEACHING_DIR / f"{topic}.json"
+    if not json_path.exists():
+        return jsonify({"error": f"Content not found: {topic}"}), 404
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return jsonify(data)
+
+
+@app.route("/api/ai_chat", methods=["POST"])
+def ai_chat():
+    """AI knowledge Q&A — SSE stream from mimo v2.5."""
+    if not MIMO_API_KEY:
+        return jsonify({"error": "AI 服务未配置。请设置环境变量 MIMO_API_KEY。"}), 503
+
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No JSON data provided."}), 400
+
+    messages = data.get("messages", [])
+    if not messages:
+        return jsonify({"error": "No messages provided."}), 400
+
+    # Inject system prompt
+    full_messages = [{"role": "system", "content": MIMO_SYSTEM_PROMPT}] + messages
+
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=MIMO_API_KEY, base_url=MIMO_BASE_URL)
+
+        def generate():
+            try:
+                stream = client.chat.completions.create(
+                    model=MIMO_MODEL,
+                    messages=full_messages,
+                    stream=True,
+                    max_tokens=2048,
+                    temperature=0.7,
+                )
+                for chunk in stream:
+                    if chunk.choices and chunk.choices[0].delta.content:
+                        yield f"data: {json.dumps({'content': chunk.choices[0].delta.content})}\n\n"
+            except Exception as e:
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            yield "data: [DONE]\n\n"
+
+        return Response(stream_with_context(generate()), mimetype="text/event-stream",
+                        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+    except ImportError:
+        return jsonify({"error": "请安装 openai 包: pip install openai"}), 503
+
+
+# ---------- Main ----------
+
+def get_lan_ip():
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return None
+
+
+if __name__ == "__main__":
+    pid_file = BASE_DIR / "server.pid"
+    pid_file.write_text(str(os.getpid()))
+
+    HOST = "0.0.0.0"
+    PORT = 5000
+    lan_ip = get_lan_ip()
+
+    print("=" * 60)
+    print("  Pendulum Motion Analysis Web App")
+    print("=" * 60)
+    print(f"  Upload folder: {UPLOAD_FOLDER}")
+    print(f"  Local:    http://127.0.0.1:{PORT}")
+    if lan_ip:
+        print(f"  Network:  http://{lan_ip}:{PORT}")
+    print("=" * 60)
+
+    try:
+        app.run(host=HOST, port=PORT, debug=False, threaded=True)
+    finally:
+        _cleanup_stop.set()
+        if pid_file.exists():
+            pid_file.unlink()

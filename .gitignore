@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+uploads/
+server.pid
+*.pt
+.env
+.claude/settings.local.json
+.claude/conversation_log.md
