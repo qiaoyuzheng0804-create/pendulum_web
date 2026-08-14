@@ -32,6 +32,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from processors.danbai_processor import process_danbai
 from processors.cizuni_processor import process_cizuni
 from processors.niubai_processor import process_niubai
+from processors.ciliniudun_processor import process_ciliniudun
 from processors.symbolic_regression import (
     run_sr_danbai, run_sr_ci_underdamped, run_sr_ci_critical,
     run_sr_ci_overdamped, run_sr_niubai
@@ -54,14 +55,16 @@ _LOCAL_PATHS = {
     "danbai": r"C:\Users\MECHREV\Desktop\yolov8\runs\detect\small_ball_yolov8_safe2\weights\best.pt",
     "cizuni": r"C:\Users\MECHREV\Desktop\yolov8\runs\detect\cizuni\weights\best.pt",
     "niubai": r"C:\Users\MECHREV\Desktop\yolov8\runs\detect\niubai\weights\best.pt",
+    "ciliniudun": r"C:\Users\MECHREV\Desktop\yolov8\runs\detect\ciliniudun\weights\best.pt",
 }
 _DEPLOY_PATHS = {
     "danbai": str(BASE_DIR / "models" / "danbai_best.pt"),
     "cizuni": str(BASE_DIR / "models" / "cizuni_best.pt"),
     "niubai": str(BASE_DIR / "models" / "niubai_best.pt"),
+    "ciliniudun": str(BASE_DIR / "models" / "ciliniudun_best.pt"),
 }
 MODEL_PATHS = {}
-for k in ["danbai", "cizuni", "niubai"]:
+for k in ["danbai", "cizuni", "niubai", "ciliniudun"]:
     MODEL_PATHS[k] = _LOCAL_PATHS[k] if os.path.exists(_LOCAL_PATHS[k]) else _DEPLOY_PATHS[k]
 
 # ---------- Validate model files at startup ----------
@@ -79,9 +82,9 @@ MIMO_MODEL = os.environ.get("MIMO_MODEL", "mimo-v2.5")
 
 MIMO_SYSTEM_PROMPT = r"""你是一位物理实验教学助手，专注于阻尼振动实验教学。你的知识范围包括：
 1. 阻尼振动的物理原理和数学推导（微分方程、解析解、参数物理意义）
-2. 单摆、磁阻尼摆、扭摆等实验的操作指导和数据分析
-3. 振动、阻尼、周期、频率、阻尼比等相关物理概念
-4. YOLOv8 视频分析在物理实验中的应用
+2. 单摆、磁阻尼摆、扭摆、磁力牛顿摆等实验的操作指导和数据分析
+3. 振动、阻尼、周期、频率、阻尼比、动量守恒与能量传递等相关物理概念
+4. YOLOv8 视频分析在物理实验中的应用（含多目标跟踪、轨迹绑定、水平几何约束）
 
 回答格式要求：
 - 使用 Markdown 格式，支持标题(###)、加粗(**)、列表(-)、代码块(```)等
@@ -145,6 +148,29 @@ CALIB_SPECS = {
             {"id": 4, "label": "标尺参考点2 (Scale Ref Point 2)", "color": "#ffb41e"},
         ],
         "keys": ["origin", "x_axis_end", "y_axis_end", "scale_p1", "scale_p2"],
+    },
+    "ciliniudun": {
+        "name": "磁力牛顿摆 (Magnetic Newton's Cradle)",
+        # 摆球数量可变（min~max），分阶段标定（与底层 ManualMarker 一致）：
+        # N 个摆球悬挂点 + 竖直方向 2 点 + 水平方向 2 点
+        "num_pivots": 4,
+        "num_points": 8,   # 默认摆球数 4 时的总点数（前端会按实际摆球数重算）
+        "min_pivots": 2,
+        "max_pivots": 5,
+        "dynamic": True,
+        "pivot_template": {"label": "摆球 {i} 悬挂点 (Pivot {i})", "color": "#00ffff"},
+        "points": [
+            {"id": 0, "kind": "pivot", "label": "摆球 1 悬挂点 (Pivot 1)", "color": "#00ffff"},
+            {"id": 1, "kind": "pivot", "label": "摆球 2 悬挂点 (Pivot 2)", "color": "#00ffff"},
+            {"id": 2, "kind": "pivot", "label": "摆球 3 悬挂点 (Pivot 3)", "color": "#00ffff"},
+            {"id": 3, "kind": "pivot", "label": "摆球 4 悬挂点 (Pivot 4)", "color": "#00ffff"},
+            {"id": 4, "kind": "vertical", "label": "竖直方向起点 (Vertical Start)", "color": "#00ffff"},
+            {"id": 5, "kind": "vertical", "label": "竖直方向终点 (Vertical End)", "color": "#ff5050"},
+            {"id": 6, "kind": "horizontal", "label": "水平方向起点 (Horizontal Start, 左)", "color": "#32dc32"},
+            {"id": 7, "kind": "horizontal", "label": "水平方向终点 (Horizontal End, 右)", "color": "#32dc32"},
+        ],
+        "keys": ["pivot_1", "pivot_2", "pivot_3", "pivot_4",
+                 "vertical_1", "vertical_2", "horizontal_1", "horizontal_2"],
     },
 }
 
@@ -309,6 +335,7 @@ def _run_processing(session_id, data, progress_callback=None):
     known_physical_dist_m = float(data.get("known_physical_dist_m", 0.064))
     target_cycles = int(data.get("target_cycles", 400))
     samples_per_cycle = int(data.get("samples_per_cycle", 25))
+    num_pivots = int(data.get("num_pivots", 4))
 
     if session_id not in session_store:
         return None, {"error": "Invalid session. Please re-upload the video."}
@@ -323,8 +350,16 @@ def _run_processing(session_id, data, progress_callback=None):
         return None, {"error": f"Output directory is not writable: {output_dir}"}
 
     spec = CALIB_SPECS[motion_type]
-    if len(calibration_points) != spec["num_points"]:
-        return None, {"error": f"Expected {spec['num_points']} calibration points, got {len(calibration_points)}."}
+    if motion_type == "ciliniudun":
+        # 摆球数量不预设：以实际标记的圆心数（总点数 - 4）为准
+        min_p = spec.get("min_pivots", 2)
+        max_p = spec.get("max_pivots", 5)
+        num_pivots = len(calibration_points) - 4
+        if not (min_p <= num_pivots <= max_p):
+            return None, {"error": f"标定的摆球数量为 {num_pivots}，超出支持范围 ({min_p}~{max_p})，请重新标定。"}
+    else:
+        if len(calibration_points) != spec["num_points"]:
+            return None, {"error": f"Expected {spec['num_points']} calibration points, got {len(calibration_points)}."}
 
     # Check cache
     cache_params = {
@@ -332,6 +367,9 @@ def _run_processing(session_id, data, progress_callback=None):
         "slow_motion_factor": slow_motion_factor, "target_cycles": target_cycles,
         "samples_per_cycle": samples_per_cycle, "known_physical_dist_m": known_physical_dist_m,
         "damping_subtype": data.get("damping_subtype", "欠阻尼"),
+        "num_pivots": num_pivots,
+        "gen_video": bool(data.get("gen_video", True)),
+        "target_fps": float(data.get("target_fps", 30)),
     }
     cache_key = make_cache_key(video_path, calibration_points, cache_params)
     if session_id in _progress and "cache" in _progress[session_id]:
@@ -349,7 +387,12 @@ def _run_processing(session_id, data, progress_callback=None):
     scale = max_width / orig_w if orig_w > max_width else 1.0
 
     calibration = {}
-    for i, key in enumerate(spec["keys"]):
+    if motion_type == "ciliniudun":
+        keys = [f"pivot_{i}" for i in range(1, num_pivots + 1)] + \
+               ["vertical_1", "vertical_2", "horizontal_1", "horizontal_2"]
+    else:
+        keys = spec["keys"]
+    for i, key in enumerate(keys):
         pt = calibration_points[i]
         calibration[key] = [pt["x"] / scale, pt["y"] / scale]
 
@@ -386,6 +429,21 @@ def _run_processing(session_id, data, progress_callback=None):
                 num_cycles=target_cycles,
                 samples_per_cycle=samples_per_cycle,
                 model=model, progress_callback=_on_frame)
+        elif motion_type == "ciliniudun":
+            result = process_ciliniudun(
+                video_path, output_dir, MODEL_PATHS[motion_type], calibration,
+                num_pivots=num_pivots,
+                skip_start_sec=skip_start_sec,
+                skip_end_sec=skip_end_sec,
+                target_fps=float(data.get("target_fps", 30)),
+                conf=float(data.get("conf", 0.18)),
+                iou=float(data.get("iou", 0.5)),
+                imgsz=int(data.get("imgsz", 1536)),
+                sg_window=int(data.get("sg_window", 11)),
+                sg_polyorder=int(data.get("sg_polyorder", 3)),
+                right_positive=not flip_angle,
+                gen_video=bool(data.get("gen_video", True)),
+                model=model, progress_callback=_on_frame)
         else:
             return None, {"error": f"Unknown motion type: {motion_type}"}
 
@@ -410,6 +468,7 @@ def _run_processing(session_id, data, progress_callback=None):
             elif motion_type == "niubai":
                 sr_result = run_sr_niubai(csv_path, output_dir)
             else:
+                # 磁力牛顿摆：多摆碰撞/能量传递系统，不做阻尼振荡符号回归
                 sr_result = None
         except Exception as e:
             print(f"Symbolic regression warning: {e}")
@@ -514,7 +573,7 @@ def cleanup():
 @app.route("/api/teaching_content/<topic>")
 def get_teaching_content(topic):
     """Return teaching content JSON from the teaching/ directory."""
-    allowed = {"theory", "guide_danbai", "guide_cizuni", "guide_niubai"}
+    allowed = {"theory", "guide_danbai", "guide_cizuni", "guide_niubai", "guide_ciliniudun"}
     if topic not in allowed:
         return jsonify({"error": f"Unknown topic: {topic}"}), 400
     json_path = TEACHING_DIR / f"{topic}.json"

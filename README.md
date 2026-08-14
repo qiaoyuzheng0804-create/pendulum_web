@@ -4,10 +4,11 @@ Flask + YOLOv8 实验视频分析平台。上传摆的实验视频，自动追�
 
 ## 功能特性
 
-- **三种摆的实验分析**
+- **四种摆的实验分析**
   - 单摆 (danbai)：3 点标定 + Savitzky-Golay 滤波 + 零交叉检测 + 周期拟合
   - 磁阻尼摆 (cizuni)：高斯平滑 + 角度计算，支持欠阻尼 / 临界阻尼 / 过阻尼
   - 扭摆 (niubai)：卡尔曼滤波（RTS 平滑）+ 角度提取
+  - 磁力牛顿摆 (ciliniudun)：YOLOv8 + ByteTrack 多目标跟踪，2~5 个摆球同时提取角度-时间序列，轨迹绑定 + 水平几何约束修正，输出各摆 CSV / 汇总 CSV / 标注视频 / 时空数据图
 - **阻尼实验教学模块**
   - 理论知识：阻尼分类、微分方程、参数物理意义
   - 实验指导：器材清单、拍摄要点、标定说明、FAQ
@@ -36,13 +37,14 @@ pip install -r requirements.txt
 
 ### 2. 配置模型
 
-三种摆的 YOLOv8 权重已随仓库提供，位于 `models/` 目录：
+四种摆的 YOLOv8 权重已随仓库提供，位于 `models/` 目录：
 
 | 实验 | 模型文件 |
 |------|---------|
 | 单摆 (danbai) | `models/danbai_best.pt` |
 | 磁阻尼摆 (cizuni) | `models/cizuni_best.pt` |
 | 扭摆 (niubai) | `models/niubai_best.pt` |
+| 磁力牛顿摆 (ciliniudun) | `models/ciliniudun_best.pt` |
 
 `app.py` 启动时会优先使用本地训练路径，找不到则回退到 `models/` 目录。若要换成自己训练的权重，直接替换对应 `.pt` 文件即可。
 
@@ -76,18 +78,20 @@ pendulum_web/
 ├── requirements.txt        # Python 依赖清单
 ├── 启动服务器.bat           # Windows 启动脚本（自动读取 .env）
 ├── 停止服务器.bat           # 停止服务
-├── models/                 # YOLOv8 权重（三种摆各一个 .pt）
+├── models/                 # YOLOv8 权重（四种摆各一个 .pt）
 ├── processors/
 │   ├── __init__.py
 │   ├── danbai_processor.py     # 单摆处理
 │   ├── cizuni_processor.py     # 磁阻尼摆处理
 │   ├── niubai_processor.py     # 扭摆处理
+│   ├── ciliniudun_processor.py # 磁力牛顿摆处理（移植自 yolov8/src/磁力牛顿摆/magnetic_newton_cradle.py）
 │   └── symbolic_regression.py  # 符号回归拟合
 ├── teaching/
 │   ├── theory.json             # 阻尼振动理论
 │   ├── guide_danbai.json       # 单摆实验指导
 │   ├── guide_cizuni.json       # 磁阻尼摆实验指导
-│   └── guide_niubai.json       # 扭摆实验指导
+│   ├── guide_niubai.json       # 扭摆实验指导
+│   └── guide_ciliniudun.json   # 磁力牛顿摆实验指导
 ├── templates/
 │   └── index.html              # 单页前端
 └── uploads/                    # 上传视频临时存储（运行时创建，git 忽略）

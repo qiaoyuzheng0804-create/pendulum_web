@@ -30,17 +30,20 @@ pendulum_web/
 ├── .env                            # API 配置文件（不会上传到 GitHub）
 ├── 启动服务器.bat                   # Windows 启动脚本（自动读取 .env）
 ├── 停止服务器.bat                   # 停止服务
+├── models/                         # YOLOv8 权重（四种摆各一个 .pt，已纳入 git 跟踪）
 ├── processors/
-│   ├── __init__.py                 # 导出 process_danbai / process_cizuni / process_niubai
+│   ├── __init__.py                 # 导出四个处理器
 │   ├── danbai_processor.py         # 单摆处理
 │   ├── cizuni_processor.py         # 磁阻尼摆处理
 │   ├── niubai_processor.py         # 扭摆处理
+│   ├── ciliniudun_processor.py     # 磁力牛顿摆处理（移植自 yolov8/src/磁力牛顿摆/magnetic_newton_cradle.py）
 │   └── symbolic_regression.py      # 符号回归拟合（纯 scipy）
 ├── teaching/
 │   ├── theory.json                 # 阻尼振动理论知识
 │   ├── guide_danbai.json           # 单摆实验指导
 │   ├── guide_cizuni.json           # 磁阻尼摆实验指导
-│   └── guide_niubai.json           # 扭摆实验指导
+│   ├── guide_niubai.json           # 扭摆实验指导
+│   └── guide_ciliniudun.json       # 磁力牛顿摆实验指导
 ├── templates/
 │   └── index.html                  # 单页前端（数据分析 + 教学双模式）
 ├── .gitignore                      # 忽略 uploads/ __pycache__/ *.pt 等
@@ -86,7 +89,7 @@ AI 聊天中：先解码 `&lt;` `&gt;`，再 Unicode→LaTeX，再包裹裸命�
 
 System prompt 要求 AI 用 Markdown 格式回答，公式用 `$...$` / `$$...$$` 包裹。
 
-## 三种摆的处理流程
+## 四种摆的处理流程
 
 1. **单摆** (danbai_processor.py)
    - YOLO 逐帧检测（`conf=0.25, iou=0.45, imgsz=1280`），最近邻跟踪避免目标跳变
@@ -106,8 +109,29 @@ System prompt 要求 AI 用 Markdown 格式回答，公式用 `$...$` / `$$...$$
    - 零基线 → 周期提取 → 提前停止
    - 输出 CSV + 双面板图
 
-4. **符号回归** (symbolic_regression.py)
+4. **磁力牛顿摆** (ciliniudun_processor.py)
+   - YOLOv8 检测 + ByteTrack 多目标跟踪（`conf=0.18, iou=0.5, imgsz=1536`，bytetrack.yaml）
+   - 轨迹绑定：每条轨迹的质心离哪个悬挂点最近就归哪个摆（中断轨迹自动合并）
+   - 水平几何约束修正：匈牙利算法全局最优匹配，解决碰撞时相邻摆球混淆
+   - 角度计算：检测框中心与悬挂点连线相对竖直方向夹角（最低点 0°，向右为正）
+   - 降噪：统一时间网格 + 短缺失线性插值 + Savitzky-Golay 滤波（sg 窗口 11，阶数 3）
+   - 输出各摆 CSV（`{basename}_angle_N.csv`）+ 汇总 CSV（`{basename}_all_pendulums.csv`）+ 标注视频（可选）+ 多面板时空图
+   - 不做符号回归（多摆碰撞/能量传递系统，`_run_processing` 中 `sr_result = None`）
+
+5. **符号回归** (symbolic_regression.py)
    - 纯 scipy。三种阻尼拟合 + ODE 验证 + 物理项库拟合
+
+## 磁力牛顿摆标定（分阶段，与底层 ManualMarker 一致）
+
+前端标定弹窗分三阶段（状态 `S.calibPhase: pivots → vertical → horizontal`，`S._pivotCount` 记录确认的悬挂点数）：
+
+1. **pivots**：自由点击每个摆球的**悬挂点**（2~5 个，数量不预设，标多少算多少），Enter/『下一步』确认
+2. **vertical**：竖直方向 2 点（上→下）
+3. **horizontal**：水平方向 2 点（左→右）
+
+按键：Enter=下一阶段 / C=上一步 / R=撤销上一点 / Esc=关闭。关闭弹窗（X/Esc/遮罩）不设限制，标定是否完成由『下一步』校验与开始处理时把关。
+
+后端 `_run_processing` 以实际标定点数推导摆球数量 `num_pivots = len(calibration_points) - 4`（**不信任前端传入值**），范围 2~5，超范围报错。标定点顺序：pivot_1..pivot_N, vertical_1, vertical_2, horizontal_1, horizontal_2（显示坐标除以缩放比转原始坐标）。
 
 ## 交互模拟参数
 
@@ -138,6 +162,7 @@ YOLOv8 模型按优先级查找：本地路径 → 项目 `models/` 目录。
 - `C:\Users\MECHREV\Desktop\yolov8\runs\detect\small_ball_yolov8_safe2\weights\best.pt`（单摆）
 - `C:\Users\MECHREV\Desktop\yolov8\runs\detect\cizuni\weights\best.pt`（磁阻尼摆）
 - `C:\Users\MECHREV\Desktop\yolov8\runs\detect\niubai\weights\best.pt`（扭摆）
+- `C:\Users\MECHREV\Desktop\yolov8\runs\detect\ciliniudun\weights\best.pt`（磁力牛顿摆）
 
 ## 处理器说明
 
@@ -162,9 +187,18 @@ YOLOv8 模型按优先级查找：本地路径 → 项目 `models/` 目录。
 3. 零基线 → 周期提取 → 提前停止
 4. 输出 CSV + 双面板图
 
+### ciliniudun_processor.py — 磁力牛顿摆
+
+1. 网页分阶段标定（悬挂点 N 个 + 竖直 2 点 + 水平 2 点，无 GUI 弹窗，见上文"磁力牛顿摆标定"）
+2. YOLOv8 检测 + ByteTrack 跟踪（`model.track(persist=True, tracker="bytetrack.yaml")`），统一时间网格采样
+3. 轨迹绑定（质心最近悬挂点，仅统计参考）+ 水平几何约束修正（匈牙利算法，`linear_sum_assignment`）
+4. 角度计算（`compute_angle`，最低点 0°、向右为正、`right_positive` 可翻转）→ 短缺失插值 + Savitzky-Golay 分段滤波
+5. 输出 CSV（各摆 + 汇总）、标注视频（`write_annotated_video`，mp4v 编码、临时文件避免中文路径问题）、多面板时空图（`plot_all`）
+6. 进度回调覆盖跟踪 + 视频两遍，参数 `gen_video` 控制是否输出标注视频
+
 ### symbolic_regression.py — 参数拟合
 
-纯 scipy。三种阻尼拟合 + ODE 验证 + 物理项库拟合。
+纯 scipy。三种阻尼拟合 + ODE 验证 + 物理项库拟合（磁力牛顿摆不做符号回归）。
 
 ## 注意事项
 
@@ -174,9 +208,9 @@ YOLOv8 模型按优先级查找：本地路径 → 项目 `models/` 目录。
 - 处理结果有缓存（视频 MD5 + 参数 hash）
 - `KMP_DUPLICATE_LIB_OK=TRUE` 解决 PyTorch 与 OpenCV 冲突
 - 扭摆依赖 `filterpy`，AI 问答依赖 `openai`
-- 新增实验：在 `teaching/` 添加 JSON 文件，在 `app.py` 的 `allowed` 集合注册
+- 新增实验：需完整注册——`app.py` 的 `MODEL_PATHS`（本地路径 + models/ 回退）、`CALIB_SPECS`、`_run_processing` 分发分支、`get_teaching_content` 的 `allowed` 集合；新增 `processors/xxx_processor.py` 并在 `processors/__init__.py` 导出；新增 `teaching/guide_xxx.json`；前端 `index.html` 添加类型卡片、标定逻辑与参数组（参考磁力牛顿摆 ciliniudun 的完整实现）
 - 前端输出目录由用户指定，需确保可写
-- 所有处理器 CSV 格式：`time_s, angle_deg`（前两列）
+- 磁力牛顿摆输出文件以视频 basename 为前缀（`{basename}_angle_N.csv` 等）；其他处理器 CSV 格式：`time_s, angle_deg`（前两列）
 
 ## Git 自动提交与推送规则
 

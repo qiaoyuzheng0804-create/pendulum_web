@@ -103,7 +103,7 @@
   .card-header .tag{font-size:0.7rem;color:var(--t3);text-transform:uppercase;letter-spacing:0.07em;}
 
   /* Type selector cards */
-  .type-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px;}
+  .type-cards{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-bottom:20px;}
   .type-card{position:relative;background:var(--bg2);border:2px solid var(--border);border-radius:14px;padding:22px 16px 16px;cursor:pointer;text-align:center;transition:all 0.35s;overflow:hidden;transform-style:preserve-3d;}
   .type-card:hover{border-color:var(--a2);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,0.3);}
   .type-card:hover .p-icon{animation-duration:1.2s;}
@@ -111,6 +111,7 @@
   .type-card:hover .t-icon{animation-duration:1.8s;}
   .type-card.selected{border-color:var(--a1);box-shadow:0 0 0 4px var(--fr);background:color-mix(in srgb,var(--a1) 6%,var(--bg2));animation:cardSwing 2.5s ease-in-out infinite,borderGlow 3s ease-in-out infinite;}
   .type-card[data-type="cizuni"]{border-radius:6px;}
+  .type-card[data-type="ciliniudun"]{border-radius:10px;}
   .type-card .icon-area{width:70px;height:70px;margin:0 auto 10px;position:relative;display:flex;align-items:center;justify-content:center;}
   .type-card .name{font-weight:700;font-size:0.95rem;margin-bottom:2px;}
   .type-card .eng{font-size:0.7rem;color:var(--t3);text-transform:uppercase;letter-spacing:0.04em;}
@@ -128,6 +129,25 @@
   .t-icon{position:relative;width:36px;height:36px;border:3px solid var(--a2);border-radius:8px;animation:torsionRotate 3s linear infinite;display:flex;align-items:center;justify-content:center;transition:animation-duration 0.3s;}
   .t-icon::before{content:'';width:4px;height:4px;border-radius:50%;background:var(--a2);}
   .t-icon::after{content:'';position:absolute;inset:-2px;border-radius:10px;border:1.5px solid transparent;border-top-color:var(--a1);border-bottom-color:var(--a3);animation:torsionRing 3s linear infinite;}
+
+  /* Magnetic Newton's cradle icon: 5 pendulums, classic sequential impact motion
+     (left ball swings out & returns → impact → right ball swings out & returns → impact).
+     Note: CSS rotate(+deg) swings the hanging ball LEFT, rotate(-deg) swings it RIGHT,
+     so the left ball uses +deg (outward) and the right ball uses -deg (outward);
+     amplitude kept small (20°) so balls never overlap their neighbours. */
+  .n-icon{position:relative;width:66px;height:34px;}
+  .n-pend{position:absolute;top:0;width:12px;height:32px;transform-origin:50% 0%;will-change:transform;}
+  .n-pend .n-string{position:absolute;top:0;left:50%;width:2px;height:19px;margin-left:-1px;background:var(--t3);border-radius:1px;}
+  .n-pend .n-ball{position:absolute;bottom:0;left:50%;width:12px;height:12px;margin-left:-6px;border-radius:50%;background:radial-gradient(circle at 35% 30%,var(--a4),var(--a2) 60%,var(--a1));box-shadow:0 0 10px var(--a1),inset 0 1px 1px rgba(255,255,255,0.35);}
+  .np1{left:0;animation:nEndL 2.8s ease-in-out infinite;}
+  .np2{left:13px;animation:nMidA 1.4s ease-in-out infinite;}
+  .np3{left:26px;animation:nMidB 1.4s ease-in-out infinite;}
+  .np4{left:39px;animation:nMidA 1.4s ease-in-out infinite .35s;}
+  .np5{left:52px;animation:nEndR 2.8s ease-in-out infinite;}
+  @keyframes nEndL{0%{transform:rotate(0deg);}25%{transform:rotate(20deg);}50%{transform:rotate(0deg);}100%{transform:rotate(0deg);}}
+  @keyframes nEndR{0%{transform:rotate(0deg);}50%{transform:rotate(0deg);}75%{transform:rotate(-20deg);}100%{transform:rotate(0deg);}}
+  @keyframes nMidA{0%{transform:rotate(0deg);}25%{transform:rotate(1.8deg);}50%{transform:rotate(-1.8deg);}75%{transform:rotate(1.2deg);}100%{transform:rotate(0deg);}}
+  @keyframes nMidB{0%{transform:rotate(0deg);}25%{transform:rotate(-1.8deg);}50%{transform:rotate(1.8deg);}75%{transform:rotate(-1.2deg);}100%{transform:rotate(0deg);}}
 
   /* Form */
   .field-label{display:flex;align-items:baseline;gap:8px;margin-bottom:6px;}
@@ -456,6 +476,19 @@
         <div class="check">&#10003;</div><div class="icon-area"><div class="t-icon"></div></div>
         <div class="name">扭摆</div><div class="eng">Torsional Pendulum</div>
       </div>
+      <div class="type-card" data-type="ciliniudun" onclick="selectType('ciliniudun')">
+        <div class="check">&#10003;</div>
+        <div class="icon-area">
+          <div class="n-icon">
+            <div class="n-pend np1"><div class="n-string"></div><div class="n-ball"></div></div>
+            <div class="n-pend np2"><div class="n-string"></div><div class="n-ball"></div></div>
+            <div class="n-pend np3"><div class="n-string"></div><div class="n-ball"></div></div>
+            <div class="n-pend np4"><div class="n-string"></div><div class="n-ball"></div></div>
+            <div class="n-pend np5"><div class="n-string"></div><div class="n-ball"></div></div>
+          </div>
+        </div>
+        <div class="name">磁力牛顿摆</div><div class="eng">Magnetic Newton's Cradle</div>
+      </div>
     </div>
 
     <div class="field-label" style="margin-top:18px;"><span class="zh">上传视频</span><span class="en">Upload Video</span></div>
@@ -489,6 +522,13 @@
         <div class="param-card" id="dist_group" style="display:none;"><div class="p-label">标尺距离 Scale Dist</div><div class="input-wrap"><input type="number" id="param_dist" value="0.064" min="0.001" step="0.001"><span class="unit">m</span></div></div>
         <div class="param-card" id="cycles_group" style="display:none;"><div class="p-label">输出周期数 Cycles</div><div class="input-wrap"><input type="number" id="param_cycles" value="400" min="1" step="1"><span class="unit">周期</span></div></div>
         <div class="param-card" id="samples_group" style="display:none;"><div class="p-label">每周期取样 Samples/Cycle</div><div class="input-wrap"><input type="number" id="param_samples" value="25" min="2" step="1"><span class="unit">点</span></div></div>
+        <div class="param-card" id="targetfps_group" style="display:none;"><div class="p-label">采样帧率 Target FPS</div><div class="input-wrap"><input type="number" id="param_targetfps" value="30" min="5" max="120" step="1"><span class="unit">fps</span></div></div>
+        <div class="param-card" id="genvideo_group" style="display:none;"><div class="p-label">输出标注视频 Tracked Video</div>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 0;">
+            <input type="checkbox" id="param_gen_video" checked style="width:18px;height:18px;accent-color:var(--a1);cursor:pointer;">
+            <span style="font-size:0.85rem;color:var(--t2);">生成带检测框的标注视频</span>
+          </label>
+        </div>
       </div>
     </div>
   </div>
@@ -552,6 +592,7 @@
       <button class="btn btn-primary" onclick="loadGuide('danbai')">&#9679; 单摆指导</button>
       <button class="btn btn-primary" onclick="loadGuide('cizuni')">&#9679; 磁阻尼摆指导</button>
       <button class="btn btn-primary" onclick="loadGuide('niubai')">&#9679; 扭摆指导</button>
+      <button class="btn btn-primary" onclick="loadGuide('ciliniudun')">&#9679; 磁力牛顿摆指导</button>
     </div>
   </div>
 
@@ -618,9 +659,10 @@
     <div class="modal-footer">
       <div class="hint" id="calib_modal_hint">点击图片标定第 1 个点 &nbsp; <span class="kbd">Enter</span> 确认 &nbsp; <span class="kbd">R</span> 重置 &nbsp; <span class="kbd">Esc</span> 关闭</div>
       <div style="display:flex;gap:8px;">
+        <button class="btn btn-outline" id="calib_prev_btn" onclick="calibPrevPhase()" style="display:none;">↩ 上一步</button>
         <button class="btn btn-outline" onclick="undoPoint()">↩ 撤销</button>
         <button class="btn btn-outline" onclick="resetCalib()">&#8634; 重置</button>
-        <button class="btn btn-primary" onclick="closeCalibModal()">确认完成</button>
+        <button class="btn btn-primary" id="calib_done_btn" onclick="closeCalibModal()">确认完成</button>
       </div>
     </div>
   </div>
@@ -729,10 +771,11 @@ themeTrigger.addEventListener('click',()=>{themeOpen=!themeOpen;themeTrigger.cla
 document.addEventListener('click',e=>{if(themeOpen&&!themeTrigger.contains(e.target)&&!themePanel.contains(e.target)){themeOpen=false;themeTrigger.classList.remove('open');themePanel.classList.remove('open');}});
 
 // ==================== State ====================
-const S={sessionId:null,motionType:'',firstFrameB64:null,firstFrameImg:null,calibSpec:null,calibPoints:[]};
+const S={sessionId:null,motionType:'',firstFrameB64:null,firstFrameImg:null,calibSpec:null,calibPoints:[],calibPhase:null,_pivotCount:null};
 const $=s=>document.querySelector(s);
 const uploadZone=$('#upload_zone'),videoInput=$('#video_input'),videoInfo=$('#video_info');
 const paramsArea=$('#params_area'),distGroup=$('#dist_group'),cyclesGroup=$('#cycles_group'),samplesGroup=$('#samples_group'),dampingTypeGroup=$('#damping_type_group'),flipAngleGroup=$('#flip_angle_group');
+const targetfpsGroup=$('#targetfps_group'),genvideoGroup=$('#genvideo_group');
 const cardCalib=$('#card-calib'),cardProcess=$('#card-process'),cardResult=$('#card-result');
 const calibPreviewText=$('#calib_preview_text'),btnResetCalib=$('#btn_reset_calib'),thumbCanvas=$('#thumb_canvas');
 const statusDiv=$('#status'),btnProcess=$('#btn_process'),resultGrid=$('#result_grid');
@@ -763,10 +806,67 @@ function selectType(type){
   cyclesGroup.style.display=(type==='danbai'||type==='niubai')?'block':'none';
   samplesGroup.style.display=type==='niubai'?'block':'none';
   dampingTypeGroup.style.display=type==='cizuni'?'block':'none';
-  flipAngleGroup.style.display=type==='cizuni'?'block':'none';
+  flipAngleGroup.style.display=(type==='cizuni'||type==='ciliniudun')?'block':'none';
+  targetfpsGroup.style.display=type==='ciliniudun'?'block':'none';
+  genvideoGroup.style.display=type==='ciliniudun'?'block':'none';
+  S.calibPhase=null;S._pivotCount=null;
   if(type==='danbai'){$('#param_cycles').value='400';$('#param_skip_start').value='3';}
   else if(type==='niubai'){$('#param_cycles').value='80';$('#param_skip_start').value='1';}
   else if(type==='cizuni'){$('#param_skip_start').value='0.15';}
+  else if(type==='ciliniudun'){$('#param_skip_start').value='2';$('#param_skip_end').value='0';}
+}
+
+// ==================== Phase-based calibration (ciliniudun) ====================
+// 与底层 ManualMarker 一致的分阶段标定：
+//   阶段1 pivots     : 依次点击每个摆球的悬挂点（2~5 个，数量不预设）
+//   阶段2 vertical   : 点击竖直方向两点（上->下）
+//   阶段3 horizontal : 点击水平方向两点（左->右）
+// 按键: Enter=进入下一阶段, C=返回上一阶段, R=撤销上一点, Esc=关闭
+function calibPointStyle(i){
+  if(S.motionType!=='ciliniudun')return S.calibSpec&&S.calibSpec.points[i]?S.calibSpec.points[i]:{color:'#00ffff',label:'P'+(i+1)};
+  const n=S._pivotCount!=null?S._pivotCount:(S.calibPhase==='pivots'?S.calibPoints.length:4);
+  if(i<n)return {color:'#00ffff',label:'摆球 '+(i+1)+' 悬挂点'};
+  if(i===n)return {color:'#00ffff',label:'竖直方向起点'};
+  if(i===n+1)return {color:'#ff5050',label:'竖直方向终点'};
+  if(i===n+2)return {color:'#32dc32',label:'水平方向起点'};
+  if(i===n+3)return {color:'#32dc32',label:'水平方向终点'};
+  return {color:'#00ffff',label:'摆球 '+(i+1)+' 悬挂点'};
+}
+function isCiliniudunCalibDone(){
+  if(S.motionType!=='ciliniudun')return S.calibSpec&&S.calibPoints.length>=S.calibSpec.num_points;
+  const n=S._pivotCount;
+  return n!=null&&n>=2&&n<=5&&S.calibPoints.length>=n+4;
+}
+function calibNextPhase(){
+  if(S.motionType!=='ciliniudun')return;
+  const n=S.calibPoints.length;
+  if(S.calibPhase==='pivots'){
+    if(n<2){showToast('请至少标记 2 个摆球的悬挂点','error');return;}
+    S._pivotCount=n;S.calibPhase='vertical';
+  }else if(S.calibPhase==='vertical'){
+    if(n<S._pivotCount+2){showToast('请标记竖直方向 2 个点（上→下）','error');return;}
+    S.calibPhase='horizontal';
+  }else{
+    if(n<S._pivotCount+4){showToast('请标记水平方向 2 个点（左→右）','error');return;}
+    S.calibPhase='done';
+    closeCalibModal();
+    return;
+  }
+  redrawCalibCanvas();updateModalHint();updateThumbCanvas();updateCalibPreviewText();updateCalibNextBtn();
+}
+function calibPrevPhase(){
+  if(S.motionType!=='ciliniudun')return;
+  if(S.calibPhase==='vertical'){S.calibPoints.length=S._pivotCount;S._pivotCount=null;S.calibPhase='pivots';}
+  else if(S.calibPhase==='horizontal'||S.calibPhase==='done'){S.calibPoints.length=S._pivotCount+2;S.calibPhase='vertical';}
+  redrawCalibCanvas();updateModalHint();updateThumbCanvas();updateCalibPreviewText();updateCalibNextBtn();
+}
+function updateCalibNextBtn(){
+  const b=$('#calib_done_btn');if(!b)return;
+  if(S.motionType!=='ciliniudun'){b.textContent='确认完成';b.onclick=closeCalibModal;return;}
+  if(S.calibPhase==='pivots')b.textContent='下一步：竖直方向';
+  else if(S.calibPhase==='vertical')b.textContent='下一步：水平方向';
+  else b.textContent='完成标定';
+  b.onclick=calibNextPhase;
 }
 
 // ==================== Upload ====================
@@ -797,32 +897,105 @@ function updateThumbCanvas(){
   if(!S.firstFrameImg)return;const c=thumbCanvas,ctx=c.getContext('2d'),img=S.firstFrameImg;
   const scale=Math.min(c.width/img.naturalWidth,c.height/img.naturalHeight),dw=img.naturalWidth*scale,dh=img.naturalHeight*scale,dx=(c.width-dw)/2,dy=(c.height-dh)/2;
   ctx.clearRect(0,0,c.width,c.height);ctx.drawImage(img,dx,dy,dw,dh);
-  if(S.calibPoints.length>0&&S.calibSpec){for(let i=0;i<S.calibPoints.length;i++){const pt=S.calibPoints[i],ps=S.calibSpec.points[i];ctx.beginPath();ctx.arc(dx+pt.x*scale,dy+pt.y*scale,4,0,2*Math.PI);ctx.fillStyle=ps.color;ctx.fill();ctx.strokeStyle='#000';ctx.lineWidth=1;ctx.stroke();}}
+  if(S.calibPoints.length>0){for(let i=0;i<S.calibPoints.length;i++){const pt=S.calibPoints[i],ps=calibPointStyle(i);ctx.beginPath();ctx.arc(dx+pt.x*scale,dy+pt.y*scale,4,0,2*Math.PI);ctx.fillStyle=ps.color;ctx.fill();ctx.strokeStyle='#000';ctx.lineWidth=1;ctx.stroke();}}
 }
 function updateCalibPreviewText(){
-  if(!S.calibSpec)return;const done=S.calibPoints.length,total=S.calibSpec.num_points;
+  if(!S.calibSpec)return;
+  if(S.motionType==='ciliniudun'){
+    const n=S._pivotCount;
+    if(n==null){
+      const c=S.calibPoints.length;
+      if(c===0){calibPreviewText.style.color='var(--t3)';calibPreviewText.textContent='尚未标定 — 点击开始标定，先依次标记每个摆球的悬挂点';}
+      else{calibPreviewText.style.color='var(--t2)';calibPreviewText.textContent=`已标记 ${c} 个摆球悬挂点（2~5 个）— 确认后继续标定竖直/水平方向`;}
+    }else{
+      const total=n+4;
+      if(S.calibPoints.length<total){calibPreviewText.style.color='var(--t2)';calibPreviewText.textContent=`已标记 ${S.calibPoints.length} / ${total} 个点（${n} 个悬挂点 + 竖直 2 + 水平 2）— 继续标定`;}
+      else{calibPreviewText.style.color='var(--green)';calibPreviewText.textContent=`全部 ${total} 个点标定完成（${n} 个摆球）✓`;btnResetCalib.style.display='inline-flex';updateStepBar(3);}
+    }
+    return;
+  }
+  const done=S.calibPoints.length,total=S.calibSpec.num_points;
   if(done===0){calibPreviewText.style.color='var(--t3)';calibPreviewText.textContent='尚未标定 — 请点击下方按钮，在弹窗中完成标定';}
   else if(done<total){calibPreviewText.style.color='var(--t2)';calibPreviewText.textContent=`已标定 ${done} / ${total} 个点 — 继续标定剩余的点`;}
   else{calibPreviewText.style.color='var(--green)';calibPreviewText.textContent=`全部 ${total} 个点标定完成 ✓`;btnResetCalib.style.display='inline-flex';updateStepBar(3);}
 }
 
 // ==================== Calibration Modal ====================
-function openCalibModal(){if(!S.firstFrameImg||!S.calibSpec){showToast('请先上传视频','error');return;}calibModalOverlay.classList.add('active');calibModalTitle.textContent=`标定坐标系 — ${S.calibSpec.name}`;const img=S.firstFrameImg;const maxW=Math.min(window.innerWidth*0.9,1400),maxH=window.innerHeight*0.65;const scale=Math.min(maxW/img.naturalWidth,maxH/img.naturalHeight,1);calibCanvas.width=Math.round(img.naturalWidth*scale);calibCanvas.height=Math.round(img.naturalHeight*scale);S._modalScale=scale;redrawCalibCanvas();updateModalHint();}
-function closeCalibModal(){calibModalOverlay.classList.remove('active');updateThumbCanvas();updateCalibPreviewText();if(S.calibSpec&&S.calibPoints.length>=S.calibSpec.num_points){cardProcess.classList.remove('hidden');updateStepBar(3);}}
-function redrawCalibCanvas(){const ctx=calibCanvas.getContext('2d'),img=S.firstFrameImg,s=S._modalScale||1;ctx.clearRect(0,0,calibCanvas.width,calibCanvas.height);ctx.drawImage(img,0,0,img.naturalWidth*s,img.naturalHeight*s);const spec=S.calibSpec;if(!spec)return;for(let i=0;i<S.calibPoints.length;i++){const pt=S.calibPoints[i],ps=spec.points[i],x=pt.x*s,y=pt.y*s;ctx.beginPath();ctx.arc(x,y,14,0,2*Math.PI);ctx.fillStyle=ps.color+'22';ctx.fill();ctx.beginPath();ctx.arc(x,y,10,0,2*Math.PI);ctx.strokeStyle=ps.color;ctx.lineWidth=3;ctx.stroke();ctx.beginPath();ctx.arc(x,y,5,0,2*Math.PI);ctx.fillStyle=ps.color;ctx.fill();const label=`P${i+1}: ${ps.label}`;ctx.font='bold 13px "Segoe UI",system-ui,sans-serif';const m=ctx.measureText(label),tx=x+18,ty=y-10;ctx.fillStyle='rgba(0,0,0,0.75)';ctx.fillRect(tx-3,ty-16,m.width+8,22);ctx.fillStyle=ps.color;ctx.fillText(label,tx,ty);}if(S.motionType==='danbai'&&S.calibPoints.length>=3){dL(ctx,S.calibPoints[1],S.calibPoints[2],'#00ffff',2,s);const c=S.calibPoints[0],p1=S.calibPoints[1],p2=S.calibPoints[2];const dd=p2.x-p1.x,dy=p2.y-p1.y,len=Math.sqrt(dd*dd+dy*dy);if(len>0){const ux=dd/len,uy=dy/len;dA(ctx,c,{x:c.x+uy*100,y:c.y-ux*100},'#32dc32',2,s);dA(ctx,c,{x:c.x+ux*80,y:c.y+uy*80},'#00ffff',2,s);}}if(S.motionType==='cizuni'&&S.calibPoints.length>=2)dL(ctx,S.calibPoints[0],S.calibPoints[1],'#00ffff',2,s);if(S.motionType==='niubai'&&S.calibPoints.length>=3){dA(ctx,S.calibPoints[0],S.calibPoints[1],'#5050ff',2,s);dA(ctx,S.calibPoints[0],S.calibPoints[2],'#32dc32',2,s);}if(S.motionType==='niubai'&&S.calibPoints.length>=5)dL(ctx,S.calibPoints[3],S.calibPoints[4],'#ffb41e',2,s);}
+function openCalibModal(){if(!S.firstFrameImg||!S.calibSpec){showToast('请先上传视频','error');return;}calibModalOverlay.classList.add('active');calibModalTitle.textContent=`标定坐标系 — ${S.calibSpec.name}`;const img=S.firstFrameImg;const maxW=Math.min(window.innerWidth*0.9,1400),maxH=window.innerHeight*0.65;const scale=Math.min(maxW/img.naturalWidth,maxH/img.naturalHeight,1);calibCanvas.width=Math.round(img.naturalWidth*scale);calibCanvas.height=Math.round(img.naturalHeight*scale);S._modalScale=scale;
+if(S.motionType==='ciliniudun'){
+  if(isCiliniudunCalibDone())S.calibPhase='done';
+  else if(S._pivotCount==null)S.calibPhase='pivots';
+  else if(S.calibPoints.length>=S._pivotCount+2)S.calibPhase='horizontal';
+  else S.calibPhase='vertical';
+  updateCalibNextBtn();
+  const pb=$('#calib_prev_btn');if(pb)pb.style.display='inline-flex';
+}else{
+  const db=$('#calib_done_btn');if(db){db.textContent='确认完成';db.onclick=closeCalibModal;}
+  const pb=$('#calib_prev_btn');if(pb)pb.style.display='none';
+}
+redrawCalibCanvas();updateModalHint();}
+function closeCalibModal(force){
+  // 关闭弹窗不设限制：X / Esc / 点击遮罩均可退出（标定是否完成由"下一步"校验与开始处理时把关）
+  calibModalOverlay.classList.remove('active');updateThumbCanvas();updateCalibPreviewText();
+  if(S.calibSpec&&(S.motionType==='ciliniudun'?isCiliniudunCalibDone():S.calibPoints.length>=S.calibSpec.num_points)){cardProcess.classList.remove('hidden');updateStepBar(3);}
+}
+function redrawCalibCanvas(){const ctx=calibCanvas.getContext('2d'),img=S.firstFrameImg,s=S._modalScale||1;ctx.clearRect(0,0,calibCanvas.width,calibCanvas.height);ctx.drawImage(img,0,0,img.naturalWidth*s,img.naturalHeight*s);const spec=S.calibSpec;if(!spec)return;for(let i=0;i<S.calibPoints.length;i++){const pt=S.calibPoints[i],ps=calibPointStyle(i),x=pt.x*s,y=pt.y*s;ctx.beginPath();ctx.arc(x,y,14,0,2*Math.PI);ctx.fillStyle=ps.color+'22';ctx.fill();ctx.beginPath();ctx.arc(x,y,10,0,2*Math.PI);ctx.strokeStyle=ps.color;ctx.lineWidth=3;ctx.stroke();ctx.beginPath();ctx.arc(x,y,5,0,2*Math.PI);ctx.fillStyle=ps.color;ctx.fill();const label=`P${i+1}: ${ps.label}`;ctx.font='bold 13px "Segoe UI",system-ui,sans-serif';const m=ctx.measureText(label),tx=x+18,ty=y-10;ctx.fillStyle='rgba(0,0,0,0.75)';ctx.fillRect(tx-3,ty-16,m.width+8,22);ctx.fillStyle=ps.color;ctx.fillText(label,tx,ty);}if(S.motionType==='danbai'&&S.calibPoints.length>=3){dL(ctx,S.calibPoints[1],S.calibPoints[2],'#00ffff',2,s);const c=S.calibPoints[0],p1=S.calibPoints[1],p2=S.calibPoints[2];const dd=p2.x-p1.x,dy=p2.y-p1.y,len=Math.sqrt(dd*dd+dy*dy);if(len>0){const ux=dd/len,uy=dy/len;dA(ctx,c,{x:c.x+uy*100,y:c.y-ux*100},'#32dc32',2,s);dA(ctx,c,{x:c.x+ux*80,y:c.y+uy*80},'#00ffff',2,s);}}if(S.motionType==='cizuni'&&S.calibPoints.length>=2)dL(ctx,S.calibPoints[0],S.calibPoints[1],'#00ffff',2,s);if(S.motionType==='niubai'&&S.calibPoints.length>=3){dA(ctx,S.calibPoints[0],S.calibPoints[1],'#5050ff',2,s);dA(ctx,S.calibPoints[0],S.calibPoints[2],'#32dc32',2,s);}if(S.motionType==='niubai'&&S.calibPoints.length>=5)dL(ctx,S.calibPoints[3],S.calibPoints[4],'#ffb41e',2,s);if(S.motionType==='ciliniudun'&&S._pivotCount!=null){const n=S._pivotCount;if(S.calibPoints.length>=n+2)dL(ctx,S.calibPoints[n],S.calibPoints[n+1],'#00ffff',2,s);if(S.calibPoints.length>=n+4)dL(ctx,S.calibPoints[n+2],S.calibPoints[n+3],'#32dc32',2,s);}}
 function dL(ctx,p1,p2,c,w,sc){const s=sc||1;ctx.beginPath();ctx.moveTo(p1.x*s,p1.y*s);ctx.lineTo(p2.x*s,p2.y*s);ctx.strokeStyle=c;ctx.lineWidth=w;ctx.stroke();}
 function dA(ctx,from,to,c,w,sc){const s=sc||1,head=12,dx=to.x*s-from.x*s,dy=to.y*s-from.y*s,ang=Math.atan2(dy,dx);ctx.beginPath();ctx.moveTo(from.x*s,from.y*s);ctx.lineTo(to.x*s,to.y*s);ctx.strokeStyle=c;ctx.lineWidth=w;ctx.stroke();ctx.beginPath();ctx.moveTo(to.x*s,to.y*s);ctx.lineTo(to.x*s-head*Math.cos(ang-Math.PI/6),to.y*s-head*Math.sin(ang-Math.PI/6));ctx.moveTo(to.x*s,to.y*s);ctx.lineTo(to.x*s-head*Math.cos(ang+Math.PI/6),to.y*s-head*Math.sin(ang+Math.PI/6));ctx.stroke();}
-function updateModalHint(){if(!S.calibSpec)return;const idx=S.calibPoints.length;if(idx>=S.calibSpec.num_points){calibModalHint.innerHTML='所有点已标定完成，点击"确认完成"或按 <span class="kbd">Enter</span> 关闭';calibModalHint.style.color='var(--green)';}else{const pt=S.calibSpec.points[idx];calibModalHint.innerHTML=`请点击: <b>P${idx+1}</b> — ${pt.label} &nbsp; <span class="kbd">Esc</span> 关闭 &nbsp; <span class="kbd">R</span> 重置`;calibModalHint.style.color='var(--a1)';}}
-calibCanvas.addEventListener('click',e=>{if(!S.calibSpec||S.calibPoints.length>=S.calibSpec.num_points)return;const rect=calibCanvas.getBoundingClientRect(),scale=S._modalScale||1;S.calibPoints.push({x:Math.round((e.clientX-rect.left)/scale),y:Math.round((e.clientY-rect.top)/scale)});redrawCalibCanvas();updateModalHint();if(S.calibPoints.length>=S.calibSpec.num_points){updateThumbCanvas();updateCalibPreviewText();cardProcess.classList.remove('hidden');updateStepBar(3);}});
-function undoPoint(){if(S.calibPoints.length>0){S.calibPoints.pop();redrawCalibCanvas();updateModalHint();updateThumbCanvas();updateCalibPreviewText();}}
-function resetCalib(){S.calibPoints=[];redrawCalibCanvas();updateModalHint();updateThumbCanvas();updateCalibPreviewText();btnResetCalib.style.display='none';cardProcess.classList.add('hidden');updateStepBar(2);}
+function updateModalHint(){
+  if(!S.calibSpec)return;
+  if(S.motionType==='ciliniudun'){
+    const n=S._pivotCount;
+    if(n==null){
+      const c=S.calibPoints.length;
+      calibModalHint.innerHTML=(c===0?'请点击: <b>摆球 1 悬挂点</b>（依次点击每个摆球的悬挂点）':'已标记 <b>'+c+'</b> 个悬挂点，可继续点击或确认')+'<br><span style="font-size:0.85em;">至少 2 个、最多 5 个 &nbsp; <span class="kbd">Enter</span> 下一步 &nbsp; <span class="kbd">R</span> 撤销 &nbsp; <span class="kbd">C</span> 上一步 &nbsp; <span class="kbd">Esc</span> 关闭</span>';
+      calibModalHint.style.color='var(--a1)';
+    }else if(S.calibPhase==='vertical'){
+      const done=S.calibPoints.length-n;
+      calibModalHint.innerHTML=(done<2?'请点击: <b>竖直方向 '+(done+1)+'</b>（上→下）':'竖直方向已标定')+' &nbsp; <span class="kbd">Enter</span> 下一步 &nbsp; <span class="kbd">C</span> 上一步 &nbsp; <span class="kbd">R</span> 撤销';
+      calibModalHint.style.color=done<2?'var(--a1)':'var(--green)';
+    }else if(S.calibPhase==='horizontal'){
+      const done=S.calibPoints.length-n-2;
+      calibModalHint.innerHTML=(done<2?'请点击: <b>水平方向 '+(done+1)+'</b>（左→右）':'水平方向已标定')+' &nbsp; <span class="kbd">Enter</span> 完成 &nbsp; <span class="kbd">C</span> 上一步 &nbsp; <span class="kbd">R</span> 撤销';
+      calibModalHint.style.color=done<2?'var(--a1)':'var(--green)';
+    }else{
+      calibModalHint.innerHTML='所有点已标定完成，点击"完成标定"或按 <span class="kbd">Enter</span> 关闭';calibModalHint.style.color='var(--green)';
+    }
+    return;
+  }
+  const idx=S.calibPoints.length;if(idx>=S.calibSpec.num_points){calibModalHint.innerHTML='所有点已标定完成，点击"确认完成"或按 <span class="kbd">Enter</span> 关闭';calibModalHint.style.color='var(--green)';}else{const pt=S.calibSpec.points[idx];calibModalHint.innerHTML=`请点击: <b>P${idx+1}</b> — ${pt.label} &nbsp; <span class="kbd">Esc</span> 关闭 &nbsp; <span class="kbd">R</span> 重置`;calibModalHint.style.color='var(--a1)';}
+}
+calibCanvas.addEventListener('click',e=>{
+  if(!S.calibSpec)return;
+  if(S.motionType==='ciliniudun'){
+    const pc=S._pivotCount;
+    if(pc!=null&&S.calibPoints.length>=pc+4)return;                                                     // 全部标定完成
+    if(S.calibPhase==='pivots'&&S.calibPoints.length>=5){showToast('最多标记 5 个摆球的悬挂点','error');return;}
+    if(pc!=null&&S.calibPhase==='vertical'&&S.calibPoints.length>=pc+2){showToast('竖直方向已标定 2 点，按 Enter 或『下一步』继续','info');return;}
+    if(pc!=null&&S.calibPhase==='horizontal'&&S.calibPoints.length>=pc+4){showToast('水平方向已标定 2 点，按 Enter 或『完成』结束','info');return;}
+    const rect=calibCanvas.getBoundingClientRect(),scale=S._modalScale||1;
+    S.calibPoints.push({x:Math.round((e.clientX-rect.left)/scale),y:Math.round((e.clientY-rect.top)/scale)});
+    redrawCalibCanvas();updateModalHint();
+    if(isCiliniudunCalibDone()){updateThumbCanvas();updateCalibPreviewText();cardProcess.classList.remove('hidden');updateStepBar(3);}
+    return;
+  }
+  if(S.calibPoints.length>=S.calibSpec.num_points)return;const rect=calibCanvas.getBoundingClientRect(),scale=S._modalScale||1;S.calibPoints.push({x:Math.round((e.clientX-rect.left)/scale),y:Math.round((e.clientY-rect.top)/scale)});redrawCalibCanvas();updateModalHint();if(S.calibPoints.length>=S.calibSpec.num_points){updateThumbCanvas();updateCalibPreviewText();cardProcess.classList.remove('hidden');updateStepBar(3);}
+});
+function undoPoint(){if(S.calibPoints.length>0){S.calibPoints.pop();if(S.motionType==='ciliniudun'){if(S._pivotCount!=null&&S.calibPoints.length<S._pivotCount){S._pivotCount=null;S.calibPhase='pivots';}else if(S.calibPhase==='done'){S.calibPhase='horizontal';}updateCalibNextBtn();}redrawCalibCanvas();updateModalHint();updateThumbCanvas();updateCalibPreviewText();}}
+function resetCalib(){S.calibPoints=[];if(S.motionType==='ciliniudun'){S.calibPhase='pivots';S._pivotCount=null;updateCalibNextBtn();}redrawCalibCanvas();updateModalHint();updateThumbCanvas();updateCalibPreviewText();btnResetCalib.style.display='none';cardProcess.classList.add('hidden');updateStepBar(2);}
 calibModalOverlay.addEventListener('click',e=>{if(e.target===calibModalOverlay)closeCalibModal();});
-document.addEventListener('keydown',e=>{if(!calibModalOverlay.classList.contains('active'))return;if(e.key==='Escape'){e.preventDefault();closeCalibModal();}else if(e.key==='r'||e.key==='R'){e.preventDefault();resetCalib();}else if(e.key==='Enter'){e.preventDefault();closeCalibModal();}});
+document.addEventListener('keydown',e=>{if(!calibModalOverlay.classList.contains('active'))return;if(S.motionType==='ciliniudun'){if(e.key==='Escape'){e.preventDefault();closeCalibModal(true);}else if(e.key==='Enter'){e.preventDefault();calibNextPhase();}else if(e.key==='r'||e.key==='R'){e.preventDefault();undoPoint();}else if(e.key==='c'||e.key==='C'){e.preventDefault();calibPrevPhase();}return;}if(e.key==='Escape'){e.preventDefault();closeCalibModal();}else if(e.key==='r'||e.key==='R'){e.preventDefault();resetCalib();}else if(e.key==='Enter'){e.preventDefault();closeCalibModal();}});
 
 // ==================== Processing ====================
 async function startProcessing(){
   const outputDir=$('#output_dir').value.trim();if(!outputDir){showToast('请输入结果保存路径','error');return;}
-  if(!S.calibSpec||S.calibPoints.length<S.calibSpec.num_points){showToast('请先完成标定','error');return;}
+  const calibDone=S.motionType==='ciliniudun'?isCiliniudunCalibDone():(S.calibSpec&&S.calibPoints.length>=S.calibSpec.num_points);
+  if(!calibDone){showToast('请先完成标定','error');return;}
+  let numPivots=4;
+  if(S.motionType==='ciliniudun'){
+    numPivots=S.calibPoints.length-4;
+    if(numPivots<2||numPivots>5){showToast('摆球数量异常（应为 2~5 个），请重新标定','error');return;}
+  }
   btnProcess.disabled=true;btnProcess.innerHTML='<span class="load-pendulum"><span class="bob"></span>分析中...</span>';
   statusDiv.className='status info';statusDiv.textContent='正在使用 YOLOv8 分析视频运动数据...';
   const progBar=$('#progress_bar'),progFill=$('#progress_fill'),progText=$('#progress_text');
@@ -831,7 +1004,7 @@ async function startProcessing(){
   const plotArea=$('#plot_preview_area'),plotImg=$('#plot_preview_img');
   plotArea.classList.add('hidden');
 
-  const body=JSON.stringify({session_id:S.sessionId,output_dir:outputDir,calibration_points:S.calibPoints,skip_start_sec:parseFloat($('#param_skip_start').value)||0,skip_end_sec:parseFloat($('#param_skip_end').value)||0,slow_motion_factor:parseFloat($('#param_slowmo').value)||1,known_physical_dist_m:parseFloat($('#param_dist').value)||0.064,target_cycles:parseInt($('#param_cycles').value)||400,samples_per_cycle:parseInt($('#param_samples').value)||25,damping_subtype:$('#param_damping_type')?.value||'欠阻尼',flip_angle:$('#param_flip_angle')?.checked||false});
+  const body=JSON.stringify({session_id:S.sessionId,output_dir:outputDir,calibration_points:S.calibPoints,skip_start_sec:parseFloat($('#param_skip_start').value)||0,skip_end_sec:parseFloat($('#param_skip_end').value)||0,slow_motion_factor:parseFloat($('#param_slowmo').value)||1,known_physical_dist_m:parseFloat($('#param_dist').value)||0.064,target_cycles:parseInt($('#param_cycles').value)||400,samples_per_cycle:parseInt($('#param_samples').value)||25,damping_subtype:$('#param_damping_type')?.value||'欠阻尼',flip_angle:$('#param_flip_angle')?.checked||false,num_pivots:numPivots,gen_video:$('#param_gen_video')?.checked!==false,target_fps:parseFloat($('#param_targetfps')?.value)||30});
 
   let progTimer=setInterval(async()=>{
     try{const r=await fetch('api/progress/'+S.sessionId);const p=await r.json();if(p.total>0){progFill.style.width=p.percent+'%';progText.textContent=p.percent+'% ('+p.current+'/'+p.total+' 帧)';}}catch(e){}
@@ -859,6 +1032,11 @@ async function startProcessing(){
           h+=`<div class="result-item"><div class="key">保存目录</div><div class="val">${esc(data.output_dir)} <button class="copy-btn" onclick="copyPath('${esc(data.output_dir).replace(/'/g,"\\'")}',this)">📋 复制</button></div></div>`;
           h+=`<div class="result-item"><div class="key">CSV 数据文件</div><div class="val">${esc(r.csv_path)} <button class="copy-btn" onclick="copyPath('${esc(r.csv_path).replace(/'/g,"\\'")}',this)">📋 复制</button></div></div>`;
           if(r.peaks_csv)h+=`<div class="result-item"><div class="key">峰值 CSV</div><div class="val">${esc(r.peaks_csv)} <button class="copy-btn" onclick="copyPath('${esc(r.peaks_csv).replace(/'/g,"\\'")}',this)">📋 复制</button></div></div>`;
+          if(r.per_pendulum_csvs&&r.per_pendulum_csvs.length){
+            const pcs=r.per_pendulum_csvs.map(p=>`<span style="display:block;font-size:0.78rem;">${esc(p)} <button class="copy-btn" onclick="copyPath('${esc(p).replace(/'/g,"\\'")}',this)">📋 复制</button></span>`).join('');
+            h+=`<div class="result-item"><div class="key">各摆 CSV (${r.num_pendulums||r.per_pendulum_csvs.length} 个摆)</div><div class="val" style="line-height:1.9;">${pcs}</div></div>`;
+          }
+          if(r.video_path)h+=`<div class="result-item"><div class="key">标注视频</div><div class="val">${esc(r.video_path)} <button class="copy-btn" onclick="copyPath('${esc(r.video_path).replace(/'/g,"\\'")}',this)">📋 复制</button></div></div>`;
           h+=`<div class="result-item"><div class="key">角度-时间图</div><div class="val">${esc(r.plot_path)} <button class="copy-btn" onclick="copyPath('${esc(r.plot_path).replace(/'/g,"\\'")}',this)">📋 复制</button></div></div>`;
           h+=`<div class="result-item"><div class="key">数据点数</div><div class="val">${r.num_points}</div></div>`;
           if(r.sr_result&&!r.sr_result.error){
