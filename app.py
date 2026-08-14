@@ -51,21 +51,38 @@ UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 ALLOWED_VIDEO_EXTS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v"}
 
 # ---------- Model paths ----------
-_LOCAL_PATHS = {
-    "danbai": r"C:\Users\MECHREV\Desktop\yolov8\runs\detect\small_ball_yolov8_safe2\weights\best.pt",
-    "cizuni": r"C:\Users\MECHREV\Desktop\yolov8\runs\detect\cizuni\weights\best.pt",
-    "niubai": r"C:\Users\MECHREV\Desktop\yolov8\runs\detect\niubai\weights\best.pt",
-    "ciliniudun": r"C:\Users\MECHREV\Desktop\yolov8\runs\detect\ciliniudun\weights\best.pt",
+# 模型查找优先级：
+#   1. 环境变量 MODEL_W_BEST_{key}（可传多个路径，用分号/英文逗号分隔，取第一个存在的）
+#   2. models/ 目录下的 {key}_best.pt
+# 不再硬编码任何本机绝对路径（避免泄漏用户名/具体目录）。
+_MODEL_ENV_NAMES = {
+    "danbai": "MODEL_W_BEST_DANBAI",
+    "cizuni": "MODEL_W_BEST_CIZUNI",
+    "niubai": "MODEL_W_BEST_NIUBAI",
+    "ciliniudun": "MODEL_W_BEST_CILINIUDUN",
 }
-_DEPLOY_PATHS = {
-    "danbai": str(BASE_DIR / "models" / "danbai_best.pt"),
-    "cizuni": str(BASE_DIR / "models" / "cizuni_best.pt"),
-    "niubai": str(BASE_DIR / "models" / "niubai_best.pt"),
-    "ciliniudun": str(BASE_DIR / "models" / "ciliniudun_best.pt"),
-}
+
+
+def _split_model_paths(raw):
+    for sep in (";", ","):
+        if sep in raw:
+            return [p.strip() for p in raw.split(sep) if p.strip()]
+    return [raw.strip()] if raw.strip() else []
+
+
 MODEL_PATHS = {}
-for k in ["danbai", "cizuni", "niubai", "ciliniudun"]:
-    MODEL_PATHS[k] = _LOCAL_PATHS[k] if os.path.exists(_LOCAL_PATHS[k]) else _DEPLOY_PATHS[k]
+for _k, _env in _MODEL_ENV_NAMES.items():
+    _candidates = []
+    _env_val = os.environ.get(_env, "")
+    if _env_val:
+        _candidates.extend(_split_model_paths(_env_val))
+    _candidates.append(str(BASE_DIR / "models" / f"{_k}_best.pt"))
+    _found = next((p for p in _candidates if os.path.exists(p)), None)
+    if _found is not None:
+        MODEL_PATHS[_k] = _found
+    else:
+        # 全都不存在时回退到第一个候选（便于启动时给出清晰告警）
+        MODEL_PATHS[_k] = _candidates[0]
 
 # ---------- Validate model files at startup ----------
 _missing = [k for k, p in MODEL_PATHS.items() if not os.path.exists(p)]

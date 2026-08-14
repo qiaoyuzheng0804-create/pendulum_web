@@ -251,9 +251,6 @@
   .anim-card:nth-child(3){animation-name:starFall3;animation-delay:0.3s;}
   .anim-card:nth-child(4){animation:starFall1 0.9s cubic-bezier(0.22,0.61,0.36,1) both;animation-delay:0.45s;}
   .param-grid .param-card{animation:starFall2 0.7s cubic-bezier(0.22,0.61,0.36,1) both;}
-  .param-grid .param-card:nth-child(1){animation-delay:0s;}.param-grid .param-card:nth-child(2){animation-name:starFall1;animation-delay:0.1s;}
-  .param-grid .param-card:nth-child(3){animation-name:starFall3;animation-delay:0.2s;}.param-grid .param-card:nth-child(4){animation-name:starFall2;animation-delay:0.3s;}
-  .param-grid .param-card:nth-child(5){animation-name:starFall1;animation-delay:0.4s;}.param-grid .param-card:nth-child(6){animation-name:starFall3;animation-delay:0.5s;}
 
   .hidden{display:none!important;}.text-center{text-align:center;}.mt-16{margin-top:16px;}.mt-24{margin-top:24px;}
 
@@ -814,6 +811,23 @@ function selectType(type){
   else if(type==='niubai'){$('#param_cycles').value='80';$('#param_skip_start').value='1';}
   else if(type==='cizuni'){$('#param_skip_start').value='0.15';}
   else if(type==='ciliniudun'){$('#param_skip_start').value='2';$('#param_skip_end').value='0';}
+  animateVisibleParamCards();
+}
+
+// 对所有当前可见的参数卡片依次施加"落入+摇晃"入场动画（递增延迟、循环 starFall1/2/3）
+// 按可见卡片顺序计数，避免 display:none 卡片占用 :nth-child 序号导致动画错乱。
+function animateVisibleParamCards(){
+  const cards=Array.from(document.querySelectorAll('#params_area .param-card'));
+  const names=['starFall1','starFall2','starFall3'];
+  let idx=0;
+  cards.forEach(card=>{
+    if(card.style.display==='none')return;
+    card.style.animation='none';
+    void card.offsetWidth; // 强制 reflow，重启动画
+    card.style.animation=`${names[idx%3]} 0.7s cubic-bezier(0.22,0.61,0.36,1) both`;
+    card.style.animationDelay=`${(idx*0.08).toFixed(2)}s`;
+    idx++;
+  });
 }
 
 // ==================== Phase-based calibration (ciliniudun) ====================
