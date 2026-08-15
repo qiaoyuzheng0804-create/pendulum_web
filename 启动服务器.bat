@@ -15,8 +15,13 @@ if exist .env (
     )
 )
 
-:: Start server with yolov8 conda environment
-set PYTHON=D:\anaconda\envs\yolov8\python.exe
+:: Locate Python: prefer the yolov8 conda env (common install locations),
+:: then fall back to whatever `python` resolves to on PATH.
+set "PYTHON="
+if exist "D:\anaconda\envs\yolov8\python.exe" set "PYTHON=D:\anaconda\envs\yolov8\python.exe"
+if not defined PYTHON if exist "C:\ProgramData\anaconda3\envs\yolov8\python.exe" set "PYTHON=C:\ProgramData\anaconda3\envs\yolov8\python.exe"
+if not defined PYTHON if exist "%USERPROFILE%\anaconda3\envs\yolov8\python.exe" set "PYTHON=%USERPROFILE%\anaconda3\envs\yolov8\python.exe"
+if not defined PYTHON set "PYTHON=python"
 
 :: Check if API key is configured
 if "%MIMO_API_KEY%"=="" (
