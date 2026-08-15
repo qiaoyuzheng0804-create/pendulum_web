@@ -94,6 +94,13 @@ pendulum_web/
 │   ├── guide_cizuni.json       # 磁阻尼摆实验指导
 │   ├── guide_niubai.json       # 扭摆实验指导
 │   └── guide_ciliniudun.json   # 磁力牛顿摆实验指导
+├── firmware/                   # STM32 电磁铁释放固件（完整可移植，详见 firmware/README.md）
+│   ├── project.uvprojx         # Keil 工程（打开→编译→ST-Link 烧录）
+│   ├── User/                   # main.c + stm32f10x_it.c（串口中断释放逻辑）
+│   ├── System/                 # 延时模块
+│   ├── start/                  # 启动文件 + 寄存器定义 + 时钟配置
+│   ├── library/                # ST 标准外设库
+│   └── 电脑端代码/             # controller.py 命令行测试工具 + 接线说明
 ├── templates/
 │   └── index.html              # 单页前端
 └── uploads/                    # 上传视频临时存储（运行时创建，git 忽略）

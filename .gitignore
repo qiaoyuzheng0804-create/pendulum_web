@@ -7,3 +7,20 @@ server.pid
 .env
 .claude/settings.local.json
 .claude/conversation_log.md
+
+# STM32 firmware (Keil) build artifacts
+firmware/**/Objects/
+firmware/**/Listings/
+firmware/**/DebugConfig/
+firmware/**/*.o
+firmware/**/*.axf
+firmware/**/*.crf
+firmware/**/*.d
+firmware/**/*.lst
+firmware/**/*.lnp
+firmware/**/*.dep
+firmware/**/*.uvguix.*
+firmware/**/*.uvoptx
+firmware/**/*.build_log.htm
+firmware/**/EventRecorderStub.scvd
+firmware/**/ExtDll.iex
