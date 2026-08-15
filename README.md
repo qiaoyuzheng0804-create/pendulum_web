@@ -75,7 +75,7 @@ python app.py
 
 「实验获取」模式通过 USB-TTL 串口控制 STM32 电磁铁释放小球，配合 OpenMV 拍摄运动视频（OpenMV 模块预留）。
 
-1. **烧录固件**：Keil 打开 `firmware/project.uvprojx` 编译并 ST-Link 烧录（接线图、串口协议见 `firmware/README.md`）
+1. **烧录固件**：Keil 打开 `firmware/stm32标准库/project.uvprojx` 编译并 ST-Link 烧录（接线图、串口协议见 `firmware/README.md`）
 2. **连接硬件**：插入 USB-TTL，设备管理器确认出现 COM 口
 3. **网页操作**：数据分析 → 选实验类型 → 视频获取方式选「实验获取」→ 刷新串口列表 → 选 COM 口 → 连接
 4. **控制释放**：点「吸合」吸住小球 →（OpenMV 开始拍摄，预留）→ 点「释放」小球落下
@@ -107,11 +107,12 @@ pendulum_web/
 │   ├── guide_niubai.json       # 扭摆实验指导
 │   └── guide_ciliniudun.json   # 磁力牛顿摆实验指导
 ├── firmware/                   # STM32 电磁铁释放固件（完整可移植，详见 firmware/README.md）
-│   ├── project.uvprojx         # Keil 工程（打开→编译→ST-Link 烧录）
-│   ├── User/                   # main.c + stm32f10x_it.c（串口中断释放逻辑）
-│   ├── System/                 # 延时模块
-│   ├── start/                  # 启动文件 + 寄存器定义 + 时钟配置
-│   ├── library/                # ST 标准外设库
+│   ├── stm32标准库/             # Keil 固件工程（与原始工程结构一致）
+│   │   ├── project.uvprojx     # Keil 工程（打开→编译→ST-Link 烧录）
+│   │   ├── User/               # main.c + stm32f10x_it.c（串口中断释放逻辑）
+│   │   ├── System/             # 延时模块
+│   │   ├── start/              # 启动文件 + 寄存器定义 + 时钟配置
+│   │   └── library/            # ST 标准外设库
 │   └── 电脑端代码/             # controller.py 命令行测试工具 + 接线说明
 ├── templates/
 │   └── index.html              # 单页前端

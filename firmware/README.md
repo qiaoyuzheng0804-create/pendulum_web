@@ -2,18 +2,19 @@
 
 本项目是「STM32 电磁铁零抖动释放」的固件源码与电脑端工具，供网页端「实验获取」模式控制电磁铁使用。网页通过串口发送单字节命令，本固件接收后控制继电器通断电磁铁。
 
-## 目录说明
+## 目录结构
 
-| 路径 | 作用 |
-|---|---|
-| `project.uvprojx` | Keil 工程文件，双击用 Keil 打开、编译、烧录 |
-| `User/main.c` | 初始化：USART1 串口（115200）+ PA0 推挽输出，上电默认低电平 |
-| `User/stm32f10x_it.c` | **释放逻辑本体**：串口中断收到 `'1'` → PA0 高电平（吸合）；`'0'` → PA0 低电平（释放） |
-| `User/stm32f10x_conf.h` | 标准库外设配置 |
-| `System/` | 延时模块（Delay.c/h） |
-| `start/` | 启动文件（startup_stm32f10x_md.s）、寄存器定义（stm32f10x.h）、72MHz 时钟配置（system_stm32f10x.c） |
-| `library/` | ST 标准外设库（GPIO/USART/RCC/NVIC 等封装） |
-| `电脑端代码/` | 电脑端命令行测试工具（controller.py，可选；网页已集成同等功能） |
+```
+firmware/
+├── README.md               # 本说明（需求、串口协议、接线、烧录）
+├── stm32标准库/             # STM32 固件工程（与原始 Keil 工程结构一致）
+│   ├── project.uvprojx     # Keil 工程文件，双击用 Keil 打开、编译、烧录
+│   ├── User/               # main.c + stm32f10x_it.c（释放逻辑本体）+ stm32f10x_conf.h
+│   ├── System/             # 延时模块（Delay.c/h）
+│   ├── start/              # 启动文件（startup_stm32f10x_md.s）、寄存器定义（stm32f10x.h）、72MHz 时钟配置
+│   └── library/            # ST 标准外设库（GPIO/USART/RCC/NVIC 等封装）
+└── 电脑端代码/              # 电脑端命令行测试工具（controller.py，可选；网页已集成同等功能）
+```
 
 ## 串口协议
 
@@ -40,7 +41,7 @@ USB-TTL → STM32（3.3V TTL 电平）：
 
 ## 烧录步骤
 
-1. Keil 打开 `project.uvprojx`，确认目标器件 `STM32F103C8`
+1. Keil 打开 `stm32标准库/project.uvprojx`，确认目标器件 `STM32F103C8`
 2. Build 编译生成 `.hex`（工程文件均为相对路径，移动目录后仍可直接编译）
 3. ST-Link 连接，点击 Download 烧录
 4. 复位后 PA0 默认为低电平（电磁铁断电）
