@@ -8,8 +8,8 @@ Flask + YOLOv8 实验视频分析平台。上传摆的实验视频，自动追�
 # 激活 conda 环境
 conda activate yolov8
 
-# 安装依赖（如未安装）
-pip install flask opencv-python numpy pandas scipy matplotlib ultralytics filterpy scikit-learn openai
+# 安装依赖（如未安装，自动包含 flask/cv2/ultralytics/filterpy/pyserial 等全部依赖）
+pip install -r requirements.txt
 
 # 配置 API Key（可选，用于 AI 问答）
 # 编辑 .env 文件，填入 MIMO_API_KEY
