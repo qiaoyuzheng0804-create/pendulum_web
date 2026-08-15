@@ -21,3 +21,6 @@ scikit-learn==1.3.2
 
 # AI Q&A (OpenAI-compatible client)
 openai==2.2.0
+
+# STM32 serial control (electromagnet release)
+pyserial>=3.5,<4

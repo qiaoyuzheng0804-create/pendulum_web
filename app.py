@@ -585,6 +585,123 @@ def cleanup():
     return jsonify({"success": True})
 
 
+# ---------- STM32 serial control (electromagnet release) ----------
+# 浏览器无法直接访问串口，因此由 Flask 代理转发（协议与 电脑端代码/controller.py 一致）：
+#   GET  /api/serial/ports        列出可用串口
+#   POST /api/serial/connect      打开串口（115200 8N1），连接后先发送 '0' 建立已知断电状态
+#   POST /api/serial/command      发送 '0'(断电释放) / '1'(通电吸合)，返回提交时刻时间戳
+#   POST /api/serial/disconnect   关闭串口（若通电则先断电保护）
+# pyserial 为可选依赖：未安装时相关接口返回友好错误提示。
+try:
+    import serial as _pyserial
+    from serial.tools import list_ports as _list_ports
+    SERIAL_AVAILABLE = True
+except ImportError:
+    _pyserial = None
+    _list_ports = None
+    SERIAL_AVAILABLE = False
+
+SERIAL_BAUD = 115200
+_SERIAL_LOCK = threading.Lock()
+_serial_conn = None  # 全局唯一串口连接（serial.Serial 实例）
+
+
+def _serial_unavailable():
+    return jsonify({"error": "未安装 pyserial，请先执行: pip install pyserial"}), 503
+
+
+@app.route("/api/serial/ports")
+def serial_list_ports():
+    if not SERIAL_AVAILABLE:
+        return _serial_unavailable()
+    ports = []
+    try:
+        for p in _list_ports.comports():
+            ports.append({"device": p.device, "description": p.description or p.device})
+    except Exception as e:
+        return jsonify({"error": f"枚举串口失败: {e}"}), 400
+    connected = _serial_conn is not None and _serial_conn.is_open
+    return jsonify({
+        "ports": ports,
+        "connected": connected,
+        "port": _serial_conn.port if connected else None,
+    })
+
+
+@app.route("/api/serial/connect", methods=["POST"])
+def serial_connect():
+    if not SERIAL_AVAILABLE:
+        return _serial_unavailable()
+    data = request.get_json() or {}
+    port = str(data.get("port", "")).strip()
+    if not port:
+        return jsonify({"error": "缺少串口号 port。"}), 400
+    global _serial_conn
+    with _SERIAL_LOCK:
+        if _serial_conn is not None and _serial_conn.is_open:
+            return jsonify({"error": f"串口已连接: {_serial_conn.port}，请先断开。"}), 400
+        try:
+            conn = _pyserial.Serial(
+                port=port, baudrate=SERIAL_BAUD,
+                bytesize=_pyserial.EIGHTBITS, parity=_pyserial.PARITY_NONE,
+                stopbits=_pyserial.STOPBITS_ONE, timeout=1.0, write_timeout=1.0,
+            )
+            # USB-TTL 适配器可能在打开串口时复位 STM32，等待其完成启动
+            _time.sleep(1.5)
+            conn.reset_input_buffer()
+            # 协议无状态查询，先发送 '0' 建立已知安全状态（断电、无磁力）
+            conn.write(b"0")
+            conn.flush()
+            _serial_conn = conn
+            return jsonify({"success": True, "port": port, "state": 0})
+        except Exception as e:
+            return jsonify({"error": f"无法打开串口 {port}: {e}"}), 400
+
+
+@app.route("/api/serial/command", methods=["POST"])
+def serial_command():
+    if not SERIAL_AVAILABLE:
+        return _serial_unavailable()
+    data = request.get_json() or {}
+    cmd = str(data.get("command", "")).strip()
+    if cmd not in ("0", "1"):
+        return jsonify({"error": "command 仅支持 '0'(断电释放) 或 '1'(通电吸合)。"}), 400
+    with _SERIAL_LOCK:
+        if _serial_conn is None or not _serial_conn.is_open:
+            return jsonify({"error": "串口未连接，请先连接。"}), 400
+        try:
+            _serial_conn.write(cmd.encode("ascii"))
+            _serial_conn.flush()
+            # 记录电脑提交指令的墙上时钟时间戳，供后续 OpenMV 帧时间对齐参考
+            return jsonify({"success": True, "command": cmd,
+                            "state": 1 if cmd == "1" else 0,
+                            "timestamp_ns": _time.time_ns()})
+        except Exception as e:
+            return jsonify({"error": f"发送命令失败: {e}"}), 400
+
+
+@app.route("/api/serial/disconnect", methods=["POST"])
+def serial_disconnect():
+    if not SERIAL_AVAILABLE:
+        return _serial_unavailable()
+    global _serial_conn
+    with _SERIAL_LOCK:
+        if _serial_conn is None or not _serial_conn.is_open:
+            return jsonify({"success": True, "already": True})
+        try:
+            # 断电保护：关闭前确保电磁铁处于断电状态
+            _serial_conn.write(b"0")
+            _serial_conn.flush()
+        except Exception:
+            pass
+        try:
+            _serial_conn.close()
+        except Exception:
+            pass
+        _serial_conn = None
+    return jsonify({"success": True})
+
+
 # ---------- Teaching & AI Chat ----------
 
 @app.route("/api/teaching_content/<topic>")

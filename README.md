@@ -15,10 +15,12 @@ Flask + YOLOv8 实验视频分析平台。上传摆的实验视频，自动追�
   - 交互模拟：Canvas 实时绘制阻尼振荡波形
   - AI 问答：LLM 接入，Markdown + LaTeX 公式渲染
 - **前端**：单页 HTML，6 种主题，SSE 流式进度，KaTeX 公式渲染
+- **实验获取**：视频获取方式双卡片（上传现成视频 / STM32+OpenMV 实验获取）；实验获取模式通过串口控制 STM32 电磁铁释放小球（'1' 吸合 / '0' 释放），OpenMV 拍摄模块预留位置
 
 ## 技术栈
 
 - 后端：Flask + YOLOv8 (ultralytics)
+- 串口：pyserial（STM32 电磁铁释放控制）
 - 视频 / 数值：OpenCV、NumPy、SciPy、pandas、matplotlib
 - 滤波：Savitzky-Golay、高斯、卡尔曼 (filterpy)
 - 拟合：符号回归 (纯 SciPy) 参数拟合
@@ -109,6 +111,10 @@ pendulum_web/
 | POST | `/api/cleanup` | 清理 session 文件 |
 | GET | `/api/teaching_content/<topic>` | 获取教学内容 JSON |
 | POST | `/api/ai_chat` | AI 知识问答（SSE 流式） |
+| GET | `/api/serial/ports` | 列出可用串口 |
+| POST | `/api/serial/connect` | 连接串口（115200 8N1），连接后先发送 `0` 建立断电状态 |
+| POST | `/api/serial/command` | 发送命令 `0`(释放) / `1`(吸合)，返回发送时刻时间戳 |
+| POST | `/api/serial/disconnect` | 断开串口（若通电先断电保护） |
 
 ## 注意事项
 
