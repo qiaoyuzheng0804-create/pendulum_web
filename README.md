@@ -86,7 +86,7 @@ pendulum_web/
 │   ├── danbai_processor.py     # 单摆处理
 │   ├── cizuni_processor.py     # 磁阻尼摆处理
 │   ├── niubai_processor.py     # 扭摆处理
-│   ├── ciliniudun_processor.py # 磁力牛顿摆处理（移植自 yolov8/src/磁力牛顿摆/magnetic_newton_cradle.py）
+│   ├── ciliniudun_processor.py # 磁力牛顿摆处理（YOLOv8 + ByteTrack 多目标跟踪）
 │   └── symbolic_regression.py  # 符号回归拟合
 ├── teaching/
 │   ├── theory.json             # 阻尼振动理论

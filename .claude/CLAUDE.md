@@ -36,7 +36,7 @@ pendulum_web/
 │   ├── danbai_processor.py         # 单摆处理
 │   ├── cizuni_processor.py         # 磁阻尼摆处理
 │   ├── niubai_processor.py         # 扭摆处理
-│   ├── ciliniudun_processor.py     # 磁力牛顿摆处理（移植自 yolov8/src/磁力牛顿摆/magnetic_newton_cradle.py）
+│   ├── ciliniudun_processor.py     # 磁力牛顿摆处理（YOLOv8 + ByteTrack 多目标跟踪）
 │   └── symbolic_regression.py      # 符号回归拟合（纯 scipy）
 ├── teaching/
 │   ├── theory.json                 # 阻尼振动理论知识
@@ -156,13 +156,11 @@ System prompt 要求 AI 用 Markdown 格式回答，公式用 `$...$` / `$$...$$
 
 ## 模型路径
 
-YOLOv8 模型按优先级查找：本地路径 → 项目 `models/` 目录。
+YOLOv8 模型查找优先级（`app.py` 中 `MODEL_PATHS`，不再硬编码本机绝对路径）：
+1. 环境变量 `MODEL_W_BEST_{key}`（key 为 danbai/cizuni/niubai/ciliniudun；可用分号或逗号分隔多个路径，取第一个存在的）
+2. 项目 `models/` 目录下的 `{key}_best.pt`
 
-本地路径（开发环境）：
-- `C:\Users\MECHREV\Desktop\yolov8\runs\detect\small_ball_yolov8_safe2\weights\best.pt`（单摆）
-- `C:\Users\MECHREV\Desktop\yolov8\runs\detect\cizuni\weights\best.pt`（磁阻尼摆）
-- `C:\Users\MECHREV\Desktop\yolov8\runs\detect\niubai\weights\best.pt`（扭摆）
-- `C:\Users\MECHREV\Desktop\yolov8\runs\detect\ciliniudun\weights\best.pt`（磁力牛顿摆）
+示例：`MODEL_W_BEST_DANBAI=C:\path\to\best.pt` 或默认 `models/danbai_best.pt`。
 
 ## 处理器说明
 
