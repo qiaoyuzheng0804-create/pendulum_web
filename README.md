@@ -48,7 +48,7 @@ pip install -r requirements.txt
 | 扭摆 (niubai) | `models/niubai_best.pt` |
 | 磁力牛顿摆 (ciliniudun) | `models/ciliniudun_best.pt` |
 
-`app.py` 启动时会优先使用本地训练路径，找不到则回退到 `models/` 目录。若要换成自己训练的权重，直接替换对应 `.pt` 文件即可。
+`app.py` 启动时按环境变量（`MODEL_W_BEST_{key}`，可选）→ `models/` 目录的顺序查找权重。若要换成自己训练的权重，直接替换对应 `.pt` 文件，或设置对应环境变量指定路径。
 
 ### 3. 配置 AI 问答（可选）
 
@@ -70,6 +70,18 @@ python app.py
 ```
 
 服务运行在 `http://127.0.0.1:5000`，支持局域网访问。
+
+## 实验获取（STM32 电磁铁释放，可选）
+
+「实验获取」模式通过 USB-TTL 串口控制 STM32 电磁铁释放小球，配合 OpenMV 拍摄运动视频（OpenMV 模块预留）。
+
+1. **烧录固件**：Keil 打开 `firmware/project.uvprojx` 编译并 ST-Link 烧录（接线图、串口协议见 `firmware/README.md`）
+2. **连接硬件**：插入 USB-TTL，设备管理器确认出现 COM 口
+3. **网页操作**：数据分析 → 选实验类型 → 视频获取方式选「实验获取」→ 刷新串口列表 → 选 COM 口 → 连接
+4. **控制释放**：点「吸合」吸住小球 →（OpenMV 开始拍摄，预留）→ 点「释放」小球落下
+5. **获取视频**：当前可先在 OpenMV IDE 完成拍摄，再切回「上传视频」方式上传；后续将支持拍摄后自动进入标定流程
+
+> 电脑端只需 `pip install -r requirements.txt`（含 pyserial）即可运行网页与串口控制；Keil/STM32 标准库仅在重新编译固件时需要。
 
 ## 项目结构
 
