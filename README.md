@@ -71,17 +71,19 @@ python app.py
 
 服务运行在 `http://127.0.0.1:5000`，支持局域网访问。
 
-## 实验获取（STM32 电磁铁释放，可选）
+## 实验获取（STM32 电磁铁 + OpenMV 拍摄，可选）
 
-「实验获取」模式通过 USB-TTL 串口控制 STM32 电磁铁释放小球，配合 OpenMV 拍摄运动视频（OpenMV 模块预留）。
+「实验获取」模式通过两个独立串口分别控制 STM32 电磁铁和 OpenMV 摄像头：
 
 1. **烧录固件**：Keil 打开 `firmware/stm32标准库/project.uvprojx` 编译并 ST-Link 烧录（接线图、串口协议见 `firmware/README.md`）
-2. **连接硬件**：插入 USB-TTL，设备管理器确认出现 COM 口
-3. **网页操作**：数据分析 → 选实验类型 → 视频获取方式选「实验获取」→ 刷新串口列表 → 选 COM 口 → 连接
-4. **控制释放**：点「吸合」吸住小球 →（OpenMV 开始拍摄，预留）→ 点「释放」小球落下
-5. **获取视频**：当前可先在 OpenMV IDE 完成拍摄，再切回「上传视频」方式上传；后续将支持拍摄后自动进入标定流程
+2. **连接硬件**：插入 USB-TTL（电磁铁控制）和 OpenMV USB（摄像头数据），设备管理器确认出现两个 COM 口
+3. **网页操作**：数据分析 → 选实验类型 → 视频获取方式选「实验获取」→ 分别连接 STM32 串口和 OpenMV 串口
+4. **OpenMV 实时预览**：连接 OpenMV 后网页实时显示摄像头画面（MJPEG 流，~13 FPS @ QVGA）
+5. **云台控制**：通过网页方向键按钮控制 OpenMV 云台（上下左右 + 回中）
+6. **拍摄流程**：点「吸合」吸住小球 → 点「开始拍摄」→ 点「释放」小球落下 → 点「停止并上传」→ 自动进入标定流程
 
-> 电脑端只需 `pip install -r requirements.txt`（含 pyserial）即可运行网页与串口控制；Keil/STM32 标准库仅在重新编译固件时需要。
+> 电脑端只需 `pip install -r requirements.txt`（含 pyserial、Pillow）即可运行网页与串口控制；Keil/STM32 标准库仅在重新编译固件时需要。
+> OpenMV 使用 USBDBG V1 协议（921600 波特率）读取帧缓冲，不依赖 OpenMV IDE。
 
 ## 项目结构
 
@@ -99,7 +101,8 @@ pendulum_web/
 │   ├── cizuni_processor.py     # 磁阻尼摆处理
 │   ├── niubai_processor.py     # 扭摆处理
 │   ├── ciliniudun_processor.py # 磁力牛顿摆处理（YOLOv8 + ByteTrack 多目标跟踪）
-│   └── symbolic_regression.py  # 符号回归拟合
+│   ├── symbolic_regression.py  # 符号回归拟合
+│   └── openmv_manager.py       # OpenMV 摄像头管理器（USBDBG V1 + 录制 + 云台）
 ├── teaching/
 │   ├── theory.json             # 阻尼振动理论
 │   ├── guide_danbai.json       # 单摆实验指导
@@ -135,6 +138,14 @@ pendulum_web/
 | POST | `/api/serial/connect` | 连接串口（115200 8N1），连接后先发送 `0` 建立断电状态 |
 | POST | `/api/serial/command` | 发送命令 `0`(释放) / `1`(吸合)，返回发送时刻时间戳 |
 | POST | `/api/serial/disconnect` | 断开串口（若通电先断电保护） |
+| GET | `/api/openmv/ports` | 列出串口（标注 OpenMV 设备） |
+| POST | `/api/openmv/connect` | 连接 OpenMV 摄像头（USBDBG V1，921600 波特率） |
+| POST | `/api/openmv/disconnect` | 断开 OpenMV 摄像头 |
+| GET | `/api/openmv/stream` | MJPEG 实时预览流 |
+| POST | `/api/openmv/record/start` | 开始录制帧 |
+| POST | `/api/openmv/record/stop` | 停止录制，保存 MP4 并自动创建处理 session |
+| POST | `/api/openmv/gimbal` | 云台控制（U/D/L/R/C） |
+| GET | `/api/openmv/status` | 查询 OpenMV 连接与录制状态 |
 
 ## 注意事项
 

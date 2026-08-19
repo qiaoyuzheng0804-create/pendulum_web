@@ -37,6 +37,7 @@ from processors.symbolic_regression import (
     run_sr_danbai, run_sr_ci_underdamped, run_sr_ci_critical,
     run_sr_ci_overdamped, run_sr_niubai
 )
+from processors.openmv_manager import openmv_manager, OPENMV_USB_VID, rgb_to_jpeg_bytes
 
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
@@ -700,6 +701,172 @@ def serial_disconnect():
             pass
         _serial_conn = None
     return jsonify({"success": True})
+
+
+# ---------- OpenMV camera (real-time preview, recording, gimbal) ----------
+# 通过 USBDBG V1 协议读取 OpenMV 帧缓冲，提供 MJPEG 实时预览流、
+# 录制视频、云台控制等功能。OpenMV 与 STM32 电磁铁使用独立串口。
+
+@app.route("/api/openmv/ports")
+def openmv_list_ports():
+    """List serial ports, highlighting OpenMV devices."""
+    if not SERIAL_AVAILABLE:
+        return _serial_unavailable()
+    ports = []
+    try:
+        for p in _list_ports.comports():
+            is_openmv = (getattr(p, "vid", None) == OPENMV_USB_VID
+                         or "openmv" in (p.description or "").lower())
+            ports.append({
+                "device": p.device,
+                "description": p.description or p.device,
+                "is_openmv": is_openmv,
+            })
+    except Exception as e:
+        return jsonify({"error": f"枚举串口失败: {e}"}), 400
+    return jsonify({
+        "ports": ports,
+        "connected": openmv_manager.connected,
+    })
+
+
+@app.route("/api/openmv/connect", methods=["POST"])
+def openmv_connect():
+    """Connect to an OpenMV camera."""
+    if not SERIAL_AVAILABLE:
+        return _serial_unavailable()
+    data = request.get_json() or {}
+    port = str(data.get("port", "")).strip()
+    if not port:
+        return jsonify({"error": "缺少串口号 port。"}), 400
+    baud = int(data.get("baud", 921600))
+    result = openmv_manager.connect(port, baud)
+    if "error" in result:
+        return jsonify(result), 400
+    return jsonify(result)
+
+
+@app.route("/api/openmv/disconnect", methods=["POST"])
+def openmv_disconnect():
+    """Disconnect from OpenMV camera."""
+    result = openmv_manager.disconnect()
+    return jsonify(result)
+
+
+@app.route("/api/openmv/stream")
+def openmv_stream():
+    """MJPEG streaming endpoint for real-time preview.
+
+    Returns a multipart/x-mixed-replace stream of JPEG frames.
+    """
+    if not openmv_manager.connected:
+        return jsonify({"error": "OpenMV 未连接。"}), 400
+
+    def generate():
+        while openmv_manager.connected:
+            frame = openmv_manager.get_latest_frame()
+            if frame is None:
+                time.sleep(0.05)
+                continue
+            # Record frame if recording
+            openmv_manager._record_frame(frame.rgb)
+            jpeg = rgb_to_jpeg_bytes(frame.rgb, quality=70)
+            if not jpeg:
+                continue
+            yield (
+                b"--frame\r\n"
+                b"Content-Type: image/jpeg\r\n"
+                b"Content-Length: " + str(len(jpeg)).encode() + b"\r\n\r\n"
+                + jpeg + b"\r\n"
+            )
+            time.sleep(0.01)
+
+    return Response(
+        generate(),
+        mimetype="multipart/x-mixed-replace; boundary=frame",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
+
+
+@app.route("/api/openmv/record/start", methods=["POST"])
+def openmv_record_start():
+    """Start recording frames from OpenMV."""
+    result = openmv_manager.start_recording()
+    if "error" in result:
+        return jsonify(result), 400
+    return jsonify(result)
+
+
+@app.route("/api/openmv/record/stop", methods=["POST"])
+def openmv_record_stop():
+    """Stop recording and save as MP4 video.
+
+    Returns the video path and automatically creates a processing session
+    (same as upload_video).
+    """
+    result = openmv_manager.stop_recording(str(UPLOAD_FOLDER))
+    if "error" in result:
+        return jsonify(result), 400
+
+    video_path = result["video_path"]
+
+    # Create a session for the recorded video (reuse upload flow)
+    motion_type = request.get_json(silent=True)
+    if motion_type is None:
+        motion_type = {}
+    motion_type = str(motion_type.get("motion_type", "danbai")).strip()
+    if motion_type not in MODEL_PATHS:
+        motion_type = "danbai"  # default fallback
+
+    session_id = str(uuid.uuid4())
+    try:
+        frame_b64, disp_w, disp_h = get_first_frame_base64(video_path)
+    except Exception as e:
+        return jsonify({"error": f"录制成功但读取首帧失败: {e}"}), 500
+
+    cap = cv2.VideoCapture(video_path)
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    cap.release()
+
+    session_store[session_id] = {
+        "video_path": video_path,
+        "motion_type": motion_type,
+        "original_filename": result.get("video_name", "openmv_capture.mp4"),
+        "total_frames": total_frames,
+        "created_at": _time.time(),
+    }
+
+    return jsonify({
+        **result,
+        "session_id": session_id,
+        "first_frame_base64": frame_b64,
+        "display_width": disp_w,
+        "display_height": disp_h,
+        "motion_type": motion_type,
+        "num_calib_points": CALIB_SPECS[motion_type]["num_points"],
+        "total_frames": total_frames,
+    })
+
+
+@app.route("/api/openmv/gimbal", methods=["POST"])
+def openmv_gimbal():
+    """Send a gimbal command (U/D/L/R/C) to OpenMV via TX_INPUT."""
+    data = request.get_json() or {}
+    command = str(data.get("command", "")).strip().upper()
+    result = openmv_manager.send_gimbal_command(command)
+    if "error" in result:
+        return jsonify(result), 400
+    return jsonify(result)
+
+
+@app.route("/api/openmv/status")
+def openmv_status():
+    """Query OpenMV connection and recording status."""
+    return jsonify(openmv_manager.get_status())
 
 
 # ---------- Teaching & AI Chat ----------

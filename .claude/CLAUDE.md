@@ -37,7 +37,8 @@ pendulum_web/
 │   ├── cizuni_processor.py         # 磁阻尼摆处理
 │   ├── niubai_processor.py         # 扭摆处理
 │   ├── ciliniudun_processor.py     # 磁力牛顿摆处理（YOLOv8 + ByteTrack 多目标跟踪）
-│   └── symbolic_regression.py      # 符号回归拟合（纯 scipy）
+│   ├── symbolic_regression.py      # 符号回归拟合（纯 scipy）
+│   └── openmv_manager.py           # OpenMV 摄像头管理器（USBDBG V1 帧采集 + 录制 + 云台控制）
 ├── teaching/
 │   ├── theory.json                 # 阻尼振动理论知识
 │   ├── guide_danbai.json           # 单摆实验指导

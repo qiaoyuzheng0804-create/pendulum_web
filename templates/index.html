@@ -525,7 +525,7 @@
     <div id="video_info" style="margin-top:8px;font-size:0.85rem;color:var(--green);font-family:'JetBrains Mono','Consolas',monospace;"></div>
     </div><!-- /acq_panel_upload -->
 
-    <!-- 实验获取面板：STM32 串口释放控制 + OpenMV 拍摄（预留） -->
+    <!-- 实验获取面板：STM32 串口释放控制 + OpenMV 拍摄 -->
     <div id="acq_panel_experiment" class="hidden" style="margin-top:16px;">
       <div class="section-label">&#9881; 实验设备控制 Experiment Device Control</div>
 
@@ -552,20 +552,51 @@
         <div id="magnet_status" style="font-size:0.78rem;color:var(--t3);margin-top:8px;">先连接串口，再吸合电磁铁</div>
       </div>
 
-      <!-- OpenMV 拍摄模块（预留位置） -->
-      <!-- TODO(openmv): 后续在此集成 OpenMV 实时预览、开始/停止拍摄、视频自动上传到 /api/upload_video
-           推荐流程：吸合（准备）→ 点击「开始拍摄」（OpenMV 开始录像）→ 点击「释放小球」（电磁铁断电，
-           小球落下被 OpenMV 拍到）→ 拍摄结束自动上传视频，进入标定流程 -->
+      <!-- OpenMV 拍摄模块 -->
+      <div class="param-card" style="margin-bottom:12px;">
+        <div class="p-label">OpenMV 摄像头 OpenMV Camera</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <select id="openmv_port_select" style="flex:1;min-width:170px;">
+            <option value="">扫描中...</option>
+          </select>
+          <button class="btn btn-outline" onclick="refreshOpenMVPorts()">&#8635; 刷新</button>
+          <button class="btn btn-primary" id="btn_openmv_connect" onclick="toggleOpenMVConnect()">连接</button>
+        </div>
+        <div id="openmv_status" style="font-size:0.78rem;color:var(--t3);margin-top:8px;">未连接 OpenMV</div>
+
+        <!-- 实时预览 -->
+        <div id="openmv_preview_wrap" style="margin-top:10px;display:none;">
+          <div style="position:relative;background:#000;border-radius:8px;overflow:hidden;max-height:360px;">
+            <img id="openmv_preview" style="width:100%;display:block;" alt="OpenMV 预览">
+            <div id="openmv_overlay" style="position:absolute;top:6px;right:8px;background:rgba(0,0,0,0.65);color:#0f0;font:600 0.72rem 'JetBrains Mono','Consolas',monospace;padding:3px 8px;border-radius:4px;">
+              -- FPS
+            </div>
+            <div id="openmv_rec_indicator" style="position:absolute;top:6px;left:8px;background:rgba(200,0,0,0.85);color:#fff;font:700 0.72rem monospace;padding:3px 10px;border-radius:4px;display:none;">
+              ● REC <span id="openmv_rec_time">00:00</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 录制控制 -->
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
+          <button class="btn btn-primary" id="btn_openmv_record" disabled onclick="toggleOpenMVRecord()">&#9654; 开始拍摄</button>
+          <button class="btn btn-outline" id="btn_openmv_stop_upload" disabled onclick="stopOpenMVAndUpload()">&#128228; 停止并上传</button>
+        </div>
+      </div>
+
+      <!-- 云台控制 -->
       <div class="param-card">
-        <div class="p-label">OpenMV 拍摄模块（预留，即将支持）</div>
-        <div style="font-size:0.82rem;color:var(--t2);line-height:1.6;">
-          预留位置：后续在此集成 OpenMV 实时预览、开始/停止拍摄与视频自动上传。<br>
-          当前阶段请先在 OpenMV IDE 中完成拍摄，再切换到「上传视频」方式上传视频文件。
+        <div class="p-label">云台控制 Gimbal Control</div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px;margin-top:6px;">
+          <button class="btn btn-outline openmv-gimbal-btn" data-cmd="U" style="width:52px;height:40px;padding:0;">&#9650;</button>
+          <div style="display:flex;gap:4px;">
+            <button class="btn btn-outline openmv-gimbal-btn" data-cmd="L" style="width:52px;height:40px;padding:0;">&#9664;</button>
+            <button class="btn btn-outline openmv-gimbal-btn" data-cmd="C" style="width:52px;height:40px;padding:0;font-size:0.72rem;">回中</button>
+            <button class="btn btn-outline openmv-gimbal-btn" data-cmd="R" style="width:52px;height:40px;padding:0;">&#9654;</button>
+          </div>
+          <button class="btn btn-outline openmv-gimbal-btn" data-cmd="D" style="width:52px;height:40px;padding:0;">&#9660;</button>
         </div>
-        <div style="display:flex;gap:10px;margin-top:8px;">
-          <button class="btn btn-outline" disabled>开始拍摄</button>
-          <button class="btn btn-outline" disabled>停止并上传</button>
-        </div>
+        <div id="gimbal_status" style="font-size:0.78rem;color:var(--t3);margin-top:8px;text-align:center;">先连接 OpenMV，再控制云台</div>
       </div>
     </div><!-- /acq_panel_experiment -->
 
@@ -966,7 +997,7 @@ function selectAcqMode(mode){
   acqCards.forEach(c=>c.classList.toggle('selected',c.dataset.acq===mode));
   acqPanelUpload.classList.toggle('hidden',mode!=='upload');
   acqPanelExperiment.classList.toggle('hidden',mode!=='experiment');
-  if(mode==='experiment')refreshSerialPorts();
+  if(mode==='experiment'){refreshSerialPorts();refreshOpenMVPorts();}
 }
 
 // ==================== STM32 Serial (electromagnet release) ====================
@@ -1069,6 +1100,187 @@ async function sendMagnetCommand(cmd){
     showToast(label+'失败: '+err.message,'error');
   }
 }
+
+// ==================== OpenMV Camera (preview, recording, gimbal) ====================
+const openmvPortSelect=$('#openmv_port_select'),btnOpenMVConnect=$('#btn_openmv_connect'),
+      openmvStatus=$('#openmv_status'),openmvPreviewWrap=$('#openmv_preview_wrap'),
+      openmvPreview=$('#openmv_preview'),openmvOverlay=$('#openmv_overlay'),
+      openmvRecIndicator=$('#openmv_rec_indicator'),openmvRecTime=$('#openmv_rec_time'),
+      btnOpenMVRecord=$('#btn_openmv_record'),btnOpenMVStopUpload=$('#btn_openmv_stop_upload'),
+      gimbalStatus=$('#gimbal_status');
+let openmvConnected=false,openmvRecording=false,openmvRecStart=0,openmvRecTimer=null,openmvStatusTimer=null;
+
+async function refreshOpenMVPorts(){
+  if(!openmvPortSelect)return;
+  openmvStatus.textContent='正在扫描串口...';openmvStatus.style.color='var(--t3)';
+  try{
+    const r=await fetch('api/openmv/ports');const d=await r.json();
+    if(!r.ok)throw new Error(d.error);
+    openmvPortSelect.innerHTML='';
+    if(!d.ports||!d.ports.length){
+      openmvPortSelect.innerHTML='<option value="">未发现串口</option>';
+    }else{
+      d.ports.forEach(p=>{
+        const o=document.createElement('option');
+        o.value=p.device;
+        o.textContent=p.device+(p.is_openmv?' [OpenMV]':' — '+p.description);
+        if(p.is_openmv)o.selected=true;
+        openmvPortSelect.appendChild(o);
+      });
+    }
+    if(d.connected){
+      openmvConnected=true;btnOpenMVConnect.textContent='断开';
+      openmvStatus.textContent='已连接';openmvStatus.style.color='';
+    }else{
+      openmvConnected=false;btnOpenMVConnect.textContent='连接';
+      openmvStatus.textContent=d.ports.length?`发现 ${d.ports.length} 个串口`:'未发现串口';
+    }
+  }catch(err){
+    openmvStatus.textContent='扫描失败: '+err.message;openmvStatus.style.color='var(--red)';
+  }
+}
+
+async function toggleOpenMVConnect(){
+  if(openmvConnected){await disconnectOpenMV();return;}
+  const port=openmvPortSelect.value;
+  if(!port){showToast('请先选择 OpenMV 串口','error');return;}
+  btnOpenMVConnect.disabled=true;
+  openmvStatus.textContent='连接中...';openmvStatus.style.color='var(--t3)';
+  try{
+    const r=await fetch('api/openmv/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({port})});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error);
+    openmvConnected=true;btnOpenMVConnect.textContent='断开';
+    openmvStatus.textContent=`已连接 ${port}（固件 ${d.firmware}）`;openmvStatus.style.color='';
+    openmvPreviewWrap.style.display='';btnOpenMVRecord.disabled=false;
+    // Start MJPEG stream
+    openmvPreview.src='api/openmv/stream?t='+Date.now();
+    startOpenMVStatusPoll();
+    showToast('OpenMV 连接成功','info');
+  }catch(err){
+    openmvStatus.textContent='连接失败: '+err.message;openmvStatus.style.color='var(--red)';
+    showToast('OpenMV 连接失败: '+err.message,'error');
+  }finally{
+    btnOpenMVConnect.disabled=false;
+  }
+}
+
+async function disconnectOpenMV(){
+  btnOpenMVConnect.disabled=true;
+  try{
+    if(openmvRecording)await stopOpenMVRecord();
+    await fetch('api/openmv/disconnect',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    openmvConnected=false;btnOpenMVConnect.textContent='连接';
+    openmvStatus.textContent='未连接';openmvStatus.style.color='';
+    openmvPreviewWrap.style.display='none';openmvPreview.src='';
+    btnOpenMVRecord.disabled=true;btnOpenMVStopUpload.disabled=true;
+    stopOpenMVStatusPoll();
+    showToast('OpenMV 已断开','info');
+  }catch(err){
+    openmvStatus.textContent='断开失败: '+err.message;openmvStatus.style.color='var(--red)';
+  }finally{
+    btnOpenMVConnect.disabled=false;
+  }
+}
+
+function startOpenMVStatusPoll(){
+  stopOpenMVStatusPoll();
+  openmvStatusTimer=setInterval(async()=>{
+    if(!openmvConnected)return;
+    try{
+      const r=await fetch('api/openmv/status');const d=await r.json();
+      if(d.connected){
+        openmvOverlay.textContent=d.fps+' FPS';
+        if(d.recording){
+          const elapsed=d.record_elapsed||0;
+          const mm=String(Math.floor(elapsed/60)).padStart(2,'0');
+          const ss=String(Math.floor(elapsed%60)).padStart(2,'0');
+          openmvRecTime.textContent=mm+':'+ss;
+        }
+      }else{
+        openmvConnected=false;btnOpenMVConnect.textContent='连接';
+        openmvStatus.textContent='连接已断开';openmvStatus.style.color='var(--red)';
+        openmvPreviewWrap.style.display='none';openmvPreview.src='';
+        btnOpenMVRecord.disabled=true;btnOpenMVStopUpload.disabled=true;
+        stopOpenMVStatusPoll();
+      }
+    }catch(e){}
+  },1000);
+}
+function stopOpenMVStatusPoll(){if(openmvStatusTimer){clearInterval(openmvStatusTimer);openmvStatusTimer=null;}}
+
+async function toggleOpenMVRecord(){
+  if(!openmvConnected)return;
+  if(!openmvRecording){
+    // Start recording
+    try{
+      const r=await fetch('api/openmv/record/start',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error);
+      openmvRecording=true;openmvRecStart=Date.now();
+      btnOpenMVRecord.innerHTML='&#9724; 拍摄中...';btnOpenMVRecord.classList.remove('btn-primary');btnOpenMVRecord.classList.add('btn-outline');
+      btnOpenMVStopUpload.disabled=false;
+      openmvRecIndicator.style.display='';
+      openmvRecTime.textContent='00:00';
+      showToast('开始拍摄','info');
+    }catch(err){
+      showToast('开始拍摄失败: '+err.message,'error');
+    }
+  }else{
+    // Stop recording only (don't upload yet)
+    await stopOpenMVRecord();
+  }
+}
+
+async function stopOpenMVRecord(){
+  if(!openmvRecording)return;
+  try{
+    const r=await fetch('api/openmv/record/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({motion_type:S.motionType})});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error);
+    openmvRecording=false;
+    btnOpenMVRecord.innerHTML='&#9654; 开始拍摄';btnOpenMVRecord.classList.add('btn-primary');btnOpenMVRecord.classList.remove('btn-outline');
+    openmvRecIndicator.style.display='none';
+    showToast(`拍摄完成：${d.frame_count} 帧，${d.duration}s`,'info');
+
+    // Auto-enter calibration flow with the recorded video
+    if(d.session_id&&d.first_frame_base64){
+      S.sessionId=d.session_id;S.firstFrameB64=d.first_frame_base64;S.motionType=d.motion_type;S.calibPoints=[];S.totalFrames=d.total_frames||0;
+      S.firstFrameImg=new Image();S.firstFrameImg.src='data:image/jpeg;base64,'+S.firstFrameB64;
+      // Fetch calibration spec and enter calibration UI
+      const resp2=await fetch('api/calibration_spec/'+S.motionType);S.calibSpec=await resp2.json();
+      cardCalib.classList.remove('hidden');cardProcess.classList.add('hidden');cardResult.classList.add('hidden');
+      updateStepBar(2);updateThumbCanvas();updateCalibPreviewText();btnResetCalib.style.display='none';
+      showToast('视频已获取，请继续标定坐标系','info');
+    }
+  }catch(err){
+    showToast('停止拍摄失败: '+err.message,'error');
+  }
+}
+
+async function stopOpenMVAndUpload(){
+  if(!openmvRecording){
+    showToast('未在拍摄中','error');return;
+  }
+  await stopOpenMVRecord();
+}
+
+// Gimbal control buttons
+document.querySelectorAll('.openmv-gimbal-btn').forEach(btn=>{
+  btn.addEventListener('click',async()=>{
+    const cmd=btn.dataset.cmd;
+    if(!openmvConnected){gimbalStatus.textContent='请先连接 OpenMV';gimbalStatus.style.color='var(--red)';return;}
+    try{
+      const r=await fetch('api/openmv/gimbal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:cmd})});
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error);
+      gimbalStatus.textContent='已发送: '+({U:'上移 ↑',D:'下移 ↓',L:'左移 ←',R:'右移 →',C:'回中'}[cmd]||cmd);
+      gimbalStatus.style.color='var(--green)';
+    }catch(err){
+      gimbalStatus.textContent='发送失败: '+err.message;gimbalStatus.style.color='var(--red)';
+    }
+  });
+});
 
 // ==================== Upload ====================
 uploadZone.addEventListener('click',()=>videoInput.click());

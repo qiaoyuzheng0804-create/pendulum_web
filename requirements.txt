@@ -3,6 +3,7 @@ flask==3.0.3
 
 # Computer vision / video
 opencv-python==4.13.0.92
+Pillow>=10,<13
 ultralytics==8.2.103
 
 # Numerical & data processing
