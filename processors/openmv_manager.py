@@ -217,15 +217,24 @@ class _CameraWorker(threading.Thread):
         camera = USBDBGV1(link)
         self.version = camera.firmware_version()
         camera.framebuffer_enable(True)
+        time.sleep(0.2)  # give camera firmware time to start filling framebuffer
         self.connected = True
         self.last_error = None
+        print(f"[OpenMV] Camera connected: firmware {self.version}, port {self.port}", flush=True)
 
+        zero_count = 0
         while not self.stop_event.is_set():
             try:
                 width, height, size = camera.frame_size()
                 if size == 0:
+                    zero_count += 1
+                    if zero_count == 50:
+                        print(f"[OpenMV] frame_size() returned 0 fifty times in a row — camera sensor may not be capturing", flush=True)
                     time.sleep(0.01)
                     continue
+                if zero_count > 0:
+                    print(f"[OpenMV] Got first frame after {zero_count} empty polls: {width}x{height} size={size}", flush=True)
+                    zero_count = 0
                 jpeg = camera.frame_dump(size)
             except (USBDBGError, OSError) as exc:
                 self.last_error = str(exc)
