@@ -179,12 +179,14 @@ class _CameraWorker(threading.Thread):
         baud: int,
         frame_queue: queue.Queue,
         stop_event: threading.Event,
+        record_callback=None,
     ) -> None:
         super().__init__(daemon=True)
         self.port = port
         self.baud = baud
         self.frame_queue = frame_queue
         self.stop_event = stop_event
+        self._record_callback = record_callback
         self.version: Optional[tuple[int, int, int]] = None
         self.dropped_frames = 0
         self.total_frames = 0
@@ -260,6 +262,10 @@ class _CameraWorker(threading.Thread):
                 except queue.Empty:
                     pass
                 self.frame_queue.put_nowait(frame)
+
+            # Recording: append frame copy to buffer if active
+            if self._record_callback:
+                self._record_callback(rgb)
 
 
 # ─── Gimbal control worker (UART @ 115200) ────────────────────────────────────
@@ -391,7 +397,8 @@ class OpenMVManager:
             self._stop_event.clear()
             self._frame_queue = queue.Queue(maxsize=2)
             self._camera_worker = _CameraWorker(
-                port, baud, self._frame_queue, self._stop_event
+                port, baud, self._frame_queue, self._stop_event,
+                record_callback=self._record_frame_if_active,
             )
             self._camera_worker.start()
 
@@ -593,8 +600,8 @@ class OpenMVManager:
             "duration": round(len(frames) / fps, 2),
         }
 
-    def _record_frame(self, rgb: np.ndarray) -> None:
-        """Append frame to recording buffer if recording."""
+    def _record_frame_if_active(self, rgb: np.ndarray) -> None:
+        """Callback for camera worker: append frame if recording is active."""
         if self._recording:
             self._recorded_frames.append(rgb.copy())
 

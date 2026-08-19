@@ -583,8 +583,9 @@
 
         <!-- 录制控制 -->
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
-          <button class="btn btn-primary" id="btn_openmv_record" disabled onclick="toggleOpenMVRecord()">&#9654; 开始拍摄</button>
-          <button class="btn btn-outline" id="btn_openmv_stop_upload" disabled onclick="stopOpenMVAndUpload()">&#128228; 停止并上传</button>
+          <button class="btn btn-primary" id="btn_openmv_record" disabled onclick="startOpenMVRecord()">&#9654; 开始拍摄</button>
+          <button class="btn btn-outline" id="btn_openmv_stop" disabled onclick="stopOpenMVRecord()" style="display:none;">&#9724; 停止拍摄</button>
+          <button class="btn btn-primary" id="btn_openmv_stop_upload" disabled onclick="stopOpenMVAndUpload()" style="display:none;">&#128228; 停止并上传</button>
         </div>
       </div>
 
@@ -1111,7 +1112,8 @@ const openmvPortSelect=$('#openmv_port_select'),openmvCtrlPortSelect=$('#openmv_
       openmvStatus=$('#openmv_status'),openmvPreviewWrap=$('#openmv_preview_wrap'),
       openmvPreview=$('#openmv_preview'),openmvOverlay=$('#openmv_overlay'),
       openmvRecIndicator=$('#openmv_rec_indicator'),openmvRecTime=$('#openmv_rec_time'),
-      btnOpenMVRecord=$('#btn_openmv_record'),btnOpenMVStopUpload=$('#btn_openmv_stop_upload'),
+      btnOpenMVRecord=$('#btn_openmv_record'),btnOpenMVStop=$('#btn_openmv_stop'),
+      btnOpenMVStopUpload=$('#btn_openmv_stop_upload'),
       gimbalStatus=$('#gimbal_status');
 let openmvConnected=false,openmvRecording=false,openmvRecStart=0,openmvRecTimer=null,openmvStatusTimer=null;
 
@@ -1196,7 +1198,8 @@ async function disconnectOpenMV(){
     openmvConnected=false;btnOpenMVConnect.textContent='连接';
     openmvStatus.textContent='未连接';openmvStatus.style.color='';
     openmvPreviewWrap.style.display='none';openmvPreview.src='';
-    btnOpenMVRecord.disabled=true;btnOpenMVStopUpload.disabled=true;
+    btnOpenMVRecord.disabled=true;btnOpenMVRecord.style.display='';
+    btnOpenMVStop.style.display='none';btnOpenMVStopUpload.style.display='none';
     stopOpenMVStatusPoll();
     showToast('OpenMV 已断开','info');
   }catch(err){
@@ -1230,7 +1233,8 @@ function startOpenMVStatusPoll(){
         openmvConnected=false;btnOpenMVConnect.textContent='连接';
         openmvStatus.textContent='连接已断开';openmvStatus.style.color='var(--red)';
         openmvPreviewWrap.style.display='none';openmvPreview.src='';
-        btnOpenMVRecord.disabled=true;btnOpenMVStopUpload.disabled=true;
+        btnOpenMVRecord.disabled=true;btnOpenMVRecord.style.display='';
+        btnOpenMVStop.style.display='none';btnOpenMVStopUpload.style.display='none';
         stopOpenMVStatusPoll();
       }
     }catch(e){}
@@ -1238,26 +1242,21 @@ function startOpenMVStatusPoll(){
 }
 function stopOpenMVStatusPoll(){if(openmvStatusTimer){clearInterval(openmvStatusTimer);openmvStatusTimer=null;}}
 
-async function toggleOpenMVRecord(){
-  if(!openmvConnected)return;
-  if(!openmvRecording){
-    // Start recording
-    try{
-      const r=await fetch('api/openmv/record/start',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
-      const d=await r.json();
-      if(!r.ok)throw new Error(d.error);
-      openmvRecording=true;openmvRecStart=Date.now();
-      btnOpenMVRecord.innerHTML='&#9724; 拍摄中...';btnOpenMVRecord.classList.remove('btn-primary');btnOpenMVRecord.classList.add('btn-outline');
-      btnOpenMVStopUpload.disabled=false;
-      openmvRecIndicator.style.display='';
-      openmvRecTime.textContent='00:00';
-      showToast('开始拍摄','info');
-    }catch(err){
-      showToast('开始拍摄失败: '+err.message,'error');
-    }
-  }else{
-    // Stop recording only (don't upload yet)
-    await stopOpenMVRecord();
+async function startOpenMVRecord(){
+  if(!openmvConnected||openmvRecording)return;
+  try{
+    const r=await fetch('api/openmv/record/start',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error);
+    openmvRecording=true;openmvRecStart=Date.now();
+    btnOpenMVRecord.disabled=true;btnOpenMVRecord.style.display='none';
+    btnOpenMVStop.disabled=false;btnOpenMVStop.style.display='';
+    btnOpenMVStopUpload.disabled=false;btnOpenMVStopUpload.style.display='';
+    openmvRecIndicator.style.display='';
+    openmvRecTime.textContent='00:00';
+    showToast('开始拍摄','info');
+  }catch(err){
+    showToast('开始拍摄失败: '+err.message,'error');
   }
 }
 
@@ -1268,7 +1267,8 @@ async function stopOpenMVRecord(){
     const d=await r.json();
     if(!r.ok)throw new Error(d.error);
     openmvRecording=false;
-    btnOpenMVRecord.innerHTML='&#9654; 开始拍摄';btnOpenMVRecord.classList.add('btn-primary');btnOpenMVRecord.classList.remove('btn-outline');
+    btnOpenMVRecord.disabled=false;btnOpenMVRecord.style.display='';
+    btnOpenMVStop.style.display='none';btnOpenMVStopUpload.style.display='none';
     openmvRecIndicator.style.display='none';
     showToast(`拍摄完成：${d.frame_count} 帧，${d.duration}s`,'info');
 

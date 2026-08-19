@@ -776,18 +776,19 @@ def openmv_stream():
     """MJPEG streaming endpoint for real-time preview.
 
     Returns a multipart/x-mixed-replace stream of JPEG frames.
+    Recording is handled by the camera worker thread (decoupled from stream).
     """
     if not openmv_manager.connected:
         return jsonify({"error": "OpenMV 未连接。"}), 400
 
     def generate():
+        # Send an initial empty boundary so the browser starts rendering immediately
+        yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n\r\n"
         while openmv_manager.connected:
             frame = openmv_manager.get_latest_frame()
             if frame is None:
-                _time.sleep(0.05)
+                _time.sleep(0.03)
                 continue
-            # Record frame if recording
-            openmv_manager._record_frame(frame.rgb)
             jpeg = rgb_to_jpeg_bytes(frame.rgb, quality=70)
             if not jpeg:
                 continue
@@ -797,7 +798,6 @@ def openmv_stream():
                 b"Content-Length: " + str(len(jpeg)).encode() + b"\r\n\r\n"
                 + jpeg + b"\r\n"
             )
-            _time.sleep(0.01)
 
     return Response(
         generate(),
