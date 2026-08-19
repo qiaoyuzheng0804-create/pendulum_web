@@ -555,9 +555,13 @@
       <!-- OpenMV 拍摄模块 -->
       <div class="param-card" style="margin-bottom:12px;">
         <div class="p-label">OpenMV 摄像头 OpenMV Camera</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
           <select id="openmv_port_select" style="flex:1;min-width:170px;">
             <option value="">扫描中...</option>
+          </select>
+          <span style="font-size:0.72rem;color:var(--t3);white-space:nowrap;">云台串口:</span>
+          <select id="openmv_ctrl_port_select" style="flex:1;min-width:130px;">
+            <option value="">（可选）</option>
           </select>
           <button class="btn btn-outline" onclick="refreshOpenMVPorts()">&#8635; 刷新</button>
           <button class="btn btn-primary" id="btn_openmv_connect" onclick="toggleOpenMVConnect()">连接</button>
@@ -1102,7 +1106,8 @@ async function sendMagnetCommand(cmd){
 }
 
 // ==================== OpenMV Camera (preview, recording, gimbal) ====================
-const openmvPortSelect=$('#openmv_port_select'),btnOpenMVConnect=$('#btn_openmv_connect'),
+const openmvPortSelect=$('#openmv_port_select'),openmvCtrlPortSelect=$('#openmv_ctrl_port_select'),
+      btnOpenMVConnect=$('#btn_openmv_connect'),
       openmvStatus=$('#openmv_status'),openmvPreviewWrap=$('#openmv_preview_wrap'),
       openmvPreview=$('#openmv_preview'),openmvOverlay=$('#openmv_overlay'),
       openmvRecIndicator=$('#openmv_rec_indicator'),openmvRecTime=$('#openmv_rec_time'),
@@ -1116,6 +1121,7 @@ async function refreshOpenMVPorts(){
   try{
     const r=await fetch('api/openmv/ports');const d=await r.json();
     if(!r.ok)throw new Error(d.error);
+    // Populate camera port select
     openmvPortSelect.innerHTML='';
     if(!d.ports||!d.ports.length){
       openmvPortSelect.innerHTML='<option value="">未发现串口</option>';
@@ -1128,7 +1134,19 @@ async function refreshOpenMVPorts(){
         openmvPortSelect.appendChild(o);
       });
     }
-    if(d.connected){
+    // Populate control port select (exclude the camera port, show all)
+    openmvCtrlPortSelect.innerHTML='<option value="">（不使用云台）</option>';
+    if(d.ports&&d.ports.length){
+      d.ports.forEach(p=>{
+        if(!p.is_openmv){ // non-OpenMV ports are likely USB-TTL
+          const o=document.createElement('option');
+          o.value=p.device;
+          o.textContent=p.device+' — '+p.description;
+          openmvCtrlPortSelect.appendChild(o);
+        }
+      });
+    }
+    if(d.camera_connected){
       openmvConnected=true;btnOpenMVConnect.textContent='断开';
       openmvStatus.textContent='已连接';openmvStatus.style.color='';
     }else{
@@ -1142,21 +1160,26 @@ async function refreshOpenMVPorts(){
 
 async function toggleOpenMVConnect(){
   if(openmvConnected){await disconnectOpenMV();return;}
-  const port=openmvPortSelect.value;
-  if(!port){showToast('请先选择 OpenMV 串口','error');return;}
+  const cameraPort=openmvPortSelect.value;
+  if(!cameraPort){showToast('请先选择 OpenMV 摄像头串口','error');return;}
+  const controlPort=openmvCtrlPortSelect.value||'';
   btnOpenMVConnect.disabled=true;
   openmvStatus.textContent='连接中...';openmvStatus.style.color='var(--t3)';
   try{
-    const r=await fetch('api/openmv/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({port})});
+    const body={camera_port:cameraPort};
+    if(controlPort)body.control_port=controlPort;
+    const r=await fetch('api/openmv/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await r.json();
     if(!r.ok)throw new Error(d.error);
     openmvConnected=true;btnOpenMVConnect.textContent='断开';
-    openmvStatus.textContent=`已连接 ${port}（固件 ${d.firmware}）`;openmvStatus.style.color='';
+    let statusText=`摄像头 ${cameraPort}（固件 ${d.firmware}）`;
+    if(d.control_connected)statusText+=` | 云台 ${d.control_port}`;
+    else if(d.control_warning)statusText+=` | 云台: ${d.control_warning}`;
+    openmvStatus.textContent=statusText;openmvStatus.style.color='';
     openmvPreviewWrap.style.display='';btnOpenMVRecord.disabled=false;
-    // Start MJPEG stream
     openmvPreview.src='api/openmv/stream?t='+Date.now();
     startOpenMVStatusPoll();
-    showToast('OpenMV 连接成功','info');
+    showToast('OpenMV 连接成功'+(d.control_connected?'（含云台）':''),'info');
   }catch(err){
     openmvStatus.textContent='连接失败: '+err.message;openmvStatus.style.color='var(--red)';
     showToast('OpenMV 连接失败: '+err.message,'error');
@@ -1189,13 +1212,19 @@ function startOpenMVStatusPoll(){
     if(!openmvConnected)return;
     try{
       const r=await fetch('api/openmv/status');const d=await r.json();
-      if(d.connected){
-        openmvOverlay.textContent=d.fps+' FPS';
+      if(d.camera_connected){
+        openmvOverlay.textContent=(d.fps||'--')+' FPS';
         if(d.recording){
           const elapsed=d.record_elapsed||0;
           const mm=String(Math.floor(elapsed/60)).padStart(2,'0');
           const ss=String(Math.floor(elapsed%60)).padStart(2,'0');
           openmvRecTime.textContent=mm+':'+ss;
+        }
+        // Update gimbal info in status
+        if(d.control_connected&&gimbalStatus){
+          const cmd={U:'上移 ↑',D:'下移 ↓',L:'左移 ←',R:'右移 →',C:'回中'}[d.gimbal_last_command]||'';
+          gimbalStatus.textContent=`P${d.gimbal_pan_us} T${d.gimbal_tilt_us}`+(cmd?' · '+cmd:'');
+          gimbalStatus.style.color='var(--green)';
         }
       }else{
         openmvConnected=false;btnOpenMVConnect.textContent='连接';

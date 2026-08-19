@@ -1,8 +1,14 @@
-"""OpenMV camera manager: USBDBG V1 frame capture, recording, and gimbal control.
+"""OpenMV camera manager: dual-serial-port architecture.
 
-Provides a thread-safe singleton that manages the OpenMV serial connection,
-continuously reads JPEG frames, supports MJPEG streaming to browsers, records
-frames to MP4 video files, and sends gimbal servo commands via TX_INPUT.
+Port 1 — OpenMV USB-C (USBDBG V1 @ 921600):
+    Frame capture thread reads JPEG frames from the framebuffer.
+
+Port 2 — USB-TTL adapter (UART @ 115200):
+    Gimbal control thread sends single-byte commands (L/R/U/D/C)
+    to OpenMV UART3 (P4 TX / P5 RX), which drives two MG90S servos.
+
+This matches the architecture in the source project:
+    openmv拍摄/实时画面与键盘云台/电脑端/controller.py
 """
 
 from __future__ import annotations
@@ -12,7 +18,7 @@ import queue
 import struct
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -34,14 +40,25 @@ USBDBG_FW_VERSION = 0x80
 USBDBG_FRAME_SIZE = 0x81
 USBDBG_FRAME_DUMP = 0x82
 USBDBG_FB_ENABLE = 0x0D
-USBDBG_TX_INPUT = 0x11
 
 COMMAND_HEADER = struct.Struct("<BBI")
 TRIPLE_U32 = struct.Struct("<III")
 MAX_FRAME_BYTES = 4 * 1024 * 1024
 
 OPENMV_USB_VID = 0x37C5
-DEFAULT_BAUD = 921600
+CAMERA_BAUD = 921600
+CONTROL_BAUD = 115200
+
+# ─── Servo limits (from source controller.py) ─────────────────────────────────
+
+SERVO_STEP_US = 10
+SERVO_CENTER_US = 1500
+PAN_MIN_US = 835
+PAN_MAX_US = 2165
+TILT_MIN_US = 835
+TILT_MAX_US = 2165
+PAN_RIGHT_SIGN = -1
+TILT_UP_SIGN = -1
 
 
 class USBDBGError(RuntimeError):
@@ -49,8 +66,9 @@ class USBDBGError(RuntimeError):
     pass
 
 
+# ─── Low-level USBDBG V1 helpers ──────────────────────────────────────────────
+
 def _read_exact(link: serial.Serial, size: int) -> bytes:
-    """Read exactly *size* bytes from *link*, raising on timeout."""
     data = bytearray()
     stall_timeout = max(link.timeout or 1.0, 1.0)
     deadline = time.monotonic() + stall_timeout
@@ -97,20 +115,11 @@ class USBDBGV1:
             raise USBDBGError(f"Invalid framebuffer size: {size}")
         return self._request(USBDBG_FRAME_DUMP, size)
 
-    def tx_input(self, data: bytes) -> None:
-        """Send input data (gimbal commands) to OpenMV via TX_INPUT channel."""
-        if data:
-            self._write(USBDBG_TX_INPUT, data)
-
 
 # ─── Frame decoding ────────────────────────────────────────────────────────────
 
 def decode_framebuffer(data: bytes, width: int, height: int) -> Optional[np.ndarray]:
-    """Decode raw framebuffer bytes to RGB numpy array.
-
-    Supports JPEG, RGB565, and grayscale formats.
-    Returns None if the data cannot be decoded.
-    """
+    """Decode raw framebuffer bytes to RGB numpy array (JPEG / RGB565 / gray)."""
     if data.startswith(b"\xff\xd8"):
         with Image.open(io.BytesIO(data)) as image:
             return np.asarray(image.convert("RGB"), dtype=np.uint8).copy()
@@ -146,7 +155,7 @@ def rgb_to_jpeg_bytes(rgb: np.ndarray, quality: int = 80) -> bytes:
     return buf.tobytes()
 
 
-# ─── Camera worker thread ──────────────────────────────────────────────────────
+# ─── Data structures ──────────────────────────────────────────────────────────
 
 @dataclass
 class FrameInfo:
@@ -159,13 +168,10 @@ class FrameInfo:
     jpeg_bytes: int
 
 
-class _CameraWorker(threading.Thread):
-    """Background thread that continuously reads frames from OpenMV.
+# ─── Camera worker (USBDBG V1 frame reading) ─────────────────────────────────
 
-    The USBDBG V1 protocol is request/response on a single serial link.
-    Frame reading and gimbal commands (TX_INPUT) must not overlap, so all
-    serial I/O is protected by ``self.io_lock``.
-    """
+class _CameraWorker(threading.Thread):
+    """Background thread: reads frames from OpenMV via USBDBG V1."""
 
     def __init__(
         self,
@@ -173,14 +179,12 @@ class _CameraWorker(threading.Thread):
         baud: int,
         frame_queue: queue.Queue,
         stop_event: threading.Event,
-        io_lock: threading.Lock,
     ) -> None:
         super().__init__(daemon=True)
         self.port = port
         self.baud = baud
         self.frame_queue = frame_queue
         self.stop_event = stop_event
-        self.io_lock = io_lock
         self.version: Optional[tuple[int, int, int]] = None
         self.dropped_frames = 0
         self.total_frames = 0
@@ -188,7 +192,6 @@ class _CameraWorker(threading.Thread):
         self.fps: float = 0.0
         self.last_error: Optional[str] = None
         self.connected = False
-        self._camera: Optional[USBDBGV1] = None
 
     def run(self) -> None:
         while not self.stop_event.is_set():
@@ -203,7 +206,6 @@ class _CameraWorker(threading.Thread):
             except Exception as exc:
                 self.last_error = str(exc)
                 self.connected = False
-                self._camera = None
                 if not self.stop_event.is_set():
                     time.sleep(0.5)
 
@@ -211,25 +213,21 @@ class _CameraWorker(threading.Thread):
         time.sleep(0.3)
         link.reset_input_buffer()
         camera = USBDBGV1(link)
-        with self.io_lock:
-            self.version = camera.firmware_version()
-            camera.framebuffer_enable(True)
-        self._camera = camera
+        self.version = camera.firmware_version()
+        camera.framebuffer_enable(True)
         self.connected = True
         self.last_error = None
 
         while not self.stop_event.is_set():
             try:
-                with self.io_lock:
-                    width, height, size = camera.frame_size()
-                    if size == 0:
-                        time.sleep(0.01)
-                        continue
-                    jpeg = camera.frame_dump(size)
+                width, height, size = camera.frame_size()
+                if size == 0:
+                    time.sleep(0.01)
+                    continue
+                jpeg = camera.frame_dump(size)
             except (USBDBGError, OSError) as exc:
                 self.last_error = str(exc)
                 self.connected = False
-                self._camera = None
                 return
 
             rgb = decode_framebuffer(jpeg, width, height)
@@ -264,29 +262,107 @@ class _CameraWorker(threading.Thread):
                 self.frame_queue.put_nowait(frame)
 
 
+# ─── Gimbal control worker (UART @ 115200) ────────────────────────────────────
+
+class _ControlWorker(threading.Thread):
+    """Background thread: sends gimbal commands via USB-TTL UART.
+
+    Protocol: single ASCII bytes (L/R/U/D/C) at 115200 baud.
+    OpenMV UART3 receives them and drives P1/P9 servos.
+    Software tracks pan/tilt pulse widths and enforces mechanical limits.
+    """
+
+    def __init__(
+        self,
+        port: str,
+        commands: queue.Queue,
+        stop_event: threading.Event,
+    ) -> None:
+        super().__init__(daemon=True)
+        self.port = port
+        self.commands = commands
+        self.stop_event = stop_event
+        self.connected = False
+        self.last_error: Optional[str] = None
+        self.command_count = 0
+        self.blocked_count = 0
+        self.last_command = "-"
+        self.pan_us = SERVO_CENTER_US
+        self.tilt_us = SERVO_CENTER_US
+        self.limit_message = ""
+
+    def run(self) -> None:
+        try:
+            with serial.Serial(
+                self.port,
+                CONTROL_BAUD,
+                timeout=0,
+                write_timeout=1.0,
+            ) as control:
+                self.connected = True
+                self.last_error = None
+                while not self.stop_event.is_set():
+                    try:
+                        command = self.commands.get(timeout=0.05)
+                    except queue.Empty:
+                        continue
+                    self._send_command(control, command)
+        except Exception as exc:
+            self.last_error = str(exc)
+            self.connected = False
+
+    def _next_position(self, command: bytes) -> tuple[int, int, str]:
+        pan_us = self.pan_us
+        tilt_us = self.tilt_us
+        msg = ""
+        if command == b"L":
+            pan_us -= PAN_RIGHT_SIGN * SERVO_STEP_US
+            msg = "下方舵机已到左侧限制"
+        elif command == b"R":
+            pan_us += PAN_RIGHT_SIGN * SERVO_STEP_US
+            msg = "下方舵机已到右侧限制"
+        elif command == b"U":
+            tilt_us += TILT_UP_SIGN * SERVO_STEP_US
+            msg = "上方舵机已到上侧限制"
+        elif command == b"D":
+            tilt_us -= TILT_UP_SIGN * SERVO_STEP_US
+            msg = "上方舵机已到下侧限制"
+        elif command == b"C":
+            pan_us = SERVO_CENTER_US
+            tilt_us = SERVO_CENTER_US
+        return pan_us, tilt_us, msg
+
+    def _send_command(self, control: serial.Serial, command: bytes) -> None:
+        pan_us, tilt_us, msg = self._next_position(command)
+        if not (PAN_MIN_US < pan_us < PAN_MAX_US and TILT_MIN_US < tilt_us < TILT_MAX_US):
+            self.blocked_count += 1
+            self.limit_message = msg
+            return
+        control.write(command)
+        control.flush()
+        self.pan_us = pan_us
+        self.tilt_us = tilt_us
+        self.limit_message = ""
+        self.command_count += 1
+        self.last_command = command.decode("ascii", errors="replace")
+
+
 # ─── OpenMV Manager ────────────────────────────────────────────────────────────
 
 class OpenMVManager:
-    """Thread-safe manager for OpenMV camera connection, recording, and gimbal.
+    """Thread-safe manager for OpenMV camera + gimbal (dual serial port).
 
-    Typical usage::
-
-        mgr = OpenMVManager()
-        mgr.connect("COM12")
-        jpeg = mgr.get_latest_jpeg()   # for MJPEG stream
-        mgr.start_recording()
-        ...
-        video_path = mgr.stop_recording(upload_dir)
-        mgr.send_gimbal_command("U")
-        mgr.disconnect()
+    Port 1 (camera):  OpenMV USB-C, USBDBG V1 @ 921600  → frame capture
+    Port 2 (gimbal):  USB-TTL adapter, UART @ 115200    → servo commands
     """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._io_lock = threading.Lock()  # protects serial I/O (frame read + gimbal)
-        self._worker: Optional[_CameraWorker] = None
+        self._camera_worker: Optional[_CameraWorker] = None
+        self._control_worker: Optional[_ControlWorker] = None
         self._stop_event = threading.Event()
         self._frame_queue: queue.Queue = queue.Queue(maxsize=2)
+        self._command_queue: queue.Queue = queue.Queue()
         self._recording = False
         self._recorded_frames: list[np.ndarray] = []
         self._record_start_time: float = 0.0
@@ -294,92 +370,168 @@ class OpenMVManager:
     # ── Connection ─────────────────────────────────────────────────────────
 
     @property
-    def connected(self) -> bool:
-        return self._worker is not None and self._worker.connected
+    def camera_connected(self) -> bool:
+        return self._camera_worker is not None and self._camera_worker.connected
 
-    def connect(self, port: str, baud: int = DEFAULT_BAUD) -> dict:
-        """Connect to OpenMV camera and start frame capture thread."""
+    @property
+    def control_connected(self) -> bool:
+        return self._control_worker is not None and self._control_worker.connected
+
+    @property
+    def connected(self) -> bool:
+        return self.camera_connected
+
+    def connect_camera(self, port: str, baud: int = CAMERA_BAUD) -> dict:
+        """Connect to OpenMV camera for frame capture."""
         if not _SERIAL_AVAILABLE:
             return {"error": "未安装 pyserial，请先执行: pip install pyserial"}
         with self._lock:
-            if self.connected:
-                return {"error": f"已连接到 {self._worker.port}，请先断开。"}
-
+            if self.camera_connected:
+                return {"error": f"摄像头已连接: {self._camera_worker.port}，请先断开。"}
             self._stop_event.clear()
             self._frame_queue = queue.Queue(maxsize=2)
-            self._worker = _CameraWorker(
-                port, baud, self._frame_queue, self._stop_event, self._io_lock
+            self._camera_worker = _CameraWorker(
+                port, baud, self._frame_queue, self._stop_event
             )
-            self._worker.start()
+            self._camera_worker.start()
 
-            # Wait up to 3 seconds for connection
             deadline = time.monotonic() + 3.0
-            while time.monotonic() < deadline and not self._worker.connected:
+            while time.monotonic() < deadline and not self._camera_worker.connected:
                 time.sleep(0.1)
-                if self._worker.last_error and not self._worker.connected:
-                    err = self._worker.last_error
-                    self._cleanup_worker()
+                if self._camera_worker.last_error and not self._camera_worker.connected:
+                    err = self._camera_worker.last_error
+                    self._cleanup_camera()
                     return {"error": f"连接失败: {err}"}
 
-            if not self._worker.connected:
-                err = self._worker.last_error or "连接超时"
-                self._cleanup_worker()
+            if not self._camera_worker.connected:
+                err = self._camera_worker.last_error or "连接超时"
+                self._cleanup_camera()
                 return {"error": f"连接超时: {err}"}
 
-            version = self._worker.version or (0, 0, 0)
+            version = self._camera_worker.version or (0, 0, 0)
             return {
                 "success": True,
                 "port": port,
                 "firmware": f"{version[0]}.{version[1]}.{version[2]}",
             }
 
-    def disconnect(self) -> dict:
-        """Disconnect from OpenMV camera."""
+    def connect_control(self, port: str) -> dict:
+        """Connect to USB-TTL adapter for gimbal control."""
+        if not _SERIAL_AVAILABLE:
+            return {"error": "未安装 pyserial，请先执行: pip install pyserial"}
+        with self._lock:
+            if self.control_connected:
+                return {"error": f"云台已连接: {self._control_worker.port}，请先断开。"}
+            self._command_queue = queue.Queue()
+            self._control_worker = _ControlWorker(
+                port, self._command_queue, self._stop_event
+            )
+            self._control_worker.start()
+
+            deadline = time.monotonic() + 2.0
+            while time.monotonic() < deadline and not self._control_worker.connected:
+                time.sleep(0.1)
+                if self._control_worker.last_error and not self._control_worker.connected:
+                    err = self._control_worker.last_error
+                    self._cleanup_control()
+                    return {"error": f"云台连接失败: {err}"}
+
+            if not self._control_worker.connected:
+                err = self._control_worker.last_error or "连接超时"
+                self._cleanup_control()
+                return {"error": f"云台连接超时: {err}"}
+
+            return {"success": True, "port": port}
+
+    def disconnect_camera(self) -> dict:
+        """Disconnect camera."""
         with self._lock:
             if self._recording:
                 self._recording = False
                 self._recorded_frames = []
-            if not self.connected:
-                self._cleanup_worker()
+            if not self.camera_connected:
+                self._cleanup_camera()
                 return {"success": True, "already": True}
             self._stop_event.set()
-            self._worker.join(timeout=2.0)
-            self._cleanup_worker()
+            self._camera_worker.join(timeout=2.0)
+            self._cleanup_camera()
             return {"success": True}
 
-    def _cleanup_worker(self) -> None:
-        self._worker = None
-        # Drain queue
+    def disconnect_control(self) -> dict:
+        """Disconnect gimbal control."""
+        with self._lock:
+            if not self.control_connected:
+                self._cleanup_control()
+                return {"success": True, "already": True}
+            self._stop_event.set()
+            self._control_worker.join(timeout=2.0)
+            self._cleanup_control()
+            return {"success": True}
+
+    def disconnect(self) -> dict:
+        """Disconnect both camera and gimbal."""
+        self.disconnect_control()
+        self.disconnect_camera()
+        # Reset stop event if camera was the last thing connected
+        if not self.camera_connected and not self.control_connected:
+            self._stop_event.clear()
+        return {"success": True}
+
+    def _cleanup_camera(self) -> None:
+        self._camera_worker = None
         while not self._frame_queue.empty():
             try:
                 self._frame_queue.get_nowait()
             except queue.Empty:
                 break
 
+    def _cleanup_control(self) -> None:
+        self._control_worker = None
+        while not self._command_queue.empty():
+            try:
+                self._command_queue.get_nowait()
+            except queue.Empty:
+                break
+
     # ── Status ──────────────────────────────────────────────────────────────
 
     def get_status(self) -> dict:
-        """Return current connection and recording status."""
-        if not self.connected:
-            return {"connected": False, "recording": False}
-        w = self._worker
-        version = w.version or (0, 0, 0)
-        return {
-            "connected": True,
-            "port": w.port,
-            "firmware": f"{version[0]}.{version[1]}.{version[2]}",
-            "fps": round(w.fps, 1),
-            "total_frames": w.total_frames,
-            "dropped_frames": w.dropped_frames,
+        """Return connection and recording status for both ports."""
+        result: dict = {
+            "camera_connected": self.camera_connected,
+            "control_connected": self.control_connected,
+            "connected": self.camera_connected,
             "recording": self._recording,
-            "recorded_frames": len(self._recorded_frames) if self._recording else 0,
-            "record_elapsed": round(time.monotonic() - self._record_start_time, 1) if self._recording else 0,
         }
+        if self.camera_connected:
+            w = self._camera_worker
+            version = w.version or (0, 0, 0)
+            result.update({
+                "camera_port": w.port,
+                "firmware": f"{version[0]}.{version[1]}.{version[2]}",
+                "fps": round(w.fps, 1),
+                "total_frames": w.total_frames,
+                "dropped_frames": w.dropped_frames,
+            })
+        if self.control_connected:
+            c = self._control_worker
+            result.update({
+                "control_port": c.port,
+                "gimbal_command_count": c.command_count,
+                "gimbal_last_command": c.last_command,
+                "gimbal_pan_us": c.pan_us,
+                "gimbal_tilt_us": c.tilt_us,
+                "gimbal_limit": c.limit_message,
+            })
+        if self._recording:
+            result["recorded_frames"] = len(self._recorded_frames)
+            result["record_elapsed"] = round(time.monotonic() - self._record_start_time, 1)
+        return result
 
     # ── Frame access ───────────────────────────────────────────────────────
 
     def get_latest_frame(self) -> Optional[FrameInfo]:
-        """Get the most recent frame (non-blocking)."""
+        """Get the most recent frame (non-blocking, drains queue)."""
         latest = None
         while True:
             try:
@@ -400,8 +552,8 @@ class OpenMVManager:
     def start_recording(self) -> dict:
         """Start recording frames."""
         with self._lock:
-            if not self.connected:
-                return {"error": "OpenMV 未连接。"}
+            if not self.camera_connected:
+                return {"error": "OpenMV 摄像头未连接。"}
             if self._recording:
                 return {"error": "已在录制中。"}
             self._recorded_frames = []
@@ -410,15 +562,7 @@ class OpenMVManager:
             return {"success": True}
 
     def stop_recording(self, upload_dir: str, fps: float = 13.0) -> dict:
-        """Stop recording and save frames as MP4 video.
-
-        Args:
-            upload_dir: Directory to save the video file.
-            fps: Output video frame rate.
-
-        Returns:
-            dict with video_path and frame count, or error.
-        """
+        """Stop recording and save frames as MP4 video."""
         with self._lock:
             if not self._recording:
                 return {"error": "未在录制中。"}
@@ -429,12 +573,10 @@ class OpenMVManager:
         if not frames:
             return {"error": "录制帧数为 0，未保存视频。"}
 
-        # Generate output path
         ts = int(time.time())
         video_name = f"openmv_capture_{ts}.mp4"
         video_path = str(Path(upload_dir) / video_name)
 
-        # Write video with OpenCV
         h, w = frames[0].shape[:2]
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         writer = cv2.VideoWriter(video_path, fourcc, fps, (w, h))
@@ -459,31 +601,18 @@ class OpenMVManager:
     # ── Gimbal control ─────────────────────────────────────────────────────
 
     def send_gimbal_command(self, command: str) -> dict:
-        """Send a gimbal command to OpenMV via TX_INPUT.
+        """Send a gimbal command via the control serial port.
 
         Args:
             command: One of 'U' (up), 'D' (down), 'L' (left), 'R' (right), 'C' (center).
-
-        Returns:
-            dict with success status.
         """
         valid = {"U", "D", "L", "R", "C"}
         if command not in valid:
             return {"error": f"无效命令 '{command}'，支持: {', '.join(sorted(valid))}"}
-
-        if not self.connected:
-            return {"error": "OpenMV 未连接。"}
-
-        camera = self._worker._camera
-        if camera is None:
-            return {"error": "摄像头实例不可用。"}
-
-        try:
-            with self._io_lock:
-                camera.tx_input(command.encode("ascii"))
-            return {"success": True, "command": command}
-        except Exception as e:
-            return {"error": f"发送命令失败: {e}"}
+        if not self.control_connected:
+            return {"error": "云台串口未连接。请先连接 USB-TTL 适配器。"}
+        self._command_queue.put(command.encode("ascii"))
+        return {"success": True, "command": command}
 
 
 # ─── Global singleton ─────────────────────────────────────────────────────────

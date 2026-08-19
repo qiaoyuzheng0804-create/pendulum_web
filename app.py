@@ -704,8 +704,10 @@ def serial_disconnect():
 
 
 # ---------- OpenMV camera (real-time preview, recording, gimbal) ----------
-# 通过 USBDBG V1 协议读取 OpenMV 帧缓冲，提供 MJPEG 实时预览流、
-# 录制视频、云台控制等功能。OpenMV 与 STM32 电磁铁使用独立串口。
+# 双串口架构（与 source controller.py 一致）：
+#   串口 1：OpenMV USB-C，USBDBG V1 @ 921600 → 帧采集
+#   串口 2：USB-TTL 适配器，UART @ 115200     → 云台控制
+# OpenMV 与 STM32 电磁铁使用各自独立的串口。
 
 @app.route("/api/openmv/ports")
 def openmv_list_ports():
@@ -726,29 +728,45 @@ def openmv_list_ports():
         return jsonify({"error": f"枚举串口失败: {e}"}), 400
     return jsonify({
         "ports": ports,
-        "connected": openmv_manager.connected,
+        "camera_connected": openmv_manager.camera_connected,
+        "control_connected": openmv_manager.control_connected,
     })
 
 
 @app.route("/api/openmv/connect", methods=["POST"])
 def openmv_connect():
-    """Connect to an OpenMV camera."""
+    """Connect to OpenMV camera and optionally gimbal control port.
+
+    Body: {"camera_port": "COM5", "control_port": "COM6"}
+    """
     if not SERIAL_AVAILABLE:
         return _serial_unavailable()
     data = request.get_json() or {}
-    port = str(data.get("port", "")).strip()
-    if not port:
-        return jsonify({"error": "缺少串口号 port。"}), 400
-    baud = int(data.get("baud", 921600))
-    result = openmv_manager.connect(port, baud)
+    camera_port = str(data.get("camera_port", "")).strip()
+    control_port = str(data.get("control_port", "")).strip()
+
+    if not camera_port:
+        return jsonify({"error": "缺少摄像头串口号 camera_port。"}), 400
+
+    result = openmv_manager.connect_camera(camera_port)
     if "error" in result:
         return jsonify(result), 400
+
+    # Optionally connect control port
+    if control_port:
+        ctrl_result = openmv_manager.connect_control(control_port)
+        if "error" in ctrl_result:
+            result["control_warning"] = ctrl_result["error"]
+        else:
+            result["control_connected"] = True
+            result["control_port"] = control_port
+
     return jsonify(result)
 
 
 @app.route("/api/openmv/disconnect", methods=["POST"])
 def openmv_disconnect():
-    """Disconnect from OpenMV camera."""
+    """Disconnect from OpenMV camera and gimbal."""
     result = openmv_manager.disconnect()
     return jsonify(result)
 
