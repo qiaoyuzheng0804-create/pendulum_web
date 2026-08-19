@@ -784,7 +784,7 @@ def openmv_stream():
         while openmv_manager.connected:
             frame = openmv_manager.get_latest_frame()
             if frame is None:
-                time.sleep(0.05)
+                _time.sleep(0.05)
                 continue
             # Record frame if recording
             openmv_manager._record_frame(frame.rgb)
@@ -797,7 +797,7 @@ def openmv_stream():
                 b"Content-Length: " + str(len(jpeg)).encode() + b"\r\n\r\n"
                 + jpeg + b"\r\n"
             )
-            time.sleep(0.01)
+            _time.sleep(0.01)
 
     return Response(
         generate(),
