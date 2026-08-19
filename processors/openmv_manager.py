@@ -160,7 +160,12 @@ class FrameInfo:
 
 
 class _CameraWorker(threading.Thread):
-    """Background thread that continuously reads frames from OpenMV."""
+    """Background thread that continuously reads frames from OpenMV.
+
+    The USBDBG V1 protocol is request/response on a single serial link.
+    Frame reading and gimbal commands (TX_INPUT) must not overlap, so all
+    serial I/O is protected by ``self.io_lock``.
+    """
 
     def __init__(
         self,
@@ -168,12 +173,14 @@ class _CameraWorker(threading.Thread):
         baud: int,
         frame_queue: queue.Queue,
         stop_event: threading.Event,
+        io_lock: threading.Lock,
     ) -> None:
         super().__init__(daemon=True)
         self.port = port
         self.baud = baud
         self.frame_queue = frame_queue
         self.stop_event = stop_event
+        self.io_lock = io_lock
         self.version: Optional[tuple[int, int, int]] = None
         self.dropped_frames = 0
         self.total_frames = 0
@@ -181,6 +188,7 @@ class _CameraWorker(threading.Thread):
         self.fps: float = 0.0
         self.last_error: Optional[str] = None
         self.connected = False
+        self._camera: Optional[USBDBGV1] = None
 
     def run(self) -> None:
         while not self.stop_event.is_set():
@@ -195,6 +203,7 @@ class _CameraWorker(threading.Thread):
             except Exception as exc:
                 self.last_error = str(exc)
                 self.connected = False
+                self._camera = None
                 if not self.stop_event.is_set():
                     time.sleep(0.5)
 
@@ -202,22 +211,30 @@ class _CameraWorker(threading.Thread):
         time.sleep(0.3)
         link.reset_input_buffer()
         camera = USBDBGV1(link)
-        self.version = camera.firmware_version()
-        camera.framebuffer_enable(True)
+        with self.io_lock:
+            self.version = camera.firmware_version()
+            camera.framebuffer_enable(True)
+        self._camera = camera
         self.connected = True
         self.last_error = None
-        self._camera = camera  # expose for gimbal commands
 
         while not self.stop_event.is_set():
-            width, height, size = camera.frame_size()
-            if size == 0:
-                time.sleep(0.01)
-                continue
-            jpeg = camera.frame_dump(size)
+            try:
+                with self.io_lock:
+                    width, height, size = camera.frame_size()
+                    if size == 0:
+                        time.sleep(0.01)
+                        continue
+                    jpeg = camera.frame_dump(size)
+            except (USBDBGError, OSError) as exc:
+                self.last_error = str(exc)
+                self.connected = False
+                self._camera = None
+                return
+
             rgb = decode_framebuffer(jpeg, width, height)
             if rgb is None:
                 self.dropped_frames += 1
-                time.sleep(0.005)
                 continue
 
             now = time.monotonic()
@@ -237,7 +254,6 @@ class _CameraWorker(threading.Thread):
                 captured_at=now,
                 jpeg_bytes=len(jpeg),
             )
-            # Non-blocking put: drop oldest if queue full
             try:
                 self.frame_queue.put_nowait(frame)
             except queue.Full:
@@ -246,10 +262,6 @@ class _CameraWorker(threading.Thread):
                 except queue.Empty:
                     pass
                 self.frame_queue.put_nowait(frame)
-
-    def get_camera(self) -> Optional[USBDBGV1]:
-        """Return the current USBDBGV1 instance for sending commands."""
-        return getattr(self, "_camera", None)
 
 
 # ─── OpenMV Manager ────────────────────────────────────────────────────────────
@@ -271,6 +283,7 @@ class OpenMVManager:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
+        self._io_lock = threading.Lock()  # protects serial I/O (frame read + gimbal)
         self._worker: Optional[_CameraWorker] = None
         self._stop_event = threading.Event()
         self._frame_queue: queue.Queue = queue.Queue(maxsize=2)
@@ -295,7 +308,7 @@ class OpenMVManager:
             self._stop_event.clear()
             self._frame_queue = queue.Queue(maxsize=2)
             self._worker = _CameraWorker(
-                port, baud, self._frame_queue, self._stop_event
+                port, baud, self._frame_queue, self._stop_event, self._io_lock
             )
             self._worker.start()
 
@@ -461,12 +474,13 @@ class OpenMVManager:
         if not self.connected:
             return {"error": "OpenMV 未连接。"}
 
-        camera = self._worker.get_camera()
+        camera = self._worker._camera
         if camera is None:
             return {"error": "摄像头实例不可用。"}
 
         try:
-            camera.tx_input(command.encode("ascii"))
+            with self._io_lock:
+                camera.tx_input(command.encode("ascii"))
             return {"success": True, "command": command}
         except Exception as e:
             return {"error": f"发送命令失败: {e}"}
