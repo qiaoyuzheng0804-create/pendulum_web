@@ -571,7 +571,7 @@
         <!-- 实时预览 -->
         <div id="openmv_preview_wrap" style="margin-top:10px;display:none;">
           <div style="position:relative;background:#000;border-radius:8px;overflow:hidden;max-height:360px;">
-            <img id="openmv_preview" style="width:100%;display:block;" alt="OpenMV 预览">
+            <canvas id="openmv_canvas" style="width:100%;display:block;"></canvas>
             <div id="openmv_overlay" style="position:absolute;top:6px;right:8px;background:rgba(0,0,0,0.65);color:#0f0;font:600 0.72rem 'JetBrains Mono','Consolas',monospace;padding:3px 8px;border-radius:4px;">
               -- FPS
             </div>
@@ -1110,7 +1110,7 @@ async function sendMagnetCommand(cmd){
 const openmvPortSelect=$('#openmv_port_select'),openmvCtrlPortSelect=$('#openmv_ctrl_port_select'),
       btnOpenMVConnect=$('#btn_openmv_connect'),
       openmvStatus=$('#openmv_status'),openmvPreviewWrap=$('#openmv_preview_wrap'),
-      openmvPreview=$('#openmv_preview'),openmvOverlay=$('#openmv_overlay'),
+      openmvCanvas=$('#openmv_canvas'),openmvOverlay=$('#openmv_overlay'),
       openmvRecIndicator=$('#openmv_rec_indicator'),openmvRecTime=$('#openmv_rec_time'),
       btnOpenMVRecord=$('#btn_openmv_record'),btnOpenMVStop=$('#btn_openmv_stop'),
       btnOpenMVStopUpload=$('#btn_openmv_stop_upload'),
@@ -1179,7 +1179,7 @@ async function toggleOpenMVConnect(){
     else if(d.control_warning)statusText+=` | 云台: ${d.control_warning}`;
     openmvStatus.textContent=statusText;openmvStatus.style.color='';
     openmvPreviewWrap.style.display='';btnOpenMVRecord.disabled=false;
-    openmvPreview.src='api/openmv/stream?t='+Date.now();
+    startOpenMVFrameLoop();
     startOpenMVStatusPoll();
     showToast('OpenMV 连接成功'+(d.control_connected?'（含云台）':''),'info');
   }catch(err){
@@ -1197,7 +1197,7 @@ async function disconnectOpenMV(){
     await fetch('api/openmv/disconnect',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
     openmvConnected=false;btnOpenMVConnect.textContent='连接';
     openmvStatus.textContent='未连接';openmvStatus.style.color='';
-    openmvPreviewWrap.style.display='none';openmvPreview.src='';
+    openmvPreviewWrap.style.display='none';stopOpenMVFrameLoop();
     btnOpenMVRecord.disabled=true;btnOpenMVRecord.style.display='';
     btnOpenMVStop.style.display='none';btnOpenMVStopUpload.style.display='none';
     stopOpenMVStatusPoll();
@@ -1232,7 +1232,7 @@ function startOpenMVStatusPoll(){
       }else{
         openmvConnected=false;btnOpenMVConnect.textContent='连接';
         openmvStatus.textContent='连接已断开';openmvStatus.style.color='var(--red)';
-        openmvPreviewWrap.style.display='none';openmvPreview.src='';
+        openmvPreviewWrap.style.display='none';stopOpenMVFrameLoop();
         btnOpenMVRecord.disabled=true;btnOpenMVRecord.style.display='';
         btnOpenMVStop.style.display='none';btnOpenMVStopUpload.style.display='none';
         stopOpenMVStatusPoll();
@@ -1241,6 +1241,41 @@ function startOpenMVStatusPoll(){
   },1000);
 }
 function stopOpenMVStatusPoll(){if(openmvStatusTimer){clearInterval(openmvStatusTimer);openmvStatusTimer=null;}}
+
+// Canvas-based frame polling (more reliable than MJPEG <img>)
+let openmvFrameTimer=null;let openmvFrameCount=0;let openmvFrameFps=0;let openmvFrameLast=0;
+const openmvFrameImg=new Image();
+
+function startOpenMVFrameLoop(){
+  stopOpenMVFrameLoop();
+  openmvFrameCount=0;openmvFrameFps=0;openmvFrameLast=0;
+  openmvFrameTimer=setInterval(fetchOpenMVFrame,80); // ~12 FPS polling
+}
+
+function stopOpenMVFrameLoop(){
+  if(openmvFrameTimer){clearInterval(openmvFrameTimer);openmvFrameTimer=null;}
+}
+
+function fetchOpenMVFrame(){
+  if(!openmvConnected)return;
+  openmvFrameImg.onload=function(){
+    const ctx=openmvCanvas.getContext('2d');
+    if(openmvCanvas.width!==openmvFrameImg.naturalWidth)openmvCanvas.width=openmvFrameImg.naturalWidth;
+    if(openmvCanvas.height!==openmvFrameImg.naturalHeight)openmvCanvas.height=openmvFrameImg.naturalHeight;
+    ctx.drawImage(openmvFrameImg,0,0);
+    // FPS calc
+    const now=performance.now();
+    openmvFrameCount++;
+    if(openmvFrameLast>0){
+      const dt=now-openmvFrameLast;
+      if(dt>0){const instant=1000/dt;openmvFrameFps=openmvFrameFps===0?instant:openmvFrameFps*0.85+instant*0.15;}
+    }
+    openmvFrameLast=now;
+    openmvOverlay.textContent=openmvFrameFps.toFixed(1)+' FPS';
+  };
+  openmvFrameImg.onerror=function(){/* ignore frame errors */};
+  openmvFrameImg.src='api/openmv/frame?t='+Date.now();
+}
 
 async function startOpenMVRecord(){
   if(!openmvConnected||openmvRecording)return;

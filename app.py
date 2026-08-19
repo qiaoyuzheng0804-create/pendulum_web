@@ -771,6 +771,18 @@ def openmv_disconnect():
     return jsonify(result)
 
 
+@app.route("/api/openmv/frame")
+def openmv_frame():
+    """Return a single JPEG frame for canvas-based preview."""
+    if not openmv_manager.connected:
+        return jsonify({"error": "OpenMV 未连接。"}), 400
+    jpeg = openmv_manager.get_latest_jpeg(quality=70)
+    if jpeg is None:
+        return Response(b"", status=204)
+    return Response(jpeg, mimetype="image/jpeg",
+                    headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+
+
 @app.route("/api/openmv/stream")
 def openmv_stream():
     """MJPEG streaming endpoint for real-time preview.
