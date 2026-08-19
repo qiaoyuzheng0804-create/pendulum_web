@@ -203,6 +203,8 @@ class _CameraWorker(threading.Thread):
                     self.baud,
                     timeout=2.0,
                     write_timeout=1.0,
+                    dsrdtr=False,
+                    rtscts=False,
                 ) as link:
                     self._run_camera(link)
             except Exception as exc:
@@ -217,7 +219,7 @@ class _CameraWorker(threading.Thread):
         camera = USBDBGV1(link)
         self.version = camera.firmware_version()
         camera.framebuffer_enable(True)
-        time.sleep(0.2)  # give camera firmware time to start filling framebuffer
+        time.sleep(0.3)
         self.connected = True
         self.last_error = None
         print(f"[OpenMV] Camera connected: firmware {self.version}, port {self.port}", flush=True)
