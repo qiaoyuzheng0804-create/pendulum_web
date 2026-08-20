@@ -611,14 +611,31 @@ def _serial_unavailable():
     return jsonify({"error": "未安装 pyserial，请先执行: pip install pyserial"}), 503
 
 
+def _is_bluetooth_port(p):
+    """判断 pyserial 端口是否为蓝牙（蓝牙串口不提供，避免误选）。"""
+    desc = (p.description or "")
+    low = desc.lower()
+    return "bluetooth" in low or "蓝牙" in desc
+
+
+def _list_usable_ports(extra_label="手动指定"):
+    """枚举可用串口：过滤蓝牙设备，并确保 COM9 始终可选。"""
+    ports = []
+    for p in _list_ports.comports():
+        if _is_bluetooth_port(p):
+            continue
+        ports.append({"device": p.device, "description": p.description or p.device})
+    if not any(pp["device"] == "COM9" for pp in ports):
+        ports.append({"device": "COM9", "description": extra_label})
+    return ports
+
+
 @app.route("/api/serial/ports")
 def serial_list_ports():
     if not SERIAL_AVAILABLE:
         return _serial_unavailable()
-    ports = []
     try:
-        for p in _list_ports.comports():
-            ports.append({"device": p.device, "description": p.description or p.device})
+        ports = _list_usable_ports()
     except Exception as e:
         return jsonify({"error": f"枚举串口失败: {e}"}), 400
     connected = _serial_conn is not None and _serial_conn.is_open
@@ -703,6 +720,96 @@ def serial_disconnect():
     return jsonify({"success": True})
 
 
+# ---------- Gripper gimbal (2D gimbal + gripper, STM32F103C8T6) ----------
+# 协议与「二维云台＋夹爪」源码一致：USART1 115200 8N1，单字节 ASCII 命令，每命令执行一次动作：
+#   'U' 上电机上转约 2° / 'D' 上电机下转约 2° / 'L' 下电机左转约 2° / 'R' 下电机右转约 2°
+#   'O' 开夹 / 'C' 关夹（固件转发 C6 驱动器指令，重复的同向命令会被固件忽略）
+# 爪夹只用于扭摆 (niubai) 与磁阻尼摆 (cizuni) 的释放；单 USB 串口（与电磁铁各自独立）。
+_gripper_conn = None
+_GRIPPER_LOCK = threading.Lock()
+GRIPPER_BAUD = 115200
+GRIPPER_COMMANDS = ("U", "D", "L", "R", "O", "C")
+
+
+@app.route("/api/gripper/ports")
+def gripper_list_ports():
+    if not SERIAL_AVAILABLE:
+        return _serial_unavailable()
+    try:
+        ports = _list_usable_ports()
+    except Exception as e:
+        return jsonify({"error": f"枚举串口失败: {e}"}), 400
+    connected = _gripper_conn is not None and _gripper_conn.is_open
+    return jsonify({
+        "ports": ports,
+        "connected": connected,
+        "port": _gripper_conn.port if connected else None,
+    })
+
+
+@app.route("/api/gripper/connect", methods=["POST"])
+def gripper_connect():
+    if not SERIAL_AVAILABLE:
+        return _serial_unavailable()
+    data = request.get_json() or {}
+    port = str(data.get("port", "")).strip()
+    if not port:
+        return jsonify({"error": "缺少串口号 port。"}), 400
+    global _gripper_conn
+    with _GRIPPER_LOCK:
+        if _gripper_conn is not None and _gripper_conn.is_open:
+            return jsonify({"error": f"串口已连接: {_gripper_conn.port}，请先断开。"}), 400
+        try:
+            conn = _pyserial.Serial(
+                port=port, baudrate=GRIPPER_BAUD,
+                bytesize=_pyserial.EIGHTBITS, parity=_pyserial.PARITY_NONE,
+                stopbits=_pyserial.STOPBITS_ONE, timeout=1.0, write_timeout=1.0,
+            )
+            # USB-TTL 适配器可能在打开串口时复位 STM32，等待其完成启动
+            _time.sleep(1.5)
+            conn.reset_input_buffer()
+            _gripper_conn = conn
+            return jsonify({"success": True, "port": port})
+        except Exception as e:
+            return jsonify({"error": f"无法打开串口 {port}: {e}"}), 400
+
+
+@app.route("/api/gripper/command", methods=["POST"])
+def gripper_command():
+    if not SERIAL_AVAILABLE:
+        return _serial_unavailable()
+    data = request.get_json() or {}
+    cmd = str(data.get("command", "")).strip().upper()
+    if cmd not in GRIPPER_COMMANDS:
+        return jsonify({"error": "command 仅支持 U/D/L/R(方向) 或 O/C(开合)。"}), 400
+    with _GRIPPER_LOCK:
+        if _gripper_conn is None or not _gripper_conn.is_open:
+            return jsonify({"error": "串口未连接，请先连接。"}), 400
+        try:
+            _gripper_conn.write(cmd.encode("ascii"))
+            _gripper_conn.flush()
+            return jsonify({"success": True, "command": cmd,
+                            "timestamp_ns": _time.time_ns()})
+        except Exception as e:
+            return jsonify({"error": f"发送命令失败: {e}"}), 400
+
+
+@app.route("/api/gripper/disconnect", methods=["POST"])
+def gripper_disconnect():
+    if not SERIAL_AVAILABLE:
+        return _serial_unavailable()
+    global _gripper_conn
+    with _GRIPPER_LOCK:
+        if _gripper_conn is None or not _gripper_conn.is_open:
+            return jsonify({"success": True, "already": True})
+        try:
+            _gripper_conn.close()
+        except Exception:
+            pass
+        _gripper_conn = None
+    return jsonify({"success": True})
+
+
 # ---------- OpenMV camera (real-time preview, recording, gimbal) ----------
 # 双串口架构（与 source controller.py 一致）：
 #   串口 1：OpenMV USB-C，USBDBG V1 @ 921600 → 帧采集
@@ -711,12 +818,14 @@ def serial_disconnect():
 
 @app.route("/api/openmv/ports")
 def openmv_list_ports():
-    """List serial ports, highlighting OpenMV devices."""
+    """List serial ports, highlighting OpenMV devices (bluetooth excluded)."""
     if not SERIAL_AVAILABLE:
         return _serial_unavailable()
     ports = []
     try:
         for p in _list_ports.comports():
+            if _is_bluetooth_port(p):
+                continue
             is_openmv = (getattr(p, "vid", None) == OPENMV_USB_VID
                          or "openmv" in (p.description or "").lower())
             ports.append({
@@ -724,6 +833,8 @@ def openmv_list_ports():
                 "description": p.description or p.device,
                 "is_openmv": is_openmv,
             })
+        if not any(pp["device"] == "COM9" for pp in ports):
+            ports.append({"device": "COM9", "description": "手动指定", "is_openmv": False})
     except Exception as e:
         return jsonify({"error": f"枚举串口失败: {e}"}), 400
     return jsonify({

@@ -529,6 +529,8 @@
     <div id="acq_panel_experiment" class="hidden" style="margin-top:16px;">
       <div class="section-label">&#9881; 实验设备控制 Experiment Device Control</div>
 
+      <!-- 释放控制卡片：按实验类型切换（单摆→电磁铁；扭摆/磁阻尼摆→爪夹；磁力牛顿摆→手动） -->
+      <div id="release_card_magnet" style="display:none;">
       <!-- 串口设置 -->
       <div class="param-card" style="margin-bottom:12px;">
         <div class="p-label">串口设置 Serial Port</div>
@@ -550,6 +552,45 @@
           <button class="btn btn-primary btn-lg" id="btn_magnet_off" disabled onclick="sendMagnetCommand('0')">&#128279; 释放小球</button>
         </div>
         <div id="magnet_status" style="font-size:0.78rem;color:var(--t3);margin-top:8px;">先连接串口，再吸合电磁铁</div>
+      </div>
+      </div><!-- /release_card_magnet -->
+
+      <!-- 爪夹控制（扭摆 / 磁阻尼摆释放，独立 STM32 二维云台＋夹爪） -->
+      <div class="param-card" id="release_card_gripper" style="margin-bottom:12px;display:none;">
+        <div class="p-label">爪夹云台 Gripper Control</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <select id="gripper_port_select" style="flex:1;min-width:170px;">
+            <option value="">扫描中...</option>
+          </select>
+          <button class="btn btn-outline" onclick="refreshGripperPorts()">&#8635; 刷新</button>
+          <button class="btn btn-primary" id="btn_gripper_connect" onclick="toggleGripperConnect()">连接</button>
+        </div>
+        <div id="gripper_status" style="font-size:0.78rem;color:var(--t3);margin-top:8px;">未连接串口</div>
+
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px;margin-top:12px;">
+          <button class="btn btn-outline gripper-cmd-btn" data-cmd="U" style="width:52px;height:40px;padding:0;">&#9650;</button>
+          <div style="display:flex;gap:4px;">
+            <button class="btn btn-outline gripper-cmd-btn" data-cmd="L" style="width:52px;height:40px;padding:0;">&#9664;</button>
+            <button class="btn btn-outline gripper-cmd-btn" data-cmd="D" style="width:52px;height:40px;padding:0;font-size:0.72rem;">&#9660;</button>
+            <button class="btn btn-outline gripper-cmd-btn" data-cmd="R" style="width:52px;height:40px;padding:0;">&#9654;</button>
+          </div>
+          <div style="font-size:0.68rem;color:var(--t3);margin-top:2px;">方向键每次约 2°</div>
+        </div>
+
+        <div style="display:flex;gap:10px;justify-content:center;margin-top:10px;">
+          <button class="btn btn-outline" id="btn_gripper_open" disabled onclick="sendGripperCommand('O')">&#128230; 开夹</button>
+          <button class="btn btn-primary" id="btn_gripper_close" disabled onclick="sendGripperCommand('C')">&#128279; 关夹释放</button>
+        </div>
+        <div id="gripper_cmd_status" style="font-size:0.78rem;color:var(--t3);margin-top:8px;text-align:center;">先连接串口，再控制爪夹</div>
+      </div>
+
+      <!-- 手动释放提示（磁力牛顿摆） -->
+      <div class="param-card" id="release_card_manual" style="margin-bottom:12px;display:none;">
+        <div class="p-label">释放方式 Release Method</div>
+        <div style="font-size:0.84rem;color:var(--t2);line-height:1.6;">
+          磁力牛顿摆采用<b>手动释放</b>：手动松开摆球开始实验，无需串口设备连接。<br>
+          请先在 OpenMV 中开始拍摄，再手动释放摆球。
+        </div>
       </div>
 
       <!-- OpenMV 拍摄模块 -->
@@ -877,6 +918,7 @@ document.addEventListener('click',e=>{if(themeOpen&&!themeTrigger.contains(e.tar
 
 // ==================== State ====================
 const S={sessionId:null,motionType:'',firstFrameB64:null,firstFrameImg:null,calibSpec:null,calibPoints:[],calibPhase:null,_pivotCount:null};
+const releaseCardMagnet=$('#release_card_magnet'),releaseCardGripper=$('#release_card_gripper'),releaseCardManual=$('#release_card_manual');
 const $=s=>document.querySelector(s);
 const uploadZone=$('#upload_zone'),videoInput=$('#video_input'),videoInfo=$('#video_info');
 const paramsArea=$('#params_area'),distGroup=$('#dist_group'),cyclesGroup=$('#cycles_group'),samplesGroup=$('#samples_group'),dampingTypeGroup=$('#damping_type_group'),flipAngleGroup=$('#flip_angle_group');
@@ -919,6 +961,14 @@ function selectType(type){
   else if(type==='niubai'){$('#param_cycles').value='80';$('#param_skip_start').value='1';}
   else if(type==='cizuni'){$('#param_skip_start').value='0.15';}
   else if(type==='ciliniudun'){$('#param_skip_start').value='2';$('#param_skip_end').value='0';}
+  // 释放控制卡片按实验类型切换：单摆→电磁铁；扭摆/磁阻尼摆→爪夹；磁力牛顿摆→手动释放
+  releaseCardMagnet.style.display=type==='danbai'?'':'none';
+  releaseCardGripper.style.display=(type==='cizuni'||type==='niubai')?'':'none';
+  releaseCardManual.style.display=type==='ciliniudun'?'':'none';
+  if(S.acqMode==='experiment'){
+    if(type==='danbai')refreshSerialPorts();
+    else if(type==='cizuni'||type==='niubai')refreshGripperPorts();
+  }
   animateVisibleParamCards();
 }
 
@@ -1002,7 +1052,7 @@ function selectAcqMode(mode){
   acqCards.forEach(c=>c.classList.toggle('selected',c.dataset.acq===mode));
   acqPanelUpload.classList.toggle('hidden',mode!=='upload');
   acqPanelExperiment.classList.toggle('hidden',mode!=='experiment');
-  if(mode==='experiment'){refreshSerialPorts();refreshOpenMVPorts();}
+  if(mode==='experiment'){refreshSerialPorts();refreshOpenMVPorts();refreshGripperPorts();}
 }
 
 // ==================== STM32 Serial (electromagnet release) ====================
@@ -1105,6 +1155,107 @@ async function sendMagnetCommand(cmd){
     showToast(label+'失败: '+err.message,'error');
   }
 }
+
+// ==================== Gripper (2D gimbal + gripper: niubai/cizuni release) ====================
+// 协议（与「二维云台＋夹爪」源码一致）：单字节 ASCII，115200 8N1
+//   U/D/L/R 方向各约 2°，O 开夹 / C 关夹（固件转发 C6 指令，重复同向命令被忽略）
+const gripperSelect=$('#gripper_port_select'),btnGripperConnect=$('#btn_gripper_connect'),
+      gripperStatus=$('#gripper_status'),gripperCmdStatus=$('#gripper_cmd_status'),
+      btnGripperOpen=$('#btn_gripper_open'),btnGripperClose=$('#btn_gripper_close');
+let gripperConnected=false;
+
+async function refreshGripperPorts(){
+  if(!gripperSelect)return;
+  gripperStatus.textContent='正在扫描串口...';gripperStatus.style.color='var(--t3)';
+  try{
+    const r=await fetch('api/gripper/ports');const d=await r.json();
+    if(!r.ok)throw new Error(d.error);
+    gripperSelect.innerHTML='';
+    if(!d.ports.length){
+      gripperSelect.innerHTML='<option value="">未发现串口</option>';
+    }else{
+      d.ports.forEach(p=>{
+        const o=document.createElement('option');
+        o.value=p.device;
+        o.textContent=`${p.device} — ${p.description}`;
+        gripperSelect.appendChild(o);
+      });
+    }
+    if(d.connected&&d.port){
+      gripperConnected=true;btnGripperConnect.textContent='断开';
+      gripperStatus.textContent='已连接: '+d.port;
+      enableGripperButtons();
+      if(d.port)gripperSelect.value=d.port;
+    }else{
+      gripperConnected=false;btnGripperConnect.textContent='连接';
+      gripperStatus.textContent=d.ports.length?`发现 ${d.ports.length} 个串口，请选择后连接`:'未发现串口，请插入 USB-TTL 后刷新';
+      disableGripperButtons();
+    }
+  }catch(err){
+    gripperStatus.textContent='扫描失败: '+err.message;gripperStatus.style.color='var(--red)';
+    showToast('扫描串口失败: '+err.message,'error');
+  }
+}
+
+async function toggleGripperConnect(){
+  if(gripperConnected){await disconnectGripper();return;}
+  const port=gripperSelect.value;
+  if(!port){showToast('请先选择串口号','error');return;}
+  btnGripperConnect.disabled=true;
+  try{
+    const r=await fetch('api/gripper/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({port})});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error);
+    gripperConnected=true;btnGripperConnect.textContent='断开';
+    gripperStatus.textContent=`已连接 ${port}（115200 8N1）`;
+    gripperStatus.style.color='';
+    enableGripperButtons();
+    showToast('爪夹串口连接成功','info');
+  }catch(err){
+    gripperStatus.textContent='连接失败: '+err.message;gripperStatus.style.color='var(--red)';
+    showToast('连接失败: '+err.message,'error');
+  }finally{
+    btnGripperConnect.disabled=false;
+  }
+}
+
+async function disconnectGripper(){
+  btnGripperConnect.disabled=true;
+  try{
+    await fetch('api/gripper/disconnect',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    gripperConnected=false;btnGripperConnect.textContent='连接';
+    gripperStatus.textContent='未连接串口';gripperStatus.style.color='';
+    disableGripperButtons();
+    showToast('爪夹串口已断开','info');
+  }catch(err){
+    gripperStatus.textContent='断开失败: '+err.message;gripperStatus.style.color='var(--red)';
+  }finally{
+    btnGripperConnect.disabled=false;
+  }
+}
+
+function enableGripperButtons(){btnGripperOpen.disabled=false;btnGripperClose.disabled=false;}
+function disableGripperButtons(){
+  btnGripperOpen.disabled=true;btnGripperClose.disabled=true;
+  gripperCmdStatus.textContent='先连接串口，再控制爪夹';gripperCmdStatus.style.color='var(--t3)';
+}
+
+async function sendGripperCommand(cmd){
+  if(!gripperConnected){showToast('请先连接爪夹串口','error');return;}
+  const label={U:'上转',D:'下转',L:'左转',R:'右转',O:'开夹',C:'关夹'}[cmd]||cmd;
+  try{
+    const r=await fetch('api/gripper/command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:cmd})});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error);
+    const ts=d.timestamp_ns?new Date(d.timestamp_ns/1e6).toLocaleTimeString('zh-CN',{hour12:false}):'';
+    gripperCmdStatus.style.color='var(--t3)';
+    gripperCmdStatus.textContent=`${label}指令已发送（${ts}）`;
+  }catch(err){
+    gripperCmdStatus.textContent=label+'失败: '+err.message;gripperCmdStatus.style.color='var(--red)';
+    showToast(label+'失败: '+err.message,'error');
+  }
+}
+document.querySelectorAll('.gripper-cmd-btn').forEach(btn=>{btn.addEventListener('click',()=>sendGripperCommand(btn.dataset.cmd));});
 
 // ==================== OpenMV Camera (preview, recording, gimbal) ====================
 const openmvPortSelect=$('#openmv_port_select'),openmvCtrlPortSelect=$('#openmv_ctrl_port_select'),

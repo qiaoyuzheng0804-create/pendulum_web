@@ -15,12 +15,12 @@ Flask + YOLOv8 实验视频分析平台。上传摆的实验视频，自动追�
   - 交互模拟：Canvas 实时绘制阻尼振荡波形
   - AI 问答：LLM 接入，Markdown + LaTeX 公式渲染
 - **前端**：单页 HTML，6 种主题，SSE 流式进度，KaTeX 公式渲染
-- **实验获取**：视频获取方式双卡片（上传现成视频 / STM32+OpenMV 实验获取）；实验获取模式通过串口控制 STM32 电磁铁释放小球（'1' 吸合 / '0' 释放），OpenMV 拍摄模块预留位置
+- **实验获取**：视频获取方式双卡片（上传现成视频 / STM32+OpenMV 实验获取）；释放装置按实验类型自动切换（单摆→电磁铁吸合/释放，磁阻尼摆·扭摆→二维云台＋夹爪方向/开合，磁力牛顿摆→手动释放）；OpenMV 实时预览 + 录制 + 云台
 
 ## 技术栈
 
 - 后端：Flask + YOLOv8 (ultralytics)
-- 串口：pyserial（STM32 电磁铁释放控制）
+- 串口：pyserial（STM32 电磁铁 / 二维云台＋夹爪释放控制）
 - 视频 / 数值：OpenCV、NumPy、SciPy、pandas、matplotlib
 - 滤波：Savitzky-Golay、高斯、卡尔曼 (filterpy)
 - 拟合：符号回归 (纯 SciPy) 参数拟合
@@ -71,16 +71,26 @@ python app.py
 
 服务运行在 `http://127.0.0.1:5000`，支持局域网访问。
 
-## 实验获取（STM32 电磁铁 + OpenMV 拍摄，可选）
+## 实验获取（STM32 释放装置 + OpenMV 拍摄，可选）
 
-「实验获取」模式通过两个独立串口分别控制 STM32 电磁铁和 OpenMV 摄像头：
+「实验获取」模式通过独立 USB 串口控制释放装置，配合 OpenMV 实时预览/录制。**释放装置按实验类型自动切换**：
 
-1. **烧录固件**：Keil 打开 `firmware/stm32标准库/project.uvprojx` 编译并 ST-Link 烧录（接线图、串口协议见 `firmware/README.md`）
-2. **连接硬件**：插入 USB-TTL（电磁铁控制）和 OpenMV USB（摄像头数据），设备管理器确认出现两个 COM 口
-3. **网页操作**：数据分析 → 选实验类型 → 视频获取方式选「实验获取」→ 分别连接 STM32 串口和 OpenMV 串口
-4. **OpenMV 实时预览**：连接 OpenMV 后网页实时显示摄像头画面（MJPEG 流，~13 FPS @ QVGA）
-5. **云台控制**：通过网页方向键按钮控制 OpenMV 云台（上下左右 + 回中）
-6. **拍摄流程**：点「吸合」吸住小球 → 点「开始拍摄」→ 点「释放」小球落下 → 点「停止并上传」→ 自动进入标定流程
+| 实验类型 | 释放装置 | 串口控制 |
+|---|---|---|
+| 单摆 (danbai) | 电磁铁（STM32F103C8T6） | 吸合 / 释放 |
+| 磁阻尼摆 (cizuni) | 二维云台＋夹爪（STM32F103C8T6） | 方向 U/D/L/R + 开夹 O / 关夹 C |
+| 扭摆 (niubai) | 二维云台＋夹爪 | 同上 |
+| 磁力牛顿摆 (ciliniudun) | 无（手动释放） | 无需串口 |
+
+使用流程：
+
+1. **烧录固件**：电磁铁见 `firmware/README.md`；爪夹固件见「二维云台＋夹爪」Keil 工程（`GIMBAL.uvprojx`，USART1 115200 8N1，单字节 ASCII 命令）
+2. **连接硬件**：每个装置一个 USB-TTL，插入后设备管理器确认 COM 口（串口列表已自动过滤蓝牙设备，并内置 `COM9` 手动选项）
+3. **网页操作**：数据分析 → 选实验类型 → 视频获取方式选「实验获取」→ 弹出对应释放装置卡片 → 刷新串口 → 选择 → 连接
+4. **单摆**：吸合（准备）→ OpenMV 开始拍摄 → 释放小球
+5. **磁阻尼摆 / 扭摆**：连接爪夹串口 → 方向按钮调整云台（每次约 2°）→ 开夹准备 → 关夹释放
+6. **磁力牛顿摆**：无串口控制，OpenMV 开始拍摄后手动释放摆球
+7. **视频**：OpenMV 录制完成后点「停止并上传」自动进入标定流程
 
 > 电脑端只需 `pip install -r requirements.txt`（含 pyserial、Pillow）即可运行网页与串口控制；Keil/STM32 标准库仅在重新编译固件时需要。
 > OpenMV 使用 USBDBG V1 协议（921600 波特率）读取帧缓冲，不依赖 OpenMV IDE。
@@ -138,6 +148,10 @@ pendulum_web/
 | POST | `/api/serial/connect` | 连接串口（115200 8N1），连接后先发送 `0` 建立断电状态 |
 | POST | `/api/serial/command` | 发送命令 `0`(释放) / `1`(吸合)，返回发送时刻时间戳 |
 | POST | `/api/serial/disconnect` | 断开串口（若通电先断电保护） |
+| GET | `/api/gripper/ports` | 列出爪夹可用串口（过滤蓝牙，含 COM9） |
+| POST | `/api/gripper/connect` | 连接爪夹串口（115200 8N1） |
+| POST | `/api/gripper/command` | 发送命令 `U/D/L/R`(方向) / `O/C`(开合) |
+| POST | `/api/gripper/disconnect` | 断开爪夹串口 |
 | GET | `/api/openmv/ports` | 列出串口（标注 OpenMV 设备） |
 | POST | `/api/openmv/connect` | 连接 OpenMV 摄像头（USBDBG V1，921600 波特率） |
 | POST | `/api/openmv/disconnect` | 断开 OpenMV 摄像头 |
