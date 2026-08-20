@@ -918,7 +918,6 @@ document.addEventListener('click',e=>{if(themeOpen&&!themeTrigger.contains(e.tar
 
 // ==================== State ====================
 const S={sessionId:null,motionType:'',firstFrameB64:null,firstFrameImg:null,calibSpec:null,calibPoints:[],calibPhase:null,_pivotCount:null};
-const releaseCardMagnet=$('#release_card_magnet'),releaseCardGripper=$('#release_card_gripper'),releaseCardManual=$('#release_card_manual');
 const $=s=>document.querySelector(s);
 const uploadZone=$('#upload_zone'),videoInput=$('#video_input'),videoInfo=$('#video_info');
 const paramsArea=$('#params_area'),distGroup=$('#dist_group'),cyclesGroup=$('#cycles_group'),samplesGroup=$('#samples_group'),dampingTypeGroup=$('#damping_type_group'),flipAngleGroup=$('#flip_angle_group');
@@ -962,9 +961,9 @@ function selectType(type){
   else if(type==='cizuni'){$('#param_skip_start').value='0.15';}
   else if(type==='ciliniudun'){$('#param_skip_start').value='2';$('#param_skip_end').value='0';}
   // 释放控制卡片按实验类型切换：单摆→电磁铁；扭摆/磁阻尼摆→爪夹；磁力牛顿摆→手动释放
-  releaseCardMagnet.style.display=type==='danbai'?'':'none';
-  releaseCardGripper.style.display=(type==='cizuni'||type==='niubai')?'':'none';
-  releaseCardManual.style.display=type==='ciliniudun'?'':'none';
+  $('#release_card_magnet').style.display=type==='danbai'?'':'none';
+  $('#release_card_gripper').style.display=(type==='cizuni'||type==='niubai')?'':'none';
+  $('#release_card_manual').style.display=type==='ciliniudun'?'':'none';
   if(S.acqMode==='experiment'){
     if(type==='danbai')refreshSerialPorts();
     else if(type==='cizuni'||type==='niubai')refreshGripperPorts();
