@@ -619,14 +619,22 @@ def _is_bluetooth_port(p):
 
 
 def _list_usable_ports(extra_label="手动指定"):
-    """枚举可用串口：过滤蓝牙设备，并确保 COM9 始终可选。"""
+    """枚举可用串口：过滤蓝牙设备，并补齐 COM1~COM20 全部可选。
+
+    枚举到的端口显示真实描述；未枚举到的常用 COM 号也一并列出
+    （标为「手动指定」），保证任何设备号都能在网页下拉中选择。
+    """
     ports = []
+    found = set()
     for p in _list_ports.comports():
         if _is_bluetooth_port(p):
             continue
         ports.append({"device": p.device, "description": p.description or p.device})
-    if not any(pp["device"] == "COM9" for pp in ports):
-        ports.append({"device": "COM9", "description": extra_label})
+        found.add(p.device.upper())
+    for n in range(1, 21):
+        dev = "COM%d" % n
+        if dev not in found:
+            ports.append({"device": dev, "description": extra_label})
     return ports
 
 
@@ -822,6 +830,7 @@ def openmv_list_ports():
     if not SERIAL_AVAILABLE:
         return _serial_unavailable()
     ports = []
+    found = set()
     try:
         for p in _list_ports.comports():
             if _is_bluetooth_port(p):
@@ -833,8 +842,12 @@ def openmv_list_ports():
                 "description": p.description or p.device,
                 "is_openmv": is_openmv,
             })
-        if not any(pp["device"] == "COM9" for pp in ports):
-            ports.append({"device": "COM9", "description": "手动指定", "is_openmv": False})
+            found.add(p.device.upper())
+        # 补齐 COM1~COM20：未枚举到的也可手动选择（非 OpenMV）
+        for n in range(1, 21):
+            dev = "COM%d" % n
+            if dev not in found:
+                ports.append({"device": dev, "description": "手动指定", "is_openmv": False})
     except Exception as e:
         return jsonify({"error": f"枚举串口失败: {e}"}), 400
     return jsonify({
