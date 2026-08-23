@@ -71,7 +71,8 @@
   /* Header */
   @keyframes titleFlip{0%{opacity:0;transform:perspective(800px) rotateX(-60deg) rotateY(-20deg) translateY(-30px);}40%{opacity:1;transform:perspective(800px) rotateX(8deg) rotateY(4deg) translateY(0);}60%{transform:perspective(800px) rotateX(-3deg) rotateY(-1deg);}80%{transform:perspective(800px) rotateX(1deg) rotateY(0deg);}100%{transform:perspective(800px) rotateX(0deg) rotateY(0deg) translateY(0);}}
   .header{text-align:center;margin-bottom:28px;}
-  .header h1{animation:titleFlip 1.2s cubic-bezier(0.22,0.61,0.36,1) both;font-size:2.1rem;font-weight:800;letter-spacing:-0.03em;background:linear-gradient(135deg,var(--a1) 0%,var(--a2) 50%,var(--a3) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+  .header h1{font-size:2.1rem;font-weight:800;letter-spacing:-0.03em;background:linear-gradient(105deg,var(--a2) 0%,var(--a1) 26%,var(--a3) 52%,var(--a1) 78%,var(--a2) 100%);background-size:220% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 2px 14px var(--fr));animation:titleFlip 1.2s cubic-bezier(0.22,0.61,0.36,1) both,titleShimmer 9s linear infinite;}
+  @keyframes titleShimmer{from{background-position:0% 50%;}to{background-position:-220% 50%;}}
   .header .sub{animation:fadeUp 0.6s ease-out 0.6s both;color:var(--t3);margin-top:6px;font-size:0.88rem;}
   .header .sub em{font-style:normal;color:var(--a1);}
 
