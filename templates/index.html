@@ -76,25 +76,27 @@
   .header .sub em{font-style:normal;color:var(--a1);}
 
   /* Step bar */
-  .step-bar-wrap{position:sticky;top:0;z-index:100;padding:14px 20px;margin-bottom:24px;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border);}
-  .step-bar{display:flex;align-items:center;justify-content:center;gap:0;max-width:700px;margin:0 auto;position:relative;overflow:visible;}
-  .step-node{display:flex;flex-direction:column;align-items:center;gap:6px;position:relative;flex-shrink:0;z-index:1;}
-  .step-dot{display:flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:50%;font-weight:700;font-size:0.95rem;transition:all 0.5s;background:var(--bg2);border:2px solid var(--border);color:var(--t3);position:relative;z-index:1;}
-  .step-dot.done{background:var(--green);border-color:var(--green);color:#000;box-shadow:0 0 20px rgba(74,222,128,0.3);}
-  .step-dot.current{background:var(--a1);border-color:var(--a1);color:var(--bt);box-shadow:0 0 24px var(--fr),0 0 48px var(--fr);animation:dotPulse 1.8s linear infinite;}
-  .step-bar .step-node:nth-child(7) .step-dot.current{animation-delay:-0.3s;}
-  .step-bar .step-node:nth-child(5) .step-dot.current{animation-delay:-0.6s;}
-  .step-bar .step-node:nth-child(3) .step-dot.current{animation-delay:-0.9s;}
-  .step-bar .step-node:nth-child(1) .step-dot.current{animation-delay:-1.2s;}
-  .step-line-wrap{flex:1;display:flex;align-items:center;min-width:30px;max-width:100px;height:3px;position:relative;}
-  .step-line{flex:1;height:3px;border-radius:2px;background:var(--border);transition:background 0.5s;}
-  .step-line.done{background:linear-gradient(90deg,var(--green),var(--a1));}
-  .step-line.current{background:linear-gradient(90deg,var(--green),var(--a1),var(--border));}
-  .step-label{font-size:0.65rem;color:var(--t3);font-weight:500;white-space:nowrap;text-transform:uppercase;letter-spacing:0.04em;transition:color 0.4s;}
-  .step-node.current .step-label{color:var(--a1);}
+  .step-bar-wrap{position:sticky;top:0;z-index:100;padding:14px 20px 12px;margin-bottom:24px;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border);}
+  .step-bar{display:flex;align-items:flex-start;justify-content:center;gap:0;max-width:720px;margin:0 auto;position:relative;}
+  .step-node{display:flex;flex-direction:column;align-items:center;gap:8px;position:relative;flex-shrink:0;z-index:1;min-width:86px;}
+  .step-dot{display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;font-weight:700;font-size:0.85rem;font-family:'JetBrains Mono','Consolas',monospace;background:var(--bg2);border:2px solid var(--border);color:var(--t3);position:relative;z-index:1;transition:background .5s,color .5s,border-color .5s,box-shadow .5s,transform .5s cubic-bezier(.22,.61,.36,1);}
+  .step-dot::after{content:'';position:absolute;inset:-7px;border-radius:50%;pointer-events:none;}
+  .step-dot.done{background:linear-gradient(135deg,color-mix(in srgb,var(--green) 82%,#fff),var(--green));border-color:transparent;color:#03140a;box-shadow:0 4px 16px color-mix(in srgb,var(--green) 35%,transparent);}
+  .step-dot.done::after{border:1px solid color-mix(in srgb,var(--green) 40%,transparent);}
+  .step-dot.current{background:linear-gradient(135deg,var(--a1),var(--a2));border-color:transparent;color:var(--bt);box-shadow:0 6px 20px var(--fr);animation:stepPop .55s cubic-bezier(.34,1.56,.64,1) both;}
+  .step-dot.current::after{border:2px solid var(--a1);animation:stepHalo 2s ease-out infinite;}
+  .step-line-wrap{flex:1;display:flex;align-items:center;min-width:26px;max-width:110px;height:42px;}
+  .step-line{width:100%;height:4px;border-radius:2px;background:var(--border);position:relative;overflow:hidden;}
+  .step-line::after{content:'';position:absolute;inset:0;border-radius:2px;background:linear-gradient(90deg,var(--green),var(--a1));transform:scaleX(0);transform-origin:left center;transition:transform .7s cubic-bezier(.22,.61,.36,1);}
+  .step-line.done::after{transform:scaleX(1);}
+  .step-line.current::after{transform:scaleX(.5);background:linear-gradient(90deg,var(--green),var(--a1),var(--a2),var(--green));background-size:200% 100%;animation:lineGrow 1.8s ease-in-out infinite alternate,lineShift 2.4s linear infinite;}
+  @keyframes stepPop{0%{transform:scale(.5);}62%{transform:scale(1.14);}100%{transform:scale(1);}}
+  @keyframes stepHalo{0%{transform:scale(.9);opacity:.75;}75%,100%{transform:scale(1.5);opacity:0;}}
+  @keyframes lineGrow{from{transform:scaleX(.45);}to{transform:scaleX(1);}}
+  @keyframes lineShift{from{background-position:0% 0;}to{background-position:-200% 0;}}
+  .step-label{font-size:0.68rem;color:var(--t3);font-weight:600;white-space:nowrap;text-transform:uppercase;letter-spacing:0.05em;padding:3px 12px;border-radius:999px;border:1px solid transparent;transition:color .45s,background .45s,border-color .45s;}
+  .step-node.current .step-label{color:var(--a1);background:var(--g1);border-color:var(--fr);}
   .step-node.done .step-label{color:var(--green);}
-  .wave-pulse{position:absolute;top:50%;height:20px;width:80px;pointer-events:none;z-index:0;animation:waveTravel 3.5s linear infinite;}
-  @keyframes waveTravel{0%{left:0%;transform:translateY(-50%) translateX(-100%);}100%{left:100%;transform:translateY(-50%) translateX(0%);}}
 
   /* Cards with 3D tilt */
   .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;margin-bottom:20px;box-shadow:var(--shadow),var(--ci);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);transition:transform 0.15s ease-out,border-color 0.3s,background 0.5s,box-shadow 0.3s;position:relative;transform-style:preserve-3d;perspective:1000px;}
@@ -467,7 +469,6 @@
         <div class="step-dot" id="sd4">4</div>
         <div class="step-label">完成</div>
       </div>
-      <svg class="wave-pulse" viewBox="0 0 80 3" preserveAspectRatio="none"><path d="M0,1.5 Q10,-12 20,1.5 Q30,15 40,1.5 Q50,-12 60,1.5 Q70,15 80,1.5" fill="none" stroke="var(--a1)" stroke-width="2" opacity="0.7"/></svg>
     </div>
   </div>
 
