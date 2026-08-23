@@ -64,7 +64,7 @@
   /* Formula watermarks */
   .formula-text{position:fixed;pointer-events:none;z-index:0;font-family:'Georgia','Times New Roman',serif;font-style:italic;font-size:1.25rem;opacity:0;animation:formulaFloat 12s ease-in-out infinite;white-space:nowrap;text-shadow:0 0 14px currentColor;}
   .formula-text.c1{color:var(--a1);}.formula-text.c2{color:var(--a2);}.formula-text.c3{color:var(--a3);}.formula-text.c4{color:var(--a4);}
-  /* 完整根号：Unicode √ 无上横线，用 border-top 补画 vinculum 覆盖被开方数 */
+  /* 完整根号（KaTeX 加载失败时的纯 CSS 降级方案）：Unicode √ 无上横线，用 border-top 补画 vinculum */
   .fsqrt{display:inline-block;line-height:1;text-shadow:none;filter:drop-shadow(0 0 6px currentColor);}
   .fsqrt .frad{display:inline-block;border-top:0.075em solid currentColor;padding:0.12em 0.18em 0 0.12em;margin-left:-0.08em;}
 
@@ -412,15 +412,15 @@
 
 <canvas id="bg-canvas"></canvas>
 <div id="toast-container"></div>
-<div class="formula-text c1" style="top:6%;left:4%;">θ(t) = θ₀ e<sup>−βt</sup> cos(ωt + φ)</div>
-<div class="formula-text c2" style="top:14%;right:6%;">T = 2π<span class="fsqrt">√<span class="frad">(L/g)</span></span></div>
-<div class="formula-text c3" style="top:26%;left:6%;">ω = <span class="fsqrt">√<span class="frad">(k/I)</span></span></div>
-<div class="formula-text c4" style="top:34%;right:4%;">I = Σ mᵢ rᵢ²</div>
-<div class="formula-text c1" style="top:48%;left:3%;">β = b / 2m</div>
-<div class="formula-text c2" style="top:56%;right:8%;">ωₙ = ω₀ <span class="fsqrt">√<span class="frad">(1 − ζ²)</span></span></div>
-<div class="formula-text c3" style="top:66%;left:5%;">E(t) = ½ k A² e<sup>−2βt</sup></div>
-<div class="formula-text c4" style="top:78%;right:3%;">τ = I α = −κ θ</div>
-<div class="formula-text c1" style="top:88%;left:8%;">F = −bv (damping)</div>
+<div class="formula-text c1" style="top:6%;left:4%;" data-tex="\theta(t)=\theta_0\,e^{-\beta t}\cos(\omega t+\varphi)">θ(t) = θ₀ e<sup>−βt</sup> cos(ωt + φ)</div>
+<div class="formula-text c2" style="top:14%;right:6%;" data-tex="T=2\pi\sqrt{L/g}">T = 2π<span class="fsqrt">√<span class="frad">(L/g)</span></span></div>
+<div class="formula-text c3" style="top:26%;left:6%;" data-tex="\omega=\sqrt{k/I}">ω = <span class="fsqrt">√<span class="frad">(k/I)</span></span></div>
+<div class="formula-text c4" style="top:34%;right:4%;" data-tex="I=\sum m_i r_i^2">I = Σ mᵢ rᵢ²</div>
+<div class="formula-text c1" style="top:48%;left:3%;" data-tex="\beta=b/2m">β = b / 2m</div>
+<div class="formula-text c2" style="top:56%;right:8%;" data-tex="\omega_n=\omega_0\sqrt{1-\zeta^2}">ωₙ = ω₀ <span class="fsqrt">√<span class="frad">(1 − ζ²)</span></span></div>
+<div class="formula-text c3" style="top:66%;left:5%;" data-tex="E(t)=\tfrac{1}{2}kA^2e^{-2\beta t}">E(t) = ½ k A² e<sup>−2βt</sup></div>
+<div class="formula-text c4" style="top:78%;right:3%;" data-tex="\tau=I\alpha=-\kappa\theta">τ = I α = −κ θ</div>
+<div class="formula-text c1" style="top:88%;left:8%;" data-tex="F=-bv\;\text{(damping)}">F = −bv (damping)</div>
 
 <div class="app">
   <div class="header">
@@ -867,6 +867,14 @@ async function copyPath(path,btn){
   formulas.forEach((f,i)=>{
     f.style.animationDelay=(i*3)+'s';
     f.style.animationDuration=(10+Math.random()*6)+'s';
+  });
+  // 用 KaTeX 渲染背景水印公式（根号/上下标规范排版）；
+  // KaTeX 为 defer 加载，DOMContentLoaded 时必然已就绪；加载失败则保留纯文本降级
+  window.addEventListener('DOMContentLoaded',function(){
+    if(!window.katex)return;
+    document.querySelectorAll('.formula-text[data-tex]').forEach(el=>{
+      try{el.innerHTML=katex.renderToString(el.getAttribute('data-tex'),{throwOnError:false});}catch(e){}
+    });
   });
 })();
 
