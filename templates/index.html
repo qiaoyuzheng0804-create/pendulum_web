@@ -64,6 +64,9 @@
   /* Formula watermarks */
   .formula-text{position:fixed;pointer-events:none;z-index:0;font-family:'Georgia','Times New Roman',serif;font-style:italic;font-size:1.25rem;opacity:0;animation:formulaFloat 12s ease-in-out infinite;white-space:nowrap;text-shadow:0 0 14px currentColor;}
   .formula-text.c1{color:var(--a1);}.formula-text.c2{color:var(--a2);}.formula-text.c3{color:var(--a3);}.formula-text.c4{color:var(--a4);}
+  /* 完整根号：Unicode √ 无上横线，用 border-top 补画 vinculum 覆盖被开方数 */
+  .fsqrt{display:inline-block;line-height:1;text-shadow:none;filter:drop-shadow(0 0 6px currentColor);}
+  .fsqrt .frad{display:inline-block;border-top:0.075em solid currentColor;padding:0.12em 0.18em 0 0.12em;margin-left:-0.08em;}
 
   /* Header */
   @keyframes titleFlip{0%{opacity:0;transform:perspective(800px) rotateX(-60deg) rotateY(-20deg) translateY(-30px);}40%{opacity:1;transform:perspective(800px) rotateX(8deg) rotateY(4deg) translateY(0);}60%{transform:perspective(800px) rotateX(-3deg) rotateY(-1deg);}80%{transform:perspective(800px) rotateX(1deg) rotateY(0deg);}100%{transform:perspective(800px) rotateX(0deg) rotateY(0deg) translateY(0);}}
@@ -410,11 +413,11 @@
 <canvas id="bg-canvas"></canvas>
 <div id="toast-container"></div>
 <div class="formula-text c1" style="top:6%;left:4%;">θ(t) = θ₀ e<sup>−βt</sup> cos(ωt + φ)</div>
-<div class="formula-text c2" style="top:14%;right:6%;">T = 2π√(L/g)</div>
-<div class="formula-text c3" style="top:26%;left:6%;">ω = √(k/I)</div>
+<div class="formula-text c2" style="top:14%;right:6%;">T = 2π<span class="fsqrt">√<span class="frad">(L/g)</span></span></div>
+<div class="formula-text c3" style="top:26%;left:6%;">ω = <span class="fsqrt">√<span class="frad">(k/I)</span></span></div>
 <div class="formula-text c4" style="top:34%;right:4%;">I = Σ mᵢ rᵢ²</div>
 <div class="formula-text c1" style="top:48%;left:3%;">β = b / 2m</div>
-<div class="formula-text c2" style="top:56%;right:8%;">ωₙ = ω₀ √(1 − ζ²)</div>
+<div class="formula-text c2" style="top:56%;right:8%;">ωₙ = ω₀ <span class="fsqrt">√<span class="frad">(1 − ζ²)</span></span></div>
 <div class="formula-text c3" style="top:66%;left:5%;">E(t) = ½ k A² e<sup>−2βt</sup></div>
 <div class="formula-text c4" style="top:78%;right:3%;">τ = I α = −κ θ</div>
 <div class="formula-text c1" style="top:88%;left:8%;">F = −bv (damping)</div>
