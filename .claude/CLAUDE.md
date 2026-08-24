@@ -45,6 +45,10 @@ pendulum_web/
 │   ├── guide_cizuni.json           # 磁阻尼摆实验指导
 │   ├── guide_niubai.json           # 扭摆实验指导
 │   └── guide_ciliniudun.json       # 磁力牛顿摆实验指导
+├── firmware/                       # 外设硬件资料总览（详见 firmware/README.md）
+│   ├── stm32标准库/ + 电脑端代码/   # 电磁铁固件 Keil 工程 + 测试工具
+│   ├── openmv/                     # OpenMV：相机端脚本 + USBDBG 电脑端工具 + USB 驱动（openmv_manager.py 的参考实现）
+│   └── 云台夹爪/                   # 二维云台＋夹爪：Keil 工程 + 预编译 GIMBAL.hex + 接线/烧录文档
 ├── templates/
 │   └── index.html                  # 单页前端（数据分析 + 教学双模式）
 ├── .gitignore                      # 忽略 uploads/ __pycache__/ *.pt 等

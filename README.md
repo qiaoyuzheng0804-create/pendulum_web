@@ -84,7 +84,7 @@ python app.py
 
 使用流程：
 
-1. **烧录固件**：电磁铁见 `firmware/README.md`；爪夹固件见「二维云台＋夹爪」Keil 工程（`GIMBAL.uvprojx`，USART1 115200 8N1，单字节 ASCII 命令）
+1. **烧录/部署固件**：电磁铁见 `firmware/README.md`；云台夹爪见 `firmware/云台夹爪/`（Keil 打开 `Keil工程/USER/GIMBAL.uvprojx` 编译烧录，或直接烧预编译的 `Keil工程/OBJ/GIMBAL.hex`；USART1 115200 8N1，单字节 ASCII 命令）；OpenMV 相机部署 `firmware/openmv/OpenMV端/main.py`（详见 `firmware/openmv/README.md`）
 2. **连接硬件**：每个装置一个 USB-TTL，插入后设备管理器确认 COM 口（串口列表已自动过滤蓝牙设备，并内置 `COM9` 手动选项）
 3. **网页操作**：数据分析 → 选实验类型 → 视频获取方式选「实验获取」→ 弹出对应释放装置卡片 → 刷新串口 → 选择 → 连接
 4. **单摆**：吸合（准备）→ OpenMV 开始拍摄 → 释放小球
@@ -119,14 +119,16 @@ pendulum_web/
 │   ├── guide_cizuni.json       # 磁阻尼摆实验指导
 │   ├── guide_niubai.json       # 扭摆实验指导
 │   └── guide_ciliniudun.json   # 磁力牛顿摆实验指导
-├── firmware/                   # STM32 电磁铁释放固件（完整可移植，详见 firmware/README.md）
-│   ├── stm32标准库/             # Keil 固件工程（与原始工程结构一致）
+├── firmware/                   # 外设硬件资料总览（详见 firmware/README.md）
+│   ├── stm32标准库/             # 电磁铁 Keil 固件工程（与原始工程结构一致）
 │   │   ├── project.uvprojx     # Keil 工程（打开→编译→ST-Link 烧录）
 │   │   ├── User/               # main.c + stm32f10x_it.c（串口中断释放逻辑）
 │   │   ├── System/             # 延时模块
 │   │   ├── start/              # 启动文件 + 寄存器定义 + 时钟配置
 │   │   └── library/            # ST 标准外设库
-│   └── 电脑端代码/             # controller.py 命令行测试工具 + 接线说明
+│   ├── 电脑端代码/             # 电磁铁 controller.py 命令行测试工具 + 接线说明
+│   ├── openmv/                 # OpenMV：相机端脚本 + USBDBG 电脑端工具 + USB 驱动
+│   └── 云台夹爪/               # 二维云台＋夹爪：Keil 工程 + 预编译 HEX + 接线/烧录文档 + PC 工具
 ├── templates/
 │   └── index.html              # 单页前端
 └── uploads/                    # 上传视频临时存储（运行时创建，git 忽略）

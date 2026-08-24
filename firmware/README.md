@@ -1,3 +1,17 @@
+# 外设硬件资料（firmware/）
+
+本目录收录「实验获取」模式涉及的全部外设硬件源码、固件与文档，保证仓库在新机器上可完整复原整套实验装置，不依赖任何外部目录。
+
+| 子目录 | 设备 | 用途与内容 |
+|---|---|---|
+| `stm32标准库/` + `电脑端代码/` | 单摆电磁铁释放（STM32F103C8T6） | Keil 固件工程 + 命令行测试工具，详见下方「STM32 单摆电磁铁释放固件」 |
+| `云台夹爪/` | 磁阻尼摆 / 扭摆释放（二维云台＋夹爪，STM32F103C8T6） | Keil 工程 `Keil工程/USER/GIMBAL.uvprojx`、预编译固件 `Keil工程/OBJ/GIMBAL.hex`（免 Keil 直接烧录）、`接线与使用说明.md`、`烧录步骤.md`、PC 测试工具 `pc_keyboard.py` / `test_upper_serial.py` |
+| `openmv/` | OpenMV 拍摄 + 舵机云台（OpenMV4 H7 Plus） | 相机端部署脚本 `OpenMV端/main.py`（需复制到相机存储运行）、USBDBG V1 电脑端工具（`电脑端/`）、USB 驱动（`驱动/`），详见 `openmv/README.md` |
+
+三套设备与网页的对应关系：单摆 → 电磁铁（`/api/serial/*`）；磁阻尼摆 / 扭摆 → 云台夹爪（`/api/gripper/*`）；拍摄预览 / 录制 / 舵机云台 → OpenMV（`/api/openmv/*`，双串口架构）。
+
+---
+
 # STM32 单摆电磁铁释放固件（STM32F103C8T6）
 
 本项目是「STM32 电磁铁零抖动释放」的固件源码与电脑端工具，供网页端「实验获取」模式控制电磁铁使用。网页通过串口发送单字节命令，本固件接收后控制继电器通断电磁铁。
@@ -6,14 +20,16 @@
 
 ```
 firmware/
-├── README.md               # 本说明（需求、串口协议、接线、烧录）
-├── stm32标准库/             # STM32 固件工程（与原始 Keil 工程结构一致）
+├── README.md               # 本总览 + 电磁铁固件说明（需求、串口协议、接线、烧录）
+├── stm32标准库/             # 电磁铁 Keil 固件工程（与原始工程结构一致）
 │   ├── project.uvprojx     # Keil 工程文件，双击用 Keil 打开、编译、烧录
 │   ├── User/               # main.c + stm32f10x_it.c（释放逻辑本体）+ stm32f10x_conf.h
 │   ├── System/             # 延时模块（Delay.c/h）
 │   ├── start/              # 启动文件（startup_stm32f10x_md.s）、寄存器定义（stm32f10x.h）、72MHz 时钟配置
 │   └── library/            # ST 标准外设库（GPIO/USART/RCC/NVIC 等封装）
-└── 电脑端代码/              # 电脑端命令行测试工具（controller.py，可选；网页已集成同等功能）
+├── 电脑端代码/              # 电磁铁命令行测试工具（controller.py，可选；网页已集成同等功能）
+├── openmv/                 # OpenMV 相机端脚本 + 电脑端工具 + USB 驱动（详见 openmv/README.md）
+└── 云台夹爪/                # 二维云台＋夹爪固件与文档（详见 云台夹爪/README.md）
 ```
 
 ## 串口协议

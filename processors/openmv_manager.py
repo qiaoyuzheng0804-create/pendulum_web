@@ -7,8 +7,8 @@ Port 2 — USB-TTL adapter (UART @ 115200):
     Gimbal control thread sends single-byte commands (L/R/U/D/C)
     to OpenMV UART3 (P4 TX / P5 RX), which drives two MG90S servos.
 
-This matches the architecture in the source project:
-    openmv拍摄/实时画面与键盘云台/电脑端/controller.py
+This matches the architecture in the reference tool:
+    firmware/openmv/电脑端/controller.py
 """
 
 from __future__ import annotations
