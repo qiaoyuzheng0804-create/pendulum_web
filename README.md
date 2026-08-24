@@ -14,7 +14,7 @@ Flask + YOLOv8 实验视频分析平台。上传摆的实验视频，自动追�
   - 实验指导：器材清单、拍摄要点、标定说明、FAQ
   - 交互模拟：Canvas 实时绘制阻尼振荡波形
   - AI 问答：LLM 接入，Markdown + LaTeX 公式渲染
-- **前端**：单页 HTML，6 种主题，SSE 流式进度，KaTeX 公式渲染
+- **前端**：单页 HTML，6 种主题，SSE 流式进度，KaTeX 公式渲染；首页背景公式水印（KaTeX 排版）、渐变流光大标题、动画步骤条
 - **实验获取**：视频获取方式双卡片（上传现成视频 / STM32+OpenMV 实验获取）；释放装置按实验类型自动切换（单摆→电磁铁吸合/释放，磁阻尼摆·扭摆→二维云台＋夹爪方向/开合，磁力牛顿摆→手动释放）；OpenMV 实时预览 + 录制 + 云台
 
 ## 技术栈
@@ -137,6 +137,7 @@ pendulum_web/
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/` | 主页面 |
+| GET | `/api/calibration_spec/<motion_type>` | 获取实验类型的标定点规格 |
 | POST | `/api/upload_video` | 上传视频，返回 session_id + 首帧 base64 |
 | POST | `/api/process` | 同步处理（阻塞） |
 | POST | `/api/process_stream` | SSE 流式处理（推荐） |
@@ -155,18 +156,27 @@ pendulum_web/
 | GET | `/api/openmv/ports` | 列出串口（标注 OpenMV 设备） |
 | POST | `/api/openmv/connect` | 连接 OpenMV 摄像头（USBDBG V1，921600 波特率） |
 | POST | `/api/openmv/disconnect` | 断开 OpenMV 摄像头 |
+| GET | `/api/openmv/frame` | 单帧 JPEG（前端 canvas 轮询预览用） |
 | GET | `/api/openmv/stream` | MJPEG 实时预览流 |
 | POST | `/api/openmv/record/start` | 开始录制帧 |
 | POST | `/api/openmv/record/stop` | 停止录制，保存 MP4 并自动创建处理 session |
 | POST | `/api/openmv/gimbal` | 云台控制（U/D/L/R/C） |
 | GET | `/api/openmv/status` | 查询 OpenMV 连接与录制状态 |
 
+## 处理速度说明
+
+处理耗时随视频时长线性增长，主要开销在逐帧解码 + YOLO 推理（RTX 4060 实测约 50 帧/秒）：
+
+- **单摆**：默认输出 400 个周期，会持续处理到检测满 800 次零交叉；视频较短则自动用完全部帧
+- **磁力牛顿摆**：跟踪 + 标注视频两遍处理，最慢；不需要标注视频时取消勾选「输出标注视频」可大幅提速
+- **进度到 100% 后**：还有运动方程拟合阶段（约 10~60 秒，视数据量），期间界面无进度属正常现象
+- 处理结果有缓存机制（视频 MD5 + 参数 hash），相同请求可秒回
+
 ## 注意事项
 
 - 服务器启动时预加载 YOLO 模型，首次启动较慢
 - 同一时刻仅运行一个 YOLO 处理任务（`_process_lock`）
 - Session 30 分钟自动清理
-- 处理结果有缓存（视频 MD5 + 参数 hash）
 
 ## 安全说明
 

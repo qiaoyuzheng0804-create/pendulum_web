@@ -79,6 +79,13 @@ pendulum_web/
 
 AI 聊天中：先解码 `&lt;` `&gt;`，再 Unicode→LaTeX，再包裹裸命令，再 marked.js 解析 Markdown，marked.js 会重新编码 `<` `>` 所以再解码一次，最后 KaTeX 渲染。
 
+### 首页视觉组件
+
+- **背景公式水印**：9 条 `.formula-text` 浮动水印，LaTeX 写在 `data-tex` 属性中，`DOMContentLoaded` 后用 KaTeX 渲染（KaTeX 为 defer 加载，此时必已就绪）；KaTeX 加载失败自动降级为纯文本 + 纯 CSS 根号补线（`.fsqrt/.frad`，用 border-top 画 vinculum）。**改水印公式要同时改 `data-tex` 和降级文本两处**。
+- **步骤条**（1 选择类型 → 2 标定 → 3 运行 → 4 完成）：`.step-dot` 渐变圆点 + `stepPop` 弹性入场 + `stepHalo` 光环脉冲；连接线 `.step-line` 用 `lineGrow/lineShift` 做流光；当前步骤标签为胶囊徽章。JS 钩子不变：`sn1-4/sd1-4/sl1-3` 元素 + `done/current` 类，由 `updateStepBar(n)` 驱动。
+- **大标题**：五段回文渐变（a2→a1→a3→a1→a2）+ `titleShimmer` 9s 流光 + `drop-shadow(var(--fr))` 柔光；首尾同色保证 background-position 循环无缝。
+- `@keyframes dotPulse` 被 AI 聊天打字点共用，调整步骤条动画时勿删。
+
 ### AI 问答
 
 使用 `openai` Python 包调用 mimo v2.5（兼容 OpenAI API 格式）。
@@ -147,6 +154,7 @@ System prompt 要求 AI 用 Markdown 格式回答，公式用 `$...$` / `$$...$$
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/` | 主页面 |
+| GET | `/api/calibration_spec/<motion_type>` | 获取实验类型的标定点规格 |
 | POST | `/api/upload_video` | 上传视频，返回 session_id + 首帧 base64 |
 | POST | `/api/process` | 同步处理（阻塞） |
 | POST | `/api/process_stream` | SSE 流式处理（推荐） |
@@ -154,6 +162,23 @@ System prompt 要求 AI 用 Markdown 格式回答，公式用 `$...$` / `$$...$$
 | POST | `/api/cleanup` | 清理 session 文件 |
 | GET | `/api/teaching_content/<topic>` | 获取教学内容 JSON |
 | POST | `/api/ai_chat` | AI 知识问答（SSE 流式） |
+| GET | `/api/serial/ports` | 列出电磁铁可用串口（过滤蓝牙 + COM1~20 补齐） |
+| POST | `/api/serial/connect` | 连接电磁铁串口（115200 8N1），连接后先发 `0` 建立断电状态 |
+| POST | `/api/serial/command` | 电磁铁命令 `0`(断电释放) / `1`(通电吸合)，返回提交时间戳 |
+| POST | `/api/serial/disconnect` | 断开（若通电先断电保护） |
+| GET | `/api/gripper/ports` | 列出爪夹可用串口 |
+| POST | `/api/gripper/connect` | 连接爪夹串口（115200 8N1） |
+| POST | `/api/gripper/command` | 爪夹命令 `U/D/L/R`(方向) / `O/C`(开合) |
+| POST | `/api/gripper/disconnect` | 断开爪夹串口 |
+| GET | `/api/openmv/ports` | 列出串口（标注 OpenMV 设备） |
+| POST | `/api/openmv/connect` | 连接 OpenMV（`camera_port` 必填，`control_port` 云台可选） |
+| POST | `/api/openmv/disconnect` | 断开 OpenMV 与云台 |
+| GET | `/api/openmv/frame` | 单帧 JPEG（前端 canvas 轮询预览用，约 12 FPS） |
+| GET | `/api/openmv/stream` | MJPEG 实时预览流（备用） |
+| POST | `/api/openmv/record/start` | 开始录制帧 |
+| POST | `/api/openmv/record/stop` | 停止录制，存 MP4 并自动创建处理 session |
+| POST | `/api/openmv/gimbal` | 云台命令 `U/D/L/R/C` |
+| GET | `/api/openmv/status` | OpenMV 连接与录制状态 |
 
 ## 模型路径
 
@@ -199,12 +224,26 @@ YOLOv8 模型查找优先级（`app.py` 中 `MODEL_PATHS`，不再硬编码本�
 
 纯 scipy。三种阻尼拟合 + ODE 验证 + 物理项库拟合（磁力牛顿摆不做符号回归）。
 
+## 性能要点与已知瓶颈
+
+实测环境 RTX 4060 Laptop：单帧 YOLO 推理约 12~15ms（CPU/GPU 均可达 50~85 fps），推理本身不是瓶颈，慢在流程叠加：
+
+1. **逐帧解码 + 推理随时长线性放大**：`cap.read()` 约 8ms/帧 + 推理约 12ms/帧，30fps 视频吞吐约 50 帧/秒
+2. **单摆默认 `target_cycles=400`**：提前停止需检测到 800 次零交叉，长视频可达数万帧
+3. **磁力牛顿摆两遍处理**：第一遍 ByteTrack 跟踪（`imgsz=1536`），第二遍重新解码写标注视频（mp4v 编码约 30ms/帧），全实验最慢
+4. **符号回归发生在进度 100% 之后**：`progress_callback` 只覆盖帧处理阶段；随后 SR 执行 36 组 `least_squares` 网格搜索（每组最多 1 万次迭代）+ ODE 验证 + matplotlib 出图，约 10~60 秒无任何进度提示——前端体感"最后卡住"
+5. **杂项开销**：cizuni 每次运行重新 `YOLO(model_path)`（忽略预加载模型，为规避 CUDA 上下文问题）；缓存键对整个视频文件算 MD5（1GB ≈ 2s）；服务启动后首次推理有 CUDA 上下文初始化
+
+**结果缓存的真相**：`_run_processing` 把结果写进 `_progress[session_id]["cache"]`，但处理结束时 `finally` 会 `_progress.pop(session_id)`，缓存随之销毁——实际几乎不产生跨请求命中，仅在同一次请求内有意义。
+
+**候选优化（尚未实施）**：SR 独立进度阶段上报 / 单摆周期数按视频长度自适应 / cizuni 复用预加载模型 / 牛顿摆默认关标注视频 / 扭摆 `find_peaks` 只查尾部窗口（现为每帧全量，O(n²)）。
+
 ## 注意事项
 
 - 服务器启动时预加载 YOLO 模型，首次启动较慢
 - `_process_lock` 确保同一时刻只有一个 YOLO 处理任务
 - Session 30 分钟自动清理，超过 1 GB 被 Flask 拒绝
-- 处理结果有缓存（视频 MD5 + 参数 hash）
+- 处理结果有缓存机制（视频 MD5 + 参数 hash），但仅在一次处理请求内有效（见"性能要点"）
 - `KMP_DUPLICATE_LIB_OK=TRUE` 解决 PyTorch 与 OpenCV 冲突
 - 扭摆依赖 `filterpy`，AI 问答依赖 `openai`
 - 新增实验：需完整注册——`app.py` 的 `MODEL_PATHS`（本地路径 + models/ 回退）、`CALIB_SPECS`、`_run_processing` 分发分支、`get_teaching_content` 的 `allowed` 集合；新增 `processors/xxx_processor.py` 并在 `processors/__init__.py` 导出；新增 `teaching/guide_xxx.json`；前端 `index.html` 添加类型卡片、标定逻辑与参数组（参考磁力牛顿摆 ciliniudun 的完整实现）
@@ -234,6 +273,11 @@ git push
 - 完成一个完整的功能/修复/文档改动后提交一次，**不要每保存一次就提交**
 - 攒够一个「有意义的最小改动单元」（一个功能、一个 bug 修复、一段文档）再提交
 - commit 后紧跟 push，保持 GitHub 同步
+
+### 大改动先建备份分支
+
+- 涉及大段 UI/样式重构前，先建备份分支（如 `git branch backup/<说明>`）；改崩可用 `git checkout backup/<说明> -- <文件>` 一键还原
+- 已有备份分支：`backup/pre-stepbar-redesign`（步骤条重构前快照，仅本地）
 
 ### 禁止提交的内容（提交前务必检查）
 
