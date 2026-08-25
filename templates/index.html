@@ -2060,6 +2060,9 @@ async function sendChat(){
     const resp=await fetch('/api/ai_chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:chatHistory})});
     if(!resp.ok){const err=await resp.json();throw new Error(err.error||'Request failed');}
     const reader=resp.body.getReader();const decoder=new TextDecoder();let buf='';let fullText='';
+    // 流式节流：每个 SSE 分词只累积文本，~120ms 才全量重渲染一次，结束后再终绘，
+    // 避免"每词一次 marked.parse + KaTeX 重排"的 O(N²) 开销（观感不变）
+    let lastPaint=0;
     while(true){
       const{done,value}=await reader.read();if(done)break;
       buf+=decoder.decode(value,{stream:true});
@@ -2068,7 +2071,7 @@ async function sendChat(){
         if(!line.startsWith('data: '))continue;
         const d=line.slice(6);
         if(d==='[DONE]')continue;
-        try{const j=JSON.parse(d);if(j.error)throw new Error(j.error);if(j.content){fullText+=j.content;botDiv.setAttribute('data-raw',fullText);renderBotMsg(botDiv);}}catch(e){}
+        try{const j=JSON.parse(d);if(j.error)throw new Error(j.error);if(j.content){fullText+=j.content;botDiv.setAttribute('data-raw',fullText);const now=performance.now();if(now-lastPaint>120){lastPaint=now;renderBotMsg(botDiv);}}}catch(e){}
       }
     }
     if(!fullText)botDiv.innerHTML='<em style="color:var(--t3);">（无回复）</em>';

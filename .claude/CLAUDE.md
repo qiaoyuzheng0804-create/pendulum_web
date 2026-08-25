@@ -70,7 +70,7 @@ pendulum_web/
 | 理论知识 | 阻尼分类、微分方程、参数物理意义、三种实验对比 | KaTeX 公式渲染 |
 | 实验指导 | 器材清单、拍摄要点、标定说明、参数设置、FAQ | JSON 动态加载 |
 | 交互模拟 | Canvas 实时绘制阻尼振荡波形，可调 β/ω₀/θ₀ | 固定比例尺 ±25° |
-| AI 问答 | 接入 OpenAI 兼容大模型（LLM_* 可配置），Markdown + LaTeX 公式渲染 | SSE 流式 + marked.js + KaTeX |
+| AI 问答 | 接入 OpenAI 兼容大模型（LLM_* 可配置），Markdown + LaTeX 公式渲染 | SSE 流式（~120ms 节流重绘 + 结束终绘）+ marked.js + KaTeX |
 
 ### 前端公式渲染系统
 
