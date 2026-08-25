@@ -14,7 +14,7 @@ Flask + YOLOv8 实验视频分析平台。上传摆的实验视频，自动追�
   - 实验指导：器材清单、拍摄要点、标定说明、FAQ
   - 交互模拟：Canvas 实时绘制阻尼振荡波形
   - AI 问答：LLM 接入，Markdown + LaTeX 公式渲染
-- **前端**：单页 HTML，6 种主题，SSE 流式进度，KaTeX 公式渲染；首页背景公式水印（KaTeX 排版）、渐变流光大标题、动画步骤条
+- **前端**：单页 HTML，浅色/深色双主题（日/月按钮切换），SSE 流式进度，KaTeX 公式渲染；首页背景公式水印（KaTeX 排版）、渐变流光大标题、动画步骤条
 - **实验获取**：视频获取方式双卡片（上传现成视频 / STM32+OpenMV 实验获取）；释放装置按实验类型自动切换（单摆→电磁铁吸合/释放，磁阻尼摆·扭摆→二维云台＋夹爪方向/开合，磁力牛顿摆→手动释放）；OpenMV 实时预览 + 录制 + 云台
 
 ## 技术栈
@@ -88,7 +88,7 @@ python app.py
 2. **连接硬件**：每个装置一个 USB-TTL，插入后设备管理器确认 COM 口（串口列表已自动过滤蓝牙设备，并内置 `COM9` 手动选项）
 3. **网页操作**：数据分析 → 选实验类型 → 视频获取方式选「实验获取」→ 弹出对应释放装置卡片 → 刷新串口 → 选择 → 连接
 4. **单摆**：吸合（准备）→ OpenMV 开始拍摄 → 释放小球
-5. **磁阻尼摆 / 扭摆**：连接爪夹串口 → 方向按钮调整云台（每次约 2°）→ 开夹准备 → 关夹释放
+5. **磁阻尼摆 / 扭摆**：连接夹爪串口 → 方向按钮调整云台（每次约 2°）→ 开夹准备 → 关夹释放
 6. **磁力牛顿摆**：无串口控制，OpenMV 开始拍摄后手动释放摆球
 7. **视频**：OpenMV 录制完成后点「停止并上传」自动进入标定流程
 
@@ -151,10 +151,10 @@ pendulum_web/
 | POST | `/api/serial/connect` | 连接串口（115200 8N1），连接后先发送 `0` 建立断电状态 |
 | POST | `/api/serial/command` | 发送命令 `0`(释放) / `1`(吸合)，返回发送时刻时间戳 |
 | POST | `/api/serial/disconnect` | 断开串口（若通电先断电保护） |
-| GET | `/api/gripper/ports` | 列出爪夹可用串口（过滤蓝牙，含 COM9） |
-| POST | `/api/gripper/connect` | 连接爪夹串口（115200 8N1） |
+| GET | `/api/gripper/ports` | 列出夹爪可用串口（过滤蓝牙，含 COM9） |
+| POST | `/api/gripper/connect` | 连接夹爪串口（115200 8N1） |
 | POST | `/api/gripper/command` | 发送命令 `U/D/L/R`(方向) / `O/C`(开合) |
-| POST | `/api/gripper/disconnect` | 断开爪夹串口 |
+| POST | `/api/gripper/disconnect` | 断开夹爪串口 |
 | GET | `/api/openmv/ports` | 列出串口（标注 OpenMV 设备） |
 | POST | `/api/openmv/connect` | 连接 OpenMV 摄像头（USBDBG V1，921600 波特率） |
 | POST | `/api/openmv/disconnect` | 断开 OpenMV 摄像头 |

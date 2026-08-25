@@ -57,7 +57,7 @@ pendulum_web/
 
 ## 前端架构
 
-单页 HTML：6 种主题（dark/ocean/sunset/forest/amethyst/light），顶部模式切换：**数据分析** / **阻尼实验教学**。
+单页 HTML：浅色/深色双主题（`data-theme="light|dark"`，右上角日/月圆形按钮切换，localStorage 记忆，默认深色），顶部模式切换：**数据分析** / **阻尼实验教学**。
 
 ### 数据分析模式
 
@@ -170,10 +170,10 @@ System prompt 要求 AI 用 Markdown 格式回答，公式用 `$...$` / `$$...$$
 | POST | `/api/serial/connect` | 连接电磁铁串口（115200 8N1），连接后先发 `0` 建立断电状态 |
 | POST | `/api/serial/command` | 电磁铁命令 `0`(断电释放) / `1`(通电吸合)，返回提交时间戳 |
 | POST | `/api/serial/disconnect` | 断开（若通电先断电保护） |
-| GET | `/api/gripper/ports` | 列出爪夹可用串口 |
-| POST | `/api/gripper/connect` | 连接爪夹串口（115200 8N1） |
-| POST | `/api/gripper/command` | 爪夹命令 `U/D/L/R`(方向) / `O/C`(开合) |
-| POST | `/api/gripper/disconnect` | 断开爪夹串口 |
+| GET | `/api/gripper/ports` | 列出夹爪可用串口 |
+| POST | `/api/gripper/connect` | 连接夹爪串口（115200 8N1） |
+| POST | `/api/gripper/command` | 夹爪命令 `U/D/L/R`(方向) / `O/C`(开合) |
+| POST | `/api/gripper/disconnect` | 断开夹爪串口 |
 | GET | `/api/openmv/ports` | 列出串口（标注 OpenMV 设备） |
 | POST | `/api/openmv/connect` | 连接 OpenMV（`camera_port` 必填，`control_port` 云台可选） |
 | POST | `/api/openmv/disconnect` | 断开 OpenMV 与云台 |
