@@ -52,7 +52,7 @@ pip install -r requirements.txt
 
 ### 3. 配置 AI 问答（可选）
 
-编辑项目根目录的 `.env` 文件，填入你的 API Key：
+复制 `.env.example` 为 `.env`，填入你的 API Key：
 
 ```env
 MIMO_API_KEY=your_api_key_here
@@ -60,7 +60,7 @@ MIMO_BASE_URL=https://token-plan-cn.xiaomimimo.com/v1
 MIMO_MODEL=mimo-v2.5
 ```
 
-> **安全提示**：`.env` 文件已在 `.gitignore` 中排除，不会被上传到 GitHub。
+> **安全提示**：`.env` 文件已在 `.gitignore` 中排除，不会被上传到 GitHub。跨设备迁移时 `.env` 需手工复制，其余内容 `git clone` 即可。
 
 ### 4. 启动
 
