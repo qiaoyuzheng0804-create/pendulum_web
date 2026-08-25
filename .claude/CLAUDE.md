@@ -70,7 +70,7 @@ pendulum_web/
 | 理论知识 | 阻尼分类、微分方程、参数物理意义、三种实验对比 | KaTeX 公式渲染 |
 | 实验指导 | 器材清单、拍摄要点、标定说明、参数设置、FAQ | JSON 动态加载 |
 | 交互模拟 | Canvas 实时绘制阻尼振荡波形，可调 β/ω₀/θ₀ | 固定比例尺 ±25° |
-| AI 问答 | 接入 OpenAI 兼容大模型（LLM_* 可配置），Markdown + LaTeX 公式渲染 | SSE 流式（原始文本直显 + 结束终绘）+ marked.js + KaTeX |
+| AI 问答 | 接入 OpenAI 兼容大模型（LLM_* 可配置），Markdown + LaTeX 公式渲染 | SSE 流式（~150ms 节流渲染 + 自动滚动 + 结束终绘）+ marked.js + KaTeX |
 
 ### 前端公式渲染系统
 
@@ -83,7 +83,7 @@ pendulum_web/
 
 AI 聊天渲染（`renderChatMarkdown`）实际管线：`convertBacktickMath`（反引号包裹且含 LaTeX 命令/希腊字母/上下标的数学式自动转 `$...$`，普通代码不转）→ marked.js 解析 Markdown → `renderKaTeXinHTML`（先剥真实 HTML 标签，再用 `decodeHtmlEntities` 解码 `&lt;` `&gt;` 等实体，最后 KaTeX 渲染——否则实体被当未知命令渲染成红色报错）。
 
-流式策略：SSE 分词期间直接 `textContent` 显示原始文本（零解析开销，带 `pre-wrap`），结束后一次性 Markdown+KaTeX 终绘，观感一致且无卡顿。
+流式策略：SSE 分词期间以 ~150ms 节流做 Markdown+KaTeX 渲染（边生成边呈现排版、自动跟随滚动），结束后终绘一次；渲染频率有上限，长回答不卡。
 
 ### 首页视觉组件
 

@@ -2061,10 +2061,9 @@ async function sendChat(){
     if(!resp.ok){const err=await resp.json();throw new Error(err.error||'Request failed');}
     const reader=resp.body.getReader();const decoder=new TextDecoder();let buf='';let fullText='';
     const msgBox=document.getElementById('chat_messages');
-    // 流式期间直接 textContent 显示原始文本（零解析开销，速度=网络速度），
-    // 结束后一次性 Markdown+KaTeX 渲染，最终观感不变
-    botDiv.style.whiteSpace='pre-wrap';
-    let lastScroll=0;
+    // 流式期间 ~150ms 节流做 Markdown+KaTeX 渲染，边生成边呈现排版并跟随滚动；
+    // 结束后终绘一次。渲染频率有上限，长回答也不会卡
+    let lastPaint=0;
     while(true){
       const{done,value}=await reader.read();if(done)break;
       buf+=decoder.decode(value,{stream:true});
@@ -2073,12 +2072,13 @@ async function sendChat(){
         if(!line.startsWith('data: '))continue;
         const d=line.slice(6);
         if(d==='[DONE]')continue;
-        try{const j=JSON.parse(d);if(j.error)throw new Error(j.error);if(j.content){fullText+=j.content;botDiv.textContent=fullText;const now=performance.now();if(now-lastScroll>120){lastScroll=now;msgBox.scrollTop=msgBox.scrollHeight;}}}catch(e){}
+        try{const j=JSON.parse(d);if(j.error)throw new Error(j.error);if(j.content){fullText+=j.content;botDiv.setAttribute('data-raw',fullText);const now=performance.now();if(now-lastPaint>150){lastPaint=now;renderBotMsg(botDiv);msgBox.scrollTop=msgBox.scrollHeight;}}}catch(e){}
       }
     }
     if(!fullText)botDiv.innerHTML='<em style="color:var(--t3);">（无回复）</em>';
-    else{botDiv.style.whiteSpace='';botDiv.setAttribute('data-raw',fullText);renderBotMsg(botDiv);}
+    else{botDiv.setAttribute('data-raw',fullText);renderBotMsg(botDiv);}
     chatHistory.push({role:'assistant',content:fullText});
+    msgBox.scrollTop=msgBox.scrollHeight;
   }catch(e){botDiv.innerHTML='<span style="color:var(--red);">请求失败: '+e.message+'</span>';showToast('AI 请求失败: '+e.message,'error');}
   finally{_chatStreaming=false;document.getElementById('chat_send_btn').disabled=false;}
   const msgBox=document.getElementById('chat_messages');msgBox.scrollTop=msgBox.scrollHeight;
