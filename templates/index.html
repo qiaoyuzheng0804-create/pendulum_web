@@ -1762,10 +1762,15 @@ function wrapBareLatex(text){
     });
   }).join('');
 }
+function decodeHtmlEntities(s){
+  var t=document.createElement('textarea');t.innerHTML=s;return t.value;
+}
 function renderKaTeXinHTML(html){
   if(!window.katex)return html;
-  html=html.replace(/\$\$(.+?)\$\$/gs,function(m,k){k=k.replace(/<[^>]+>/g,'');try{return katex.renderToString(k,{displayMode:true,throwOnError:false});}catch(e){return m;}});
-  html=html.replace(/\$(.+?)\$/g,function(m,k){k=k.replace(/<[^>]+>/g,'');try{return katex.renderToString(k,{displayMode:false,throwOnError:false});}catch(e){return m;}});
+  // 先剥离真实 HTML 标签，再解码 &lt;/&gt;/&amp; 等实体——否则 KaTeX 会把
+  // marked.js/innerHTML 转义的 < > 当成未知命令渲染成红色报错
+  html=html.replace(/\$\$(.+?)\$\$/gs,function(m,k){k=decodeHtmlEntities(k.replace(/<[^>]+>/g,''));try{return katex.renderToString(k,{displayMode:true,throwOnError:false});}catch(e){return m;}});
+  html=html.replace(/\$(.+?)\$/g,function(m,k){k=decodeHtmlEntities(k.replace(/<[^>]+>/g,''));try{return katex.renderToString(k,{displayMode:false,throwOnError:false});}catch(e){return m;}});
   return html;
 }
 function convertNoteToLatex(text){
