@@ -249,7 +249,7 @@ YOLOv8 模型查找优先级（`app.py` 中 `MODEL_PATHS`，不再硬编码本�
 ## 注意事项
 
 - YOLO 模型懒加载（`get_model(key)` 线程安全按需加载），启动秒开；处理器都接受 `model=None` 自行回退
-- **自动关停**：前端 Web Worker 每 2s POST `/api/heartbeat`（带随机客户端 ID）；页面卸载时 `pagehide` + `sendBeacon` POST `/api/client_exit` 告别。`_watchdog_loop`（0.5s 周期）在客户端集合清空且无处理/录制 → 2s 宽限期（覆盖刷新空窗）→ `_shutdown_safety()`（电磁铁断电、关全部串口、断 OpenMV）→ `os._exit(0)`。心跳 6s 未刷新视为离线（浏览器崩溃兜底）；多标签页只有最后一个关闭才停；从未有页面连接过（命令行调试）不退出
+- **自动关停**：前端 Web Worker 每 2s POST `/api/heartbeat`（带随机客户端 ID）；页面卸载时 `pagehide` + `sendBeacon` POST `/api/client_exit` 告别。`_watchdog_loop`（0.5s 周期）在客户端集合清空且无处理/录制 → 2s 宽限期 → `_shutdown_safety()`（电磁铁断电、关全部串口、断 OpenMV）→ `os._exit(0)`。**刷新保护**：GET `/` 会取消待关停并刷新 `_last_page_request`，距上次页面请求 6s 内一律不关停（新页面 Worker 首次心跳因 CDN 脚本加载会晚到）。心跳 6s 未刷新视为离线（浏览器崩溃兜底）；多标签页只有最后一个关闭才停；从未有页面连接过（命令行调试）不退出
 - `_process_lock` 确保同一时刻只有一个 YOLO 处理任务
 - Session 30 分钟自动清理，超过 1 GB 被 Flask 拒绝
 - 处理结果有缓存机制（视频 MD5 + 参数 hash），但仅在一次处理请求内有效（见"性能要点"）

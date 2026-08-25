@@ -287,6 +287,11 @@ _progress = {}  # session_id -> {"current": int, "total": int}
 
 @app.route("/")
 def index():
+    global _exit_mark, _last_page_request
+    # 刷新/重新打开页面时浏览器会立即请求 /：取消待关停状态（pagehide 的告别
+    # 信标在刷新时也会发出，不能据此关服务器）
+    _exit_mark = None
+    _last_page_request = _time.time()
     resp = app.make_response(render_template("index.html", calib_specs=CALIB_SPECS))
     resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
@@ -1051,6 +1056,7 @@ def openmv_status():
 _clients = {}
 _client_seen = threading.Event()
 _exit_mark = None
+_last_page_request = _time.time()  # 最近一次页面加载（GET /）时刻
 _watchdog_lock = threading.Lock()
 
 
@@ -1117,6 +1123,11 @@ def _watchdog_loop():
                 continue
             if _process_lock.locked() or openmv_manager.get_status().get("recording"):
                 _exit_mark = None  # 处理/录制期间不退出
+                continue
+            # 刷新保护：新页面加载后 Worker 首次心跳可能因 CDN 脚本加载而晚到，
+            # 距上次页面请求 6s 内一律不关停
+            if now - _last_page_request < 6:
+                _exit_mark = None
                 continue
             if _exit_mark is None:
                 _exit_mark = now
