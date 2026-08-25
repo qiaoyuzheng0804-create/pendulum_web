@@ -31,6 +31,15 @@ if "%LLM_API_KEY%"=="" (
 
 start "" /min "%PYTHON%" app.py
 
-:: Open browser after a short delay
-timeout /t 5 /nobreak >nul
+:: 等待服务端口就绪（最多 60 秒）后立即打开网页，避免模型加载期间打开报错
+set /a tries=0
+:waitloop
+powershell -NoProfile -Command "try{$c=New-Object Net.Sockets.TcpClient;$c.Connect('127.0.0.1',5000);$c.Close();exit 0}catch{exit 1}" >nul 2>&1
+if %errorlevel%==0 goto :open
+set /a tries+=1
+if %tries% geq 60 goto :open
+timeout /t 1 /nobreak >nul
+goto :waitloop
+:open
 start "" http://127.0.0.1:5000
+exit

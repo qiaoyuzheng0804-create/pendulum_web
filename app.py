@@ -119,20 +119,31 @@ LLM_SYSTEM_PROMPT = r"""你是一位物理实验教学助手，专注于阻尼�
 TEACHING_DIR = BASE_DIR / "teaching"
 TEACHING_DIR.mkdir(parents=True, exist_ok=True)
 
-# ---------- Pre-load YOLO models into memory ----------
-print("Loading YOLO models...", flush=True)
+# ---------- YOLO models: lazy load on first use ----------
+# 不在启动时预载（4 个模型要 10~20 秒），首次用到某实验类型时才加载，
+# 之后常驻内存。处理器都接受 model=None 并自行回退，因此兼容安全。
+_model_lock = threading.Lock()
 LOADED_MODELS = {}
-for _k, _path in MODEL_PATHS.items():
-    if os.path.exists(_path):
-        try:
-            from ultralytics import YOLO
-            LOADED_MODELS[_k] = YOLO(_path)
-            print(f"  [OK] {_k}: {_path}", flush=True)
-        except Exception as e:
-            print(f"  [FAIL] {_k}: {e}", flush=True)
-    else:
-        print(f"  [SKIP] {_k}: file not found", flush=True)
-print(f"Loaded {len(LOADED_MODELS)}/{len(MODEL_PATHS)} models.\n", flush=True)
+
+
+def get_model(key):
+    """按需加载 YOLO 模型（线程安全，加载失败返回 None 由处理器回退）。"""
+    if key not in MODEL_PATHS:
+        return None
+    if key not in LOADED_MODELS:
+        with _model_lock:
+            if key not in LOADED_MODELS:
+                _p = MODEL_PATHS[key]
+                if os.path.exists(_p):
+                    try:
+                        from ultralytics import YOLO
+                        LOADED_MODELS[key] = YOLO(_p)
+                        print(f"[Model] loaded {key}: {_p}", flush=True)
+                    except Exception as _e:
+                        print(f"[Model] load FAILED {key}: {_e}", flush=True)
+                else:
+                    print(f"[Model] weight not found: {_p}", flush=True)
+    return LOADED_MODELS.get(key)
 
 # ---------- Mutex: only one YOLO process at a time ----------
 _process_lock = threading.Lock()
@@ -423,7 +434,7 @@ def _run_processing(session_id, data, progress_callback=None):
         if progress_callback:
             progress_callback(current, total)
 
-    model = LOADED_MODELS.get(motion_type)
+    model = get_model(motion_type)
 
     try:
         if motion_type == "danbai":
@@ -1027,6 +1038,68 @@ def openmv_status():
     return jsonify(openmv_manager.get_status())
 
 
+# ---------- Auto-shutdown watchdog ----------
+# 网页全部关闭后自动停止服务器：前端用 Web Worker 每 2s 发心跳（Worker 定时器
+# 不受浏览器后台标签页限流影响，页面一关心跳即停）；看门狗 10s 收不到心跳、
+# 且无处理任务/录制进行时，先做断电保护（电磁铁断电、关串口、断 OpenMV）再退出。
+# 从未有页面连接过（如命令行调试）则不自动退出。
+_last_heartbeat = _time.time()
+_client_seen = threading.Event()
+
+
+@app.route("/api/heartbeat", methods=["POST"])
+def heartbeat():
+    global _last_heartbeat
+    _last_heartbeat = _time.time()
+    _client_seen.set()
+    return jsonify({"success": True})
+
+
+def _shutdown_safety():
+    """退出前安全清理：电磁铁断电、关闭全部串口与 OpenMV。"""
+    global _serial_conn, _gripper_conn
+    with _SERIAL_LOCK:
+        if _serial_conn is not None and _serial_conn.is_open:
+            try:
+                _serial_conn.write(b"0")
+                _serial_conn.flush()
+            except Exception:
+                pass
+            try:
+                _serial_conn.close()
+            except Exception:
+                pass
+        _serial_conn = None
+    with _GRIPPER_LOCK:
+        if _gripper_conn is not None and _gripper_conn.is_open:
+            try:
+                _gripper_conn.close()
+            except Exception:
+                pass
+        _gripper_conn = None
+    try:
+        openmv_manager.disconnect()
+    except Exception:
+        pass
+
+
+def _watchdog_loop():
+    while True:
+        _time.sleep(2)
+        try:
+            if not _client_seen.is_set():
+                continue
+            if _process_lock.locked() or openmv_manager.get_status().get("recording"):
+                _last_heartbeat = _time.time()  # 处理/录制期间不退出
+                continue
+            if _time.time() - _last_heartbeat > 10:
+                print("[Watchdog] 页面已全部关闭，自动停止服务器...", flush=True)
+                _shutdown_safety()
+                os._exit(0)
+        except Exception:
+            pass
+
+
 # ---------- Teaching & AI Chat ----------
 
 @app.route("/api/teaching_content/<topic>")
@@ -1118,6 +1191,7 @@ if __name__ == "__main__":
     print("=" * 60)
 
     try:
+        threading.Thread(target=_watchdog_loop, daemon=True).start()
         app.run(host=HOST, port=PORT, debug=False, threaded=True)
     finally:
         _cleanup_stop.set()

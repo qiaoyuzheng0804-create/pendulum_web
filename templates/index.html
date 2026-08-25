@@ -2124,6 +2124,13 @@ function renderBotMsg(div){
   if(!text)return;
   div.innerHTML=renderChatMarkdown(text);
 }
+
+// ==================== Heartbeat (server auto-shutdown when page closed) ====================
+// Web Worker 里的定时器不受浏览器后台标签页限流影响；页面关闭 Worker 随之销毁，心跳停止
+(function(){
+  const src='setInterval(()=>{fetch("/api/heartbeat",{method:"POST"}).catch(()=>{});},2000);';
+  try{new Worker(URL.createObjectURL(new Blob([src],{type:'application/javascript'})));}catch(e){}
+})();
 </script>
 </body>
 </html>

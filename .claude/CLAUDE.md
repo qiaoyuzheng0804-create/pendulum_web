@@ -169,6 +169,7 @@ System prompt 要求 AI 用 Markdown 格式回答，公式用 `$...$` / `$$...$$
 | POST | `/api/cleanup` | 清理 session 文件 |
 | GET | `/api/teaching_content/<topic>` | 获取教学内容 JSON |
 | POST | `/api/ai_chat` | AI 知识问答（SSE 流式） |
+| POST | `/api/heartbeat` | 页面心跳（看门狗自动关停依据，前端 Web Worker 每 2s 发送） |
 | GET | `/api/serial/ports` | 列出电磁铁可用串口（过滤蓝牙 + COM1~20 补齐） |
 | POST | `/api/serial/connect` | 连接电磁铁串口（115200 8N1），连接后先发 `0` 建立断电状态 |
 | POST | `/api/serial/command` | 电磁铁命令 `0`(断电释放) / `1`(通电吸合)，返回提交时间戳 |
@@ -247,7 +248,8 @@ YOLOv8 模型查找优先级（`app.py` 中 `MODEL_PATHS`，不再硬编码本�
 
 ## 注意事项
 
-- 服务器启动时预加载 YOLO 模型，首次启动较慢
+- YOLO 模型懒加载（`get_model(key)` 线程安全按需加载），启动秒开；处理器都接受 `model=None` 自行回退
+- **自动关停**：前端 Web Worker 每 2s POST `/api/heartbeat`（Worker 定时器不受后台标签页限流）；`_watchdog_loop` 10s 无心跳且无处理/录制 → `_shutdown_safety()`（电磁铁断电、关全部串口、断 OpenMV）→ `os._exit(0)`。从未有页面连接过则不退出（兼容命令行调试）
 - `_process_lock` 确保同一时刻只有一个 YOLO 处理任务
 - Session 30 分钟自动清理，超过 1 GB 被 Flask 拒绝
 - 处理结果有缓存机制（视频 MD5 + 参数 hash），但仅在一次处理请求内有效（见"性能要点"）
