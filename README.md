@@ -52,13 +52,22 @@ pip install -r requirements.txt
 
 ### 3. 配置 AI 问答（可选）
 
-复制 `.env.example` 为 `.env`，填入你的 API Key：
+AI 问答支持**任意 OpenAI 兼容大模型服务**（OpenAI / DeepSeek / Moonshot / 智谱 / mimo 等）。复制 `.env.example` 为 `.env`，填入你所用服务商的配置：
 
 ```env
-MIMO_API_KEY=your_api_key_here
-MIMO_BASE_URL=https://token-plan-cn.xiaomimimo.com/v1
-MIMO_MODEL=mimo-v2.5
+LLM_API_KEY=your_api_key_here
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_MODEL=gpt-4o-mini
 ```
+
+常用服务商组合：
+
+| 服务商 | LLM_BASE_URL | LLM_MODEL 示例 |
+|---|---|---|
+| OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` |
+| DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` |
+| Moonshot | `https://api.moonshot.cn/v1` | `moonshot-v1-8k` |
+| 智谱 | `https://open.bigmodel.cn/api/paas/v4` | `glm-4` |
 
 > **安全提示**：`.env` 文件已在 `.gitignore` 中排除，不会被上传到 GitHub。跨设备迁移时 `.env` 需手工复制，其余内容 `git clone` 即可。
 

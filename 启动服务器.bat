@@ -24,8 +24,8 @@ if not defined PYTHON if exist "%USERPROFILE%\anaconda3\envs\yolov8\python.exe" 
 if not defined PYTHON set "PYTHON=python"
 
 :: Check if API key is configured
-if "%MIMO_API_KEY%"=="" (
-    echo [WARN] MIMO_API_KEY not set. AI Q^&A feature will be disabled.
+if "%LLM_API_KEY%"=="" (
+    echo [WARN] LLM_API_KEY not set. AI Q^&A feature will be disabled.
     echo        Edit .env file and set your API key.
 )
 

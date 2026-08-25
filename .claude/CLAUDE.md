@@ -12,7 +12,7 @@ conda activate yolov8
 pip install -r requirements.txt
 
 # 配置 API Key（可选，用于 AI 问答）
-# 编辑 .env 文件，填入 MIMO_API_KEY
+# 复制 .env.example 为 .env，填入 LLM_API_KEY / LLM_BASE_URL / LLM_MODEL
 
 # 启动
 cd pendulum_web
@@ -70,7 +70,7 @@ pendulum_web/
 | 理论知识 | 阻尼分类、微分方程、参数物理意义、三种实验对比 | KaTeX 公式渲染 |
 | 实验指导 | 器材清单、拍摄要点、标定说明、参数设置、FAQ | JSON 动态加载 |
 | 交互模拟 | Canvas 实时绘制阻尼振荡波形，可调 β/ω₀/θ₀ | 固定比例尺 ±25° |
-| AI 问答 | 接入 mimo v2.5，Markdown + LaTeX 公式渲染 | SSE 流式 + marked.js + KaTeX |
+| AI 问答 | 接入 OpenAI 兼容大模型（LLM_* 可配置），Markdown + LaTeX 公式渲染 | SSE 流式 + marked.js + KaTeX |
 
 ### 前端公式渲染系统
 
@@ -92,12 +92,13 @@ AI 聊天中：先解码 `&lt;` `&gt;`，再 Unicode→LaTeX，再包裹裸命�
 
 ### AI 问答
 
-使用 `openai` Python 包调用 mimo v2.5（兼容 OpenAI API 格式）。
+使用 `openai` Python 包调用任意 OpenAI 兼容大模型服务（OpenAI / DeepSeek / Moonshot / 智谱 / mimo 等）。
 
-配置方式（存储在 `.env` 文件中，不会上传到 GitHub）：
-- `MIMO_API_KEY` — API 密钥
-- `MIMO_BASE_URL` — `https://token-plan-cn.xiaomimimo.com/v1`
-- `MIMO_MODEL` — `mimo-v2.5`
+配置方式（存储在 `.env` 文件中，不会上传到 GitHub，模板见 `.env.example`）：
+- `LLM_API_KEY` — API 密钥（必需）
+- `LLM_BASE_URL` — 服务商地址，默认 `https://api.openai.com/v1`
+- `LLM_MODEL` — 模型名，默认 `gpt-4o-mini`
+- 旧版 `MIMO_*` 变量名仍被识别（向后兼容）
 
 System prompt 要求 AI 用 Markdown 格式回答，公式用 `$...$` / `$$...$$` 包裹。
 

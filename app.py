@@ -93,12 +93,15 @@ if _missing:
     for k in _missing:
         print(f"    {k}: {MODEL_PATHS[k]}", flush=True)
 
-# ---------- MIMO AI configuration ----------
-MIMO_API_KEY = os.environ.get("MIMO_API_KEY", "")
-MIMO_BASE_URL = os.environ.get("MIMO_BASE_URL", "https://api.xiaomimimo.com/v1")
-MIMO_MODEL = os.environ.get("MIMO_MODEL", "mimo-v2.5")
+# ---------- LLM (OpenAI-compatible API) configuration ----------
+# 任意 OpenAI 兼容大模型服务均可（OpenAI / DeepSeek / Moonshot / 智谱 / mimo 等），
+# 通过 .env 的 LLM_API_KEY / LLM_BASE_URL / LLM_MODEL 随心配置；
+# 旧版 MIMO_* 变量名仍被识别（向后兼容）。
+LLM_API_KEY = os.environ.get("LLM_API_KEY") or os.environ.get("MIMO_API_KEY", "")
+LLM_BASE_URL = os.environ.get("LLM_BASE_URL") or os.environ.get("MIMO_BASE_URL") or "https://api.openai.com/v1"
+LLM_MODEL = os.environ.get("LLM_MODEL") or os.environ.get("MIMO_MODEL", "gpt-4o-mini")
 
-MIMO_SYSTEM_PROMPT = r"""你是一位物理实验教学助手，专注于阻尼振动实验教学。你的知识范围包括：
+LLM_SYSTEM_PROMPT = r"""你是一位物理实验教学助手，专注于阻尼振动实验教学。你的知识范围包括：
 1. 阻尼振动的物理原理和数学推导（微分方程、解析解、参数物理意义）
 2. 单摆、磁阻尼摆、扭摆、磁力牛顿摆等实验的操作指导和数据分析
 3. 振动、阻尼、周期、频率、阻尼比、动量守恒与能量传递等相关物理概念
@@ -1041,9 +1044,9 @@ def get_teaching_content(topic):
 
 @app.route("/api/ai_chat", methods=["POST"])
 def ai_chat():
-    """AI knowledge Q&A — SSE stream from mimo v2.5."""
-    if not MIMO_API_KEY:
-        return jsonify({"error": "AI 服务未配置。请设置环境变量 MIMO_API_KEY。"}), 503
+    """AI knowledge Q&A — SSE stream from the configured LLM (OpenAI-compatible API)."""
+    if not LLM_API_KEY:
+        return jsonify({"error": "AI 服务未配置。请在 .env 中设置 LLM_API_KEY。"}), 503
 
     data = request.get_json()
     if not data:
@@ -1054,16 +1057,16 @@ def ai_chat():
         return jsonify({"error": "No messages provided."}), 400
 
     # Inject system prompt
-    full_messages = [{"role": "system", "content": MIMO_SYSTEM_PROMPT}] + messages
+    full_messages = [{"role": "system", "content": LLM_SYSTEM_PROMPT}] + messages
 
     try:
         from openai import OpenAI
-        client = OpenAI(api_key=MIMO_API_KEY, base_url=MIMO_BASE_URL)
+        client = OpenAI(api_key=LLM_API_KEY, base_url=LLM_BASE_URL)
 
         def generate():
             try:
                 stream = client.chat.completions.create(
-                    model=MIMO_MODEL,
+                    model=LLM_MODEL,
                     messages=full_messages,
                     stream=True,
                     max_tokens=2048,
