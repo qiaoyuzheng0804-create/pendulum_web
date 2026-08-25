@@ -15,7 +15,6 @@ import sys
 import json
 import uuid
 import base64
-import hashlib
 import threading
 import traceback
 import time as _time
@@ -38,6 +37,28 @@ from processors.symbolic_regression import (
     run_sr_ci_overdamped, run_sr_niubai
 )
 from processors.openmv_manager import openmv_manager, OPENMV_USB_VID, rgb_to_jpeg_bytes
+
+
+# ---------- Load .env (dependency-free) ----------
+# 支持直接 `python app.py` 启动时读取根目录 .env（启动服务器.bat 也会加载，二者幂等；
+# 已存在的环境变量优先，不被覆盖）
+def _load_env_file(path):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, _, v = line.partition("=")
+                k = k.strip()
+                v = v.strip().strip('"').strip("'")
+                if k and k not in os.environ:
+                    os.environ[k] = v
+    except FileNotFoundError:
+        pass
+
+
+_load_env_file(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
@@ -266,19 +287,6 @@ def file_to_base64(path):
         return base64.b64encode(f.read()).decode("utf-8")
 
 
-def make_cache_key(video_path, calibration, params):
-    h = hashlib.md5()
-    h.update(json.dumps(calibration, sort_keys=True).encode())
-    h.update(json.dumps(params, sort_keys=True).encode())
-    try:
-        with open(video_path, "rb") as f:
-            for chunk in iter(lambda: f.read(1 << 20), b""):
-                h.update(chunk)
-    except Exception:
-        pass
-    return h.hexdigest()
-
-
 # ---------- Progress tracking ----------
 _progress = {}  # session_id -> {"current": int, "total": int}
 
@@ -361,7 +369,7 @@ def upload_video():
     })
 
 
-def _run_processing(session_id, data, progress_callback=None):
+def _run_processing(session_id, data, progress_callback=None, stage_callback=None):
     """Core processing logic shared by sync and SSE endpoints."""
     output_dir = data.get("output_dir", "")
     calibration_points = data.get("calibration_points", [])
@@ -399,22 +407,6 @@ def _run_processing(session_id, data, progress_callback=None):
         if len(calibration_points) != spec["num_points"]:
             return None, {"error": f"Expected {spec['num_points']} calibration points, got {len(calibration_points)}."}
 
-    # Check cache
-    cache_params = {
-        "skip_start_sec": skip_start_sec, "skip_end_sec": skip_end_sec,
-        "slow_motion_factor": slow_motion_factor, "target_cycles": target_cycles,
-        "samples_per_cycle": samples_per_cycle, "known_physical_dist_m": known_physical_dist_m,
-        "damping_subtype": data.get("damping_subtype", "欠阻尼"),
-        "num_pivots": num_pivots,
-        "gen_video": bool(data.get("gen_video", True)),
-        "target_fps": float(data.get("target_fps", 30)),
-    }
-    cache_key = make_cache_key(video_path, calibration_points, cache_params)
-    if session_id in _progress and "cache" in _progress[session_id]:
-        cached = _progress[session_id]["cache"].get(cache_key)
-        if cached:
-            return cached, None
-
     # Convert display coords to original image coords
     cap = cv2.VideoCapture(video_path)
     orig_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -442,6 +434,8 @@ def _run_processing(session_id, data, progress_callback=None):
     model = get_model(motion_type)
 
     try:
+        if stage_callback:
+            stage_callback("detect")
         if motion_type == "danbai":
             result = process_danbai(
                 video_path, output_dir, MODEL_PATHS[motion_type], calibration,
@@ -491,6 +485,8 @@ def _run_processing(session_id, data, progress_callback=None):
             result["plot_preview"] = file_to_base64(plot_path)
 
         # Symbolic Regression
+        if stage_callback:
+            stage_callback("fit")
         damping_subtype = data.get("damping_subtype", "欠阻尼")
         csv_path = result.get("csv_path", "")
         try:
@@ -514,10 +510,6 @@ def _run_processing(session_id, data, progress_callback=None):
 
         if sr_result:
             result["sr_result"] = sr_result
-
-        # Cache result
-        if session_id in _progress:
-            _progress[session_id].setdefault("cache", {})[cache_key] = result
 
         return result, None
 
@@ -568,7 +560,12 @@ def process_stream():
                 _progress[session_id]["current"] = current
                 _progress[session_id]["total"] = total
 
-            result, error = _run_processing(session_id, data, progress_callback=on_progress)
+            def on_stage(stage):
+                _progress[session_id]["stage"] = stage
+
+            result, error = _run_processing(session_id, data,
+                                            progress_callback=on_progress,
+                                            stage_callback=on_stage)
 
             if error:
                 yield f"data: {json.dumps({'type': 'error', 'message': error['error']})}\n\n"
@@ -588,7 +585,8 @@ def get_progress(session_id):
     current = p.get("current", 0)
     total = p.get("total", 1)
     pct = min(int(current / total * 100), 100) if total > 0 else 0
-    return jsonify({"current": current, "total": total, "percent": pct})
+    return jsonify({"current": current, "total": total, "percent": pct,
+                    "stage": p.get("stage", "")})
 
 
 @app.route("/api/cleanup", methods=["POST"])

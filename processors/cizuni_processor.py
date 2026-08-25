@@ -87,8 +87,8 @@ def process_cizuni(video_path, output_dir, model_path, calibration,
     # sample_step is computed in video-time frames.
     sample_step = auto_sample_step(total_frames, fps, skip_start_sec / slow_motion_factor, skip_end_sec / slow_motion_factor, min_data_points)
 
-    # Always create a fresh model to avoid CUDA context issues with pre-loaded models
-    model = YOLO(model_path)
+    if model is None:
+        model = YOLO(model_path)
 
     sf = int(skip_start_sec / slow_motion_factor * fps)
     ef = int(skip_end_sec / slow_motion_factor * fps)

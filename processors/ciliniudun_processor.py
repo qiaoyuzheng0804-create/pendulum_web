@@ -684,13 +684,14 @@ def process_ciliniudun(video_path, output_dir, model_path, calibration,
 
 if __name__ == "__main__":
     try:
-        # 本地快速调试入口
+        # 本地快速调试入口：python ciliniudun_processor.py <video> <output_dir> <model_path> [calib.json]
         import json
-        calib = json.load(open(sys.argv[1], encoding="utf-8")) if len(sys.argv) > 1 else {}
+        if len(sys.argv) < 4:
+            print("用法: python ciliniudun_processor.py <video> <output_dir> <model_path> [calib.json]")
+            sys.exit(2)
+        calib = json.load(open(sys.argv[4], encoding="utf-8")) if len(sys.argv) > 4 else {}
         res = process_ciliniudun(
-            video_path=r"C:\Users\MECHREV\Desktop\d01dd756d79697ef84b654ca3f6e2704.mp4",
-            output_dir=r"C:\Users\MECHREV\Desktop\newmethod_web",
-            model_path=r"C:\Users\MECHREV\Desktop\yolov8\runs\detect\ciliniudun\weights\best.pt",
+            video_path=sys.argv[1], output_dir=sys.argv[2], model_path=sys.argv[3],
             calibration=calib, num_pivots=len([k for k in calib if k.startswith("pivot_")]) or 4)
         print(json.dumps(res, ensure_ascii=False, indent=2))
     except Exception as e:

@@ -239,12 +239,8 @@ YOLOv8 模型查找优先级（`app.py` 中 `MODEL_PATHS`，不再硬编码本�
 1. **逐帧解码 + 推理随时长线性放大**：`cap.read()` 约 8ms/帧 + 推理约 12ms/帧，30fps 视频吞吐约 50 帧/秒
 2. **单摆默认 `target_cycles=400`**：提前停止需检测到 800 次零交叉，长视频可达数万帧
 3. **磁力牛顿摆两遍处理**：第一遍 ByteTrack 跟踪（`imgsz=1536`），第二遍重新解码写标注视频（mp4v 编码约 30ms/帧），全实验最慢
-4. **符号回归发生在进度 100% 之后**：`progress_callback` 只覆盖帧处理阶段；随后 SR 执行 36 组 `least_squares` 网格搜索（每组最多 1 万次迭代）+ ODE 验证 + matplotlib 出图，约 10~60 秒无任何进度提示——前端体感"最后卡住"
-5. **杂项开销**：cizuni 每次运行重新 `YOLO(model_path)`（忽略预加载模型，为规避 CUDA 上下文问题）；缓存键对整个视频文件算 MD5（1GB ≈ 2s）；服务启动后首次推理有 CUDA 上下文初始化
-
-**结果缓存的真相**：`_run_processing` 把结果写进 `_progress[session_id]["cache"]`，但处理结束时 `finally` 会 `_progress.pop(session_id)`，缓存随之销毁——实际几乎不产生跨请求命中，仅在同一次请求内有意义。
-
-**候选优化（尚未实施）**：SR 独立进度阶段上报 / 单摆周期数按视频长度自适应 / cizuni 复用预加载模型 / 牛顿摆默认关标注视频 / 扭摆 `find_peaks` 只查尾部窗口（现为每帧全量，O(n²)）。
+4. **符号回归发生在帧处理之后**：`progress_callback` 只覆盖帧处理阶段；SR 执行 36 组 `least_squares` 网格搜索（每组最多 1 万次迭代）+ ODE 验证 + matplotlib 出图，约 10~60 秒。已通过 `stage_callback` 上报 "fit" 阶段，前端进度条会显示"正在拟合运动方程"
+5. **首次分析某实验类型时**有模型加载开销（懒加载，之后常驻内存）
 
 ## 注意事项
 
@@ -252,7 +248,7 @@ YOLOv8 模型查找优先级（`app.py` 中 `MODEL_PATHS`，不再硬编码本�
 - **自动关停**：前端 Web Worker 每 2s POST `/api/heartbeat`（带随机客户端 ID）；页面卸载时 `pagehide` + `sendBeacon` POST `/api/client_exit` 告别。`_watchdog_loop`（0.5s 周期）在客户端集合清空且无处理/录制 → 2s 宽限期 → `_shutdown_safety()`（电磁铁断电、关全部串口、断 OpenMV）→ `os._exit(0)`。**刷新保护**：GET `/` 会取消待关停并刷新 `_last_page_request`，距上次页面请求 6s 内一律不关停（新页面 Worker 首次心跳因 CDN 脚本加载会晚到）。心跳 6s 未刷新视为离线（浏览器崩溃兜底）；多标签页只有最后一个关闭才停；从未有页面连接过（命令行调试）不退出
 - `_process_lock` 确保同一时刻只有一个 YOLO 处理任务
 - Session 30 分钟自动清理，超过 1 GB 被 Flask 拒绝
-- 处理结果有缓存机制（视频 MD5 + 参数 hash），但仅在一次处理请求内有效（见"性能要点"）
+- 直接 `python app.py` 启动时自动读取根目录 `.env`（`_load_env_file`，已存在的环境变量优先）
 - `KMP_DUPLICATE_LIB_OK=TRUE` 解决 PyTorch 与 OpenCV 冲突
 - 扭摆依赖 `filterpy`，AI 问答依赖 `openai`
 - 新增实验：需完整注册——`app.py` 的 `MODEL_PATHS`（本地路径 + models/ 回退）、`CALIB_SPECS`、`_run_processing` 分发分支、`get_teaching_content` 的 `allowed` 集合；新增 `processors/xxx_processor.py` 并在 `processors/__init__.py` 导出；新增 `teaching/guide_xxx.json`；前端 `index.html` 添加类型卡片、标定逻辑与参数组（参考磁力牛顿摆 ciliniudun 的完整实现）

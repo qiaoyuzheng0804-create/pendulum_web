@@ -1626,7 +1626,7 @@ async function startProcessing(){
   const body=JSON.stringify({session_id:S.sessionId,output_dir:outputDir,calibration_points:S.calibPoints,skip_start_sec:parseFloat($('#param_skip_start').value)||0,skip_end_sec:parseFloat($('#param_skip_end').value)||0,slow_motion_factor:parseFloat($('#param_slowmo').value)||1,known_physical_dist_m:parseFloat($('#param_dist').value)||0.064,target_cycles:parseInt($('#param_cycles').value)||400,samples_per_cycle:parseInt($('#param_samples').value)||25,damping_subtype:$('#param_damping_type')?.value||'欠阻尼',flip_angle:$('#param_flip_angle')?.checked||false,num_pivots:numPivots,gen_video:$('#param_gen_video')?.checked!==false,target_fps:parseFloat($('#param_targetfps')?.value)||30});
 
   let progTimer=setInterval(async()=>{
-    try{const r=await fetch('api/progress/'+S.sessionId);const p=await r.json();if(p.total>0){progFill.style.width=p.percent+'%';progText.textContent=p.percent+'% ('+p.current+'/'+p.total+' 帧)';}}catch(e){}
+    try{const r=await fetch('api/progress/'+S.sessionId);const p=await r.json();if(p.stage==='fit'){progFill.style.width='100%';progText.textContent='帧处理完成 — 正在拟合运动方程（符号回归）...';}else if(p.total>0){progFill.style.width=p.percent+'%';progText.textContent=p.percent+'% ('+p.current+'/'+p.total+' 帧)';}}catch(e){}
   },800);
 
   try{

@@ -208,6 +208,8 @@ def process_niubai(video_path, output_dir, model_path, calibration,
     # Early-stop buffers
     peak_buf_angles = []
     peak_buf_times = []
+    peak_idx_list = []      # 已确认的峰值绝对索引（增量统计）
+    _last_peak_idx = -1
     stopped_early = False
 
     for fidx in range(f_start, f_end):
@@ -252,10 +254,19 @@ def process_niubai(video_path, output_dir, model_path, calibration,
             peak_buf_times.append(real_t)
 
             if len(peak_buf_angles) > 20:
-                arr_check = np.array(peak_buf_angles)
-                peaks_check, _ = find_peaks(arr_check, prominence=0.3)
-                if len(peaks_check) >= num_cycles + 1:
-                    last_peak_idx = peaks_check[num_cycles]
+                # 只扫尾部窗口增量确认峰值（窗口滑动+去重），避免每帧全量 find_peaks 的 O(n²)
+                W = 40
+                lo = max(0, len(peak_buf_angles) - W)
+                tail = np.asarray(peak_buf_angles[lo:])
+                peaks_tail, _ = find_peaks(tail, prominence=0.3)
+                for p_rel in peaks_tail:
+                    p_abs = lo + int(p_rel)
+                    if p_abs >= len(peak_buf_angles) - 2 or p_abs <= _last_peak_idx:
+                        continue
+                    _last_peak_idx = p_abs
+                    peak_idx_list.append(p_abs)
+                if len(peak_idx_list) >= num_cycles + 1:
+                    last_peak_idx = peak_idx_list[num_cycles]
                     raw_times = peak_buf_times[:last_peak_idx + 1]
                     raw_angles = peak_buf_angles[:last_peak_idx + 1]
                     stopped_early = True
