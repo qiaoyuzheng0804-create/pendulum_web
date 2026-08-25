@@ -1039,18 +1039,37 @@ def openmv_status():
 
 
 # ---------- Auto-shutdown watchdog ----------
-# 网页全部关闭后自动停止服务器：前端用 Web Worker 每 2s 发心跳（Worker 定时器
-# 不受浏览器后台标签页限流影响，页面一关心跳即停）；看门狗 10s 收不到心跳、
-# 且无处理任务/录制进行时，先做断电保护（电磁铁断电、关串口、断 OpenMV）再退出。
-# 从未有页面连接过（如命令行调试）则不自动退出。
-_last_heartbeat = _time.time()
+# 网页全部关闭后立即停止服务器：
+#   - 前端 Web Worker 每 2s POST /api/heartbeat（带客户端 ID；Worker 定时器不受
+#     后台标签页限流影响）
+#   - 页面卸载（叉掉标签/关闭浏览器）时 sendBeacon POST /api/client_exit 告别，
+#     服务器立即移除该客户端
+#   - 看门狗：客户端集合为空且无处理任务/录制 → 2s 保护宽限期（覆盖刷新场景：
+#     旧页面告别与新页面首次心跳之间的空窗）→ 断电保护后退出
+#   - 兜底：心跳超过 6s 未刷新（浏览器崩溃等未发告别）视为离线
+#   - 多标签页：只有最后一个标签关闭才会停服务器；从未有页面连接过（命令行调试）不退出
+_clients = {}
 _client_seen = threading.Event()
+_exit_mark = None
+_watchdog_lock = threading.Lock()
 
 
 @app.route("/api/heartbeat", methods=["POST"])
 def heartbeat():
-    global _last_heartbeat
-    _last_heartbeat = _time.time()
+    data = request.get_json(silent=True) or {}
+    cid = str(data.get("id", "")) or "anon"
+    with _watchdog_lock:
+        _clients[cid] = _time.time()
+    _client_seen.set()
+    return jsonify({"success": True})
+
+
+@app.route("/api/client_exit", methods=["POST"])
+def client_exit():
+    data = request.get_json(silent=True) or {}
+    cid = str(data.get("id", "")) or "anon"
+    with _watchdog_lock:
+        _clients.pop(cid, None)
     _client_seen.set()
     return jsonify({"success": True})
 
@@ -1084,15 +1103,25 @@ def _shutdown_safety():
 
 
 def _watchdog_loop():
+    global _exit_mark
     while True:
-        _time.sleep(2)
+        _time.sleep(0.5)
         try:
-            if not _client_seen.is_set():
+            now = _time.time()
+            with _watchdog_lock:
+                for _k in [k for k, v in _clients.items() if now - v > 6]:
+                    _clients.pop(_k, None)
+                empty = not _clients
+            if not _client_seen.is_set() or not empty:
+                _exit_mark = None
                 continue
             if _process_lock.locked() or openmv_manager.get_status().get("recording"):
-                _last_heartbeat = _time.time()  # 处理/录制期间不退出
+                _exit_mark = None  # 处理/录制期间不退出
                 continue
-            if _time.time() - _last_heartbeat > 10:
+            if _exit_mark is None:
+                _exit_mark = now
+                continue
+            if now - _exit_mark >= 2.0:
                 print("[Watchdog] 页面已全部关闭，自动停止服务器...", flush=True)
                 _shutdown_safety()
                 os._exit(0)
