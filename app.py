@@ -293,6 +293,15 @@ _progress = {}  # session_id -> {"current": int, "total": int}
 
 # ---------- Routes ----------
 
+@app.before_request
+def _touch_page_activity():
+    # 任意请求都视为"有活着的页面"：后台标签页的心跳 Worker 会被浏览器节流甚至暂停
+    # （最小化/切换窗口后可能远超 6s 不发心跳），但只要还有任何请求到达就说明有人在使用；
+    # 该时间戳同时被看门狗用作"最后一次活动"依据，防止误关停
+    global _last_page_request
+    _last_page_request = _time.time()
+
+
 @app.route("/")
 def index():
     global _exit_mark, _last_page_request
@@ -1042,20 +1051,31 @@ def openmv_status():
 
 
 # ---------- Auto-shutdown watchdog ----------
-# 网页全部关闭后立即停止服务器：
+# 网页全部关闭后自动停止服务器：
 #   - 前端 Web Worker 每 2s POST /api/heartbeat（带客户端 ID；Worker 定时器不受
 #     后台标签页限流影响）
 #   - 页面卸载（叉掉标签/关闭浏览器）时 sendBeacon POST /api/client_exit 告别，
 #     服务器立即移除该客户端
-#   - 看门狗：客户端集合为空且无处理任务/录制 → 2s 保护宽限期（覆盖刷新场景：
+#   - 看门狗：客户端集合为空且无处理任务/录制 → 5s 保护宽限期（覆盖刷新场景：
 #     旧页面告别与新页面首次心跳之间的空窗）→ 断电保护后退出
-#   - 兜底：心跳超过 6s 未刷新（浏览器崩溃等未发告别）视为离线
+#   - 兜底：心跳超过 90s 未刷新视为离线（页面切后台/最小化时 Worker 会被浏览器
+#     节流到约 1 次/分钟，6s 级超时会误杀还开着的页面，必须留足余量）
+#   - 任意 HTTP 请求都会刷新活动时间戳（before_request），页面有交互就不会关停
 #   - 多标签页：只有最后一个标签关闭才会停服务器；从未有页面连接过（命令行调试）不退出
 _clients = {}
 _client_seen = threading.Event()
 _exit_mark = None
-_last_page_request = _time.time()  # 最近一次页面加载（GET /）时刻
+_last_page_request = _time.time()  # 最近一次页面活动（任意请求）时刻
 _watchdog_lock = threading.Lock()
+
+# 心跳每 2s 一次，别让它刷屏：从 werkzeug 访问日志里过滤掉
+import logging as _logging
+
+class _HeartbeatLogFilter(_logging.Filter):
+    def filter(self, record):
+        return "/api/heartbeat" not in record.getMessage()
+
+_logging.getLogger("werkzeug").addFilter(_HeartbeatLogFilter())
 
 
 @app.route("/api/heartbeat", methods=["POST"])
@@ -1113,7 +1133,8 @@ def _watchdog_loop():
         try:
             now = _time.time()
             with _watchdog_lock:
-                for _k in [k for k, v in _clients.items() if now - v > 6]:
+                # 90s：容忍后台/最小化时心跳 Worker 被浏览器节流（可低至约 1 次/分钟）
+                for _k in [k for k, v in _clients.items() if now - v > 90]:
                     _clients.pop(_k, None)
                 empty = not _clients
             if not _client_seen.is_set() or not empty:
@@ -1123,14 +1144,14 @@ def _watchdog_loop():
                 _exit_mark = None  # 处理/录制期间不退出
                 continue
             # 刷新保护：新页面加载后 Worker 首次心跳可能因 CDN 脚本加载而晚到，
-            # 距上次页面请求 6s 内一律不关停
+            # 距最近一次任意请求 6s 内一律不关停
             if now - _last_page_request < 6:
                 _exit_mark = None
                 continue
             if _exit_mark is None:
                 _exit_mark = now
                 continue
-            if now - _exit_mark >= 2.0:
+            if now - _exit_mark >= 5.0:
                 print("[Watchdog] 页面已全部关闭，自动停止服务器...", flush=True)
                 _shutdown_safety()
                 os._exit(0)
