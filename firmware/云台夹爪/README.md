@@ -3,7 +3,7 @@
 - `main.c`：C8T6 标准外设库程序，通过两组 EN/STP/DIR 控制两个 EMM42，并通过 USART1 控制 TTL 夹爪；上方电机使用 PB3/PB4/PB5。
 - `pc_keyboard.py`：电脑方向键和夹爪按键程序，使用 USB-TTL 连接 USART1。
 - `接线与使用说明.md`：完整引脚、供电、编译和调试说明。
-- `STM32F103C8T6_Keil工程/USER/GIMBAL.uvprojx`：需要用 Keil 打开的完整工程。
+- `Keil工程/USER/GIMBAL.uvprojx`：需要用 Keil 打开的完整工程。
 - `烧录步骤.md`：ST-Link 接线以及 Keil 中逐项点击说明。
 
 电脑串口为 USART1，115200 8N1；方向键或六个实体按键每按一次执行一次动作，云台默认约转动 2 度；实体按键按下高电平、释放低电平；`O` 开夹、`C` 关夹。夹爪以 120 RPM 运行并依靠驱动器闭环/限位保护停止，重复的同方向开/关命令会被忽略。

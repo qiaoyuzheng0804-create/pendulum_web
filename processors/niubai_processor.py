@@ -176,6 +176,10 @@ def process_niubai(video_path, output_dir, model_path, calibration,
     calib["y_unit"] = dy / np.linalg.norm(dy)
 
     px_dist = np.linalg.norm(calib["scale_p2"] - calib["scale_p1"])
+    if not np.isfinite(px_dist) or px_dist <= 1e-6:
+        raise RuntimeError("标尺两个标定点重合或无效，无法计算比例尺，请重新标定。")
+    if known_physical_dist_m <= 0:
+        raise RuntimeError("标尺物理距离必须为正数（单位：米）。")
     calib["px_per_m"] = px_dist / known_physical_dist_m
 
     # Open video
@@ -185,7 +189,7 @@ def process_niubai(video_path, output_dir, model_path, calibration,
 
     fps = cap.get(cv2.CAP_PROP_FPS)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    slow = slow_motion_factor
+    slow = max(1.0, float(slow_motion_factor))  # 0/负数会触发除零
 
     f_start = int(skip_start_sec / slow * fps)
     f_end = total_frames - int(skip_end_sec / slow * fps)

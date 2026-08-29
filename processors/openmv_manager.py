@@ -14,6 +14,7 @@ This matches the architecture in the reference tool:
 from __future__ import annotations
 
 import io
+import os
 import queue
 import struct
 import threading
@@ -377,11 +378,20 @@ class OpenMVManager:
         self._lock = threading.Lock()
         self._camera_worker: Optional[_CameraWorker] = None
         self._control_worker: Optional[_ControlWorker] = None
-        self._stop_event = threading.Event()
+        # 摄像头与云台各自独立的停止信号：共用一个 event 时断开云台会误杀采集线程
+        self._camera_stop = threading.Event()
+        self._control_stop = threading.Event()
         self._frame_queue: queue.Queue = queue.Queue(maxsize=2)
         self._command_queue: queue.Queue = queue.Queue()
         self._recording = False
-        self._recorded_frames: list[np.ndarray] = []
+        # 录制用独立轻量锁（不能用 _lock：disconnect_camera 持 _lock join 采集线程，
+        # 而采集线程回调要拿录制锁，混用会死锁）
+        self._record_lock = threading.Lock()
+        self._record_writer = None
+        self._record_tmp_path: Optional[str] = None
+        self._record_frame_count = 0
+        self._record_fps = 13.0
+        self._record_error: Optional[str] = None
         self._record_start_time: float = 0.0
 
     # ── Connection ─────────────────────────────────────────────────────────
@@ -405,10 +415,10 @@ class OpenMVManager:
         with self._lock:
             if self.camera_connected:
                 return {"error": f"摄像头已连接: {self._camera_worker.port}，请先断开。"}
-            self._stop_event.clear()
+            self._camera_stop.clear()
             self._frame_queue = queue.Queue(maxsize=2)
             self._camera_worker = _CameraWorker(
-                port, baud, self._frame_queue, self._stop_event,
+                port, baud, self._frame_queue, self._camera_stop,
                 record_callback=self._record_frame_if_active,
             )
             self._camera_worker.start()
@@ -440,9 +450,10 @@ class OpenMVManager:
         with self._lock:
             if self.control_connected:
                 return {"error": f"云台已连接: {self._control_worker.port}，请先断开。"}
+            self._control_stop.clear()
             self._command_queue = queue.Queue()
             self._control_worker = _ControlWorker(
-                port, self._command_queue, self._stop_event
+                port, self._command_queue, self._control_stop
             )
             self._control_worker.start()
 
@@ -462,18 +473,45 @@ class OpenMVManager:
             return {"success": True, "port": port}
 
     def disconnect_camera(self) -> dict:
-        """Disconnect camera."""
-        with self._lock:
-            if self._recording:
+        """Disconnect camera. Recording in progress is finalized to disk, not discarded."""
+        note = ""
+        writer = tmp = None
+        count, used_fps, err = 0, self._record_fps, None
+        with self._record_lock:
+            if self._recording or self._record_writer is not None:
                 self._recording = False
-                self._recorded_frames = []
+                writer, self._record_writer = self._record_writer, None
+                tmp, self._record_tmp_path = self._record_tmp_path, None
+                count, used_fps, err = self._record_frame_count, self._record_fps, self._record_error
+        if writer is not None:
+            writer.release()
+        if tmp:
+            if not err and count > 0:
+                video_path = os.path.splitext(tmp)[0] + ".mp4"
+                try:
+                    os.replace(tmp, video_path)
+                    note = f"录制中断，已保存 {count} 帧到 {video_path}"
+                    print(f"[OpenMV] {note}", flush=True)
+                except Exception:
+                    pass
+            elif os.path.exists(tmp):
+                try:
+                    os.remove(tmp)
+                except Exception:
+                    pass
+        with self._lock:
             if not self.camera_connected:
                 self._cleanup_camera()
                 return {"success": True, "already": True}
-            self._stop_event.set()
-            self._camera_worker.join(timeout=2.0)
+            self._camera_stop.set()
+            self._camera_worker.join(timeout=3.0)
+            if self._camera_worker.is_alive():
+                print("[OpenMV] 摄像头线程未在 3s 内退出，端口释放可能延迟", flush=True)
             self._cleanup_camera()
-            return {"success": True}
+        result = {"success": True}
+        if note:
+            result["note"] = note
+        return result
 
     def disconnect_control(self) -> dict:
         """Disconnect gimbal control."""
@@ -481,8 +519,10 @@ class OpenMVManager:
             if not self.control_connected:
                 self._cleanup_control()
                 return {"success": True, "already": True}
-            self._stop_event.set()
-            self._control_worker.join(timeout=2.0)
+            self._control_stop.set()
+            self._control_worker.join(timeout=3.0)
+            if self._control_worker.is_alive():
+                print("[OpenMV] 云台线程未在 3s 内退出，端口释放可能延迟", flush=True)
             self._cleanup_control()
             return {"success": True}
 
@@ -490,9 +530,6 @@ class OpenMVManager:
         """Disconnect both camera and gimbal."""
         self.disconnect_control()
         self.disconnect_camera()
-        # Reset stop event if camera was the last thing connected
-        if not self.camera_connected and not self.control_connected:
-            self._stop_event.clear()
         return {"success": True}
 
     def _cleanup_camera(self) -> None:
@@ -542,7 +579,7 @@ class OpenMVManager:
                 "gimbal_limit": c.limit_message,
             })
         if self._recording:
-            result["recorded_frames"] = len(self._recorded_frames)
+            result["recorded_frames"] = self._record_frame_count
             result["record_elapsed"] = round(time.monotonic() - self._record_start_time, 1)
         return result
 
@@ -567,54 +604,97 @@ class OpenMVManager:
 
     # ── Recording ──────────────────────────────────────────────────────────
 
-    def start_recording(self) -> dict:
-        """Start recording frames."""
-        with self._lock:
-            if not self.camera_connected:
-                return {"error": "OpenMV 摄像头未连接。"}
+    def start_recording(self, upload_dir: str) -> dict:
+        """Start recording: frames stream straight to a temp file on disk.
+
+        边录边落盘：内存不囤帧，录制时长不受内存限制；磁盘写入失败立刻置错，
+        不会等到停止时才发现白录。
+        """
+        if not self.camera_connected:
+            return {"error": "OpenMV 摄像头未连接。"}
+        with self._record_lock:
             if self._recording:
                 return {"error": "已在录制中。"}
-            self._recorded_frames = []
+            ts = int(time.time())
+            self._record_tmp_path = str(Path(upload_dir) / f"openmv_rec_{ts}_tmp.mp4")  # 必须 .mp4：VideoWriter 按扩展名选后端
+            self._record_writer = None  # 首帧到达时按实际分辨率创建
+            self._record_frame_count = 0
+            self._record_error = None
+            self._record_fps = 13.0
             self._record_start_time = time.monotonic()
             self._recording = True
             return {"success": True}
 
-    def stop_recording(self, upload_dir: str, fps: float = 13.0) -> dict:
-        """Stop recording and save frames as MP4 video."""
-        with self._lock:
-            if not self._recording:
+    def stop_recording(self, upload_dir: str) -> dict:
+        """Stop recording, finalize the on-disk temp file and return its path."""
+        writer = tmp = None
+        count, used_fps, err = 0, self._record_fps, None
+        with self._record_lock:
+            if not self._recording and self._record_writer is None:
                 return {"error": "未在录制中。"}
             self._recording = False
-            frames = self._recorded_frames.copy()
-            self._recorded_frames = []
-
-        if not frames:
+            writer, self._record_writer = self._record_writer, None
+            tmp, self._record_tmp_path = self._record_tmp_path, None
+            count, used_fps, err = self._record_frame_count, self._record_fps, self._record_error
+        # release 放锁外：编码器 finalize 可能耗时，别让采集线程回调干等
+        if writer is not None:
+            writer.release()
+        if err:
+            if tmp and os.path.exists(tmp):
+                try:
+                    os.remove(tmp)
+                except Exception:
+                    pass
+            return {"error": err}
+        if writer is None or count == 0:
+            if tmp and os.path.exists(tmp):
+                try:
+                    os.remove(tmp)
+                except Exception:
+                    pass
             return {"error": "录制帧数为 0，未保存视频。"}
-
         ts = int(time.time())
         video_name = f"openmv_capture_{ts}.mp4"
         video_path = str(Path(upload_dir) / video_name)
-
-        h, w = frames[0].shape[:2]
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        writer = cv2.VideoWriter(video_path, fourcc, fps, (w, h))
-        for rgb_frame in frames:
-            bgr = cv2.cvtColor(rgb_frame, cv2.COLOR_RGB2BGR)
-            writer.write(bgr)
-        writer.release()
-
+        try:
+            os.replace(tmp, video_path)
+        except Exception as exc:
+            return {"error": f"录制文件落盘失败: {exc}"}
         return {
             "success": True,
             "video_path": video_path,
             "video_name": video_name,
-            "frame_count": len(frames),
-            "duration": round(len(frames) / fps, 2),
+            "frame_count": count,
+            "duration": round(count / used_fps, 2),
         }
 
     def _record_frame_if_active(self, rgb: np.ndarray) -> None:
-        """Callback for camera worker: append frame if recording is active."""
-        if self._recording:
-            self._recorded_frames.append(rgb.copy())
+        """Camera-worker callback: write the frame straight to disk if recording."""
+        if not self._recording:
+            return
+        self._record_lock.acquire()
+        try:
+            if not self._recording or self._record_tmp_path is None:
+                return
+            if self._record_writer is None:
+                h, w = rgb.shape[:2]
+                fps = self._camera_worker.fps if self._camera_worker else 0.0
+                self._record_fps = round(fps, 2) if fps and fps >= 1.0 else 13.0
+                writer = cv2.VideoWriter(
+                    self._record_tmp_path, cv2.VideoWriter_fourcc(*"mp4v"),
+                    self._record_fps, (w, h))
+                if not writer.isOpened():
+                    self._record_error = "无法创建录制文件（磁盘不可写或编码器初始化失败）"
+                    self._recording = False
+                    return
+                self._record_writer = writer
+            self._record_writer.write(cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
+            self._record_frame_count += 1
+        except Exception as exc:
+            self._record_error = f"录制写入失败: {exc}"
+            self._recording = False
+        finally:
+            self._record_lock.release()
 
     # ── Gimbal control ─────────────────────────────────────────────────────
 

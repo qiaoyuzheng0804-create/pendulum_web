@@ -179,7 +179,13 @@ def detect_first_bottom_crossing(times, angle_deg, abs_gate_deg, min_index):
         if min(abs(a1), abs(a2)) <= abs_gate_deg or abs(a1) + abs(a2) <= 2 * abs_gate_deg:
             t0 = interp_zero_crossing_time(times[i], a1, times[i + 1], a2)
             return i, t0
-    idx = int(np.nanargmin(np.abs(angle_deg[min_index:]))) + min_index if n > min_index else int(np.nanargmin(np.abs(angle_deg)))
+    # 兜底：门限内没找到过零点时，退而取最接近零的角度位置。
+    # 切片可能全为 NaN（检测连续失败），nanargmin 会直接抛异常，这里显式降级成清晰报错
+    seg = angle_deg[min_index:] if n > min_index else angle_deg
+    offset = min_index if n > min_index else 0
+    if not np.any(np.isfinite(seg)):
+        raise RuntimeError("角度序列全为无效值（YOLO 检测连续失败），无法定位零点。请检查视频画质与标定。")
+    idx = int(np.nanargmin(np.abs(seg))) + offset
     return max(0, idx - 1), float(times[idx])
 
 
@@ -465,6 +471,7 @@ def process_danbai(video_path, output_dir, model_path, calibration,
     times, centers, confs = [], [], []
     prev_center = None
     frame_idx = 0
+    slow_motion_factor = max(1.0, float(slow_motion_factor))  # 0/负数会触发除零
     skip_frames = int(round(cfg.skip_initial_seconds / slow_motion_factor * fps))
 
     online_raw_angles = []
@@ -479,6 +486,12 @@ def process_danbai(video_path, output_dir, model_path, calibration,
             break
 
         t = frame_idx / fps * slow_motion_factor
+
+        # 跳过段直接不跑推理：此前 predict 在跳过判断之前，白烧 GPU
+        #（跳 3 秒 × 30fps ≈ 90 次无效推理/视频）
+        if frame_idx < skip_frames:
+            frame_idx += 1
+            continue
 
         results = model.predict(
             source=frame, conf=cfg.conf_thres, iou=cfg.iou_thres,
@@ -504,10 +517,6 @@ def process_danbai(video_path, output_dir, model_path, calibration,
                 best_idx = int(np.argmax(det_scores))
             chosen_center = det_centers[best_idx]
             prev_center = chosen_center.copy()
-
-        if frame_idx < skip_frames:
-            frame_idx += 1
-            continue
 
         times.append(t)
         centers.append(chosen_center)

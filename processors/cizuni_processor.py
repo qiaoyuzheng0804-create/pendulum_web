@@ -82,6 +82,7 @@ def process_cizuni(video_path, output_dir, model_path, calibration,
     orig_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     orig_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     if fps <= 0: raise RuntimeError("Cannot read FPS")
+    slow_motion_factor = max(1.0, float(slow_motion_factor))  # 0/负数会触发除零
 
     # Convert skip times (physical) to frame indices (video time).
     # sample_step is computed in video-time frames.
@@ -128,11 +129,20 @@ def process_cizuni(video_path, output_dir, model_path, calibration,
         progress_callback(total_frames, total_frames)
 
     if len(times_raw) < 2:
-        raise RuntimeError(f"YOLO detected 0 objects in {frame_idx} frames (conf={conf_threshold}).")
+        raise RuntimeError(
+            f"有效检测帧不足（仅 {len(times_raw)} 帧，conf={conf_threshold}）。"
+            "请检查摆球是否完整在画面内、光照是否充足。")
     times_raw = np.array(times_raw); angles_raw = np.array(angles_raw)
 
-    # Gaussian filter（照搬 cizuni3.py）
-    angles_filtered = gaussian_filter1d(angles_raw, sigma=gaussian_sigma)
+    # Gaussian filter（照搬 cizuni3.py）。
+    # 漏检帧不写入数据 → 时间轴有空洞，而 gaussian_filter1d 按索引平滑会把空洞
+    # 当均匀采样，产生时间扭曲。先插值到均匀时间网格上平滑，再插值回原时刻。
+    if np.all(np.diff(times_raw) > 0) and (times_raw[-1] - times_raw[0]) > 0:
+        t_uniform = np.linspace(times_raw[0], times_raw[-1], len(times_raw))
+        angles_filtered = gaussian_filter1d(np.interp(t_uniform, times_raw, angles_raw), sigma=gaussian_sigma)
+        angles_filtered = np.interp(times_raw, t_uniform, angles_filtered)
+    else:
+        angles_filtered = gaussian_filter1d(angles_raw, sigma=gaussian_sigma)
 
     # 输出 CSV（列名照搬原版）
     basename = os.path.splitext(os.path.basename(video_path))[0]

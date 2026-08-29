@@ -5,6 +5,7 @@ flask==3.0.3
 opencv-python==4.13.0.92
 Pillow>=10,<13
 ultralytics==8.2.103
+torch  # YOLOv8 runtime (pulled in by ultralytics, declared explicitly)
 
 # Numerical & data processing
 numpy==1.24.4

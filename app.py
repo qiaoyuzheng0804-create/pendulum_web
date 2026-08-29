@@ -261,6 +261,33 @@ def _cleanup_loop():
 _cleanup_thread = threading.Thread(target=_cleanup_loop, daemon=True)
 _cleanup_thread.start()
 
+
+def _sweep_uploads_on_startup(max_age_hours: float = 24.0):
+    """启动时清理 uploads/ 里超过 24h 的陈旧文件。
+
+    会话 TTL 清理只覆盖正常流程；崩溃/断电残留的视频（实测曾积到近 1GB）
+    只能靠这个兜底。
+    """
+    if not UPLOAD_FOLDER.is_dir():
+        return
+    cutoff = _time.time() - max_age_hours * 3600
+    freed = 0
+    try:
+        for p in UPLOAD_FOLDER.iterdir():
+            try:
+                if p.is_file() and p.stat().st_mtime < cutoff:
+                    freed += p.stat().st_size
+                    p.unlink()
+            except Exception:
+                pass
+    except Exception:
+        pass
+    if freed:
+        print(f"[Cleanup] 启动清理陈旧上传文件，释放 {freed / 1e6:.1f} MB", flush=True)
+
+
+_sweep_uploads_on_startup()
+
 # ---------- Helpers ----------
 
 
@@ -383,14 +410,32 @@ def _run_processing(session_id, data, progress_callback=None, stage_callback=Non
     output_dir = data.get("output_dir", "")
     calibration_points = data.get("calibration_points", [])
 
-    skip_start_sec = float(data.get("skip_start_sec", 0))
-    skip_end_sec = float(data.get("skip_end_sec", 0))
-    slow_motion_factor = float(data.get("slow_motion_factor", 1.0))
+    try:
+        skip_start_sec = float(data.get("skip_start_sec", 0))
+        skip_end_sec = float(data.get("skip_end_sec", 0))
+        slow_motion_factor = float(data.get("slow_motion_factor", 1.0))
+        known_physical_dist_m = float(data.get("known_physical_dist_m", 0.064))
+        target_cycles = int(data.get("target_cycles", 400))
+        samples_per_cycle = int(data.get("samples_per_cycle", 25))
+        num_pivots = int(data.get("num_pivots", 4))
+    except (TypeError, ValueError):
+        return None, {"error": "处理参数格式错误：数值参数不能为空或非数字。"}
     flip_angle = bool(data.get("flip_angle", False))
-    known_physical_dist_m = float(data.get("known_physical_dist_m", 0.064))
-    target_cycles = int(data.get("target_cycles", 400))
-    samples_per_cycle = int(data.get("samples_per_cycle", 25))
-    num_pivots = int(data.get("num_pivots", 4))
+
+    # ---- 参数护栏：畸形输入要得到清晰报错，而不是处理器深处 500/除零/NaN ----
+    if skip_start_sec < 0:
+        skip_start_sec = 0.0
+    if skip_end_sec < 0:
+        skip_end_sec = 0.0
+    if slow_motion_factor < 1.0:
+        # 0 会触发除零，<1 的快放无意义；前端 UI 本就限制 min=1
+        slow_motion_factor = 1.0
+    if known_physical_dist_m <= 0:
+        return None, {"error": "标尺距离必须为正数（单位：米）。"}
+    if target_cycles < 1:
+        target_cycles = 1
+    if samples_per_cycle < 2:
+        samples_per_cycle = 2
 
     if session_id not in session_store:
         return None, {"error": "Invalid session. Please re-upload the video."}
@@ -431,9 +476,17 @@ def _run_processing(session_id, data, progress_callback=None, stage_callback=Non
                ["vertical_1", "vertical_2", "horizontal_1", "horizontal_2"]
     else:
         keys = spec["keys"]
+    try:
+        parsed_pts = [(float(pt["x"]), float(pt["y"])) for pt in calibration_points]
+    except (KeyError, TypeError, ValueError):
+        return None, {"error": "标定数据格式错误，请重新标定。"}
+    # 两点完全重合会让比例尺/方向向量变成 0 或 inf，静默传播成错误结果
+    for i in range(len(parsed_pts)):
+        for j in range(i + 1, len(parsed_pts)):
+            if abs(parsed_pts[i][0] - parsed_pts[j][0]) < 1e-6 and abs(parsed_pts[i][1] - parsed_pts[j][1]) < 1e-6:
+                return None, {"error": "存在重合的标定点，请重新标定（任意两点不能完全相同）。"}
     for i, key in enumerate(keys):
-        pt = calibration_points[i]
-        calibration[key] = [pt["x"] / scale, pt["y"] / scale]
+        calibration[key] = [parsed_pts[i][0] / scale, parsed_pts[i][1] / scale]
 
     # Progress callback for frame reporting
     def _on_frame(current, total):
@@ -975,8 +1028,8 @@ def openmv_stream():
 
 @app.route("/api/openmv/record/start", methods=["POST"])
 def openmv_record_start():
-    """Start recording frames from OpenMV."""
-    result = openmv_manager.start_recording()
+    """Start recording frames from OpenMV (streamed straight to disk)."""
+    result = openmv_manager.start_recording(str(UPLOAD_FOLDER))
     if "error" in result:
         return jsonify(result), 400
     return jsonify(result)
@@ -1154,6 +1207,14 @@ def _watchdog_loop():
             if now - _exit_mark >= 5.0:
                 print("[Watchdog] 页面已全部关闭，自动停止服务器...", flush=True)
                 _shutdown_safety()
+                # os._exit 不执行 finally，pid 文件必须在这里删，
+                # 否则残留 pid 会让下次"启动服务器.bat"误杀无关进程
+                try:
+                    (BASE_DIR / "server.pid").unlink()
+                except FileNotFoundError:
+                    pass
+                except Exception:
+                    pass
                 os._exit(0)
         except Exception:
             pass

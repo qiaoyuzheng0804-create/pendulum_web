@@ -128,7 +128,7 @@ def _fit_underdamped(t, y, theta_eq0, output_dir):
                     loss="soft_l1", max_nfev=10000)
                 c = np.sum(res(r.x)**2)
                 if c < best_cost: best_cost, best = c, r
-            except: pass
+            except Exception as _fit_exc: print(f'[SR] 拟合初值组合失败: {_fit_exc}', flush=True)
     if best is None: return {"error": "欠阻尼拟合失败"}
 
     theta_eq, A, B, omega0, beta = best.x
@@ -182,7 +182,7 @@ def _fit_critical(t, y, theta_eq0, output_dir):
                     loss="soft_l1", max_nfev=10000)
                 c = np.sum(res(r.x)**2)
                 if c < best_cost: best_cost, best = c, r
-            except: pass
+            except Exception as _fit_exc: print(f'[SR] 拟合初值组合失败: {_fit_exc}', flush=True)
     if best is None: return {"error":"临界阻尼拟合失败"}
 
     theta_eq, A, B, lam = best.x
@@ -233,7 +233,7 @@ def _fit_overdamped(t, y, theta_eq0, output_dir):
                 loss="soft_l1", max_nfev=10000)
             c = np.sum(res(r.x)**2)
             if c < best_cost: best_cost, best = c, r
-        except: pass
+        except Exception as _fit_exc: print(f'[SR] 拟合初值组合失败: {_fit_exc}', flush=True)
     if best is None: return {"error":"过阻尼拟合失败"}
 
     theta_eq, C1, C2, lam1, lam2 = best.x
