@@ -3,9 +3,6 @@
 Adapted from analyze_pendulum_fixed.py — GUI calibration replaced with programmatic API.
 """
 
-import os as _os
-_os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
-
 import os
 import math
 import csv
@@ -18,6 +15,9 @@ from pathlib import Path
 from ultralytics import YOLO
 from filterpy.kalman import KalmanFilter
 from scipy.signal import find_peaks
+
+# 共享工具（KMP 环境变量在 common 导入时设置，须先于 torch/ultralytics 导入）
+from .common import best_detection_center
 
 
 # ---------- Kalman filter (RTS smoother) ----------
@@ -225,16 +225,10 @@ def process_niubai(video_path, output_dir, model_path, calibration,
 
         results = model(frame, conf=yolo_conf, iou=yolo_iou, verbose=False)[0]
 
-        best_box, best_conf = None, 0.0
-        for box in results.boxes:
-            if int(box.cls[0]) == target_class:
-                c = float(box.conf[0])
-                if c > best_conf:
-                    best_conf, best_box = c, box
-
-        if best_box is not None:
-            x1, y1, x2, y2 = best_box.xyxy[0].cpu().numpy()
-            cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
+        # 置信度最高且类别匹配的检测（与原内联循环逐字等价：严格大于挑选、同遍历顺序）
+        det = best_detection_center([results], {target_class})
+        if det is not None:
+            cx, cy, _best_conf = det
 
             xm, ym = pixel_to_physical((cx, cy), calib)
             angle = compute_angle(xm, ym, prev_angle)

@@ -3,11 +3,7 @@
 Adapted from danbai_ultimate_version.py — GUI calibration replaced with programmatic API.
 """
 
-import os as _os
-_os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
-
 import os
-import math
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -19,6 +15,9 @@ from typing import List, Tuple, Optional, Dict
 import cv2
 from scipy.signal import savgol_filter, find_peaks
 from ultralytics import YOLO
+
+# 共享工具（KMP 环境变量在 common 导入时设置，须先于 torch/ultralytics 导入）
+from .common import ensure_dir, normalize, make_odd, valid_savgol_window, angle_from_vertical
 
 
 @dataclass
@@ -59,34 +58,6 @@ class DanbaiConfig:
     save_angle_time_plot: bool = True
     plot_dpi: int = 150
     plot_figsize: Tuple[float, float] = (10, 6)
-
-
-def ensure_dir(path: str):
-    os.makedirs(path, exist_ok=True)
-
-
-def normalize(v: np.ndarray, eps: float = 1e-12) -> np.ndarray:
-    n = np.linalg.norm(v)
-    if n < eps:
-        return v.copy()
-    return v / n
-
-
-def make_odd(n: int) -> int:
-    return n if n % 2 == 1 else n + 1
-
-
-def valid_savgol_window(n: int, desired_window: int, polyorder: int) -> int:
-    if n <= polyorder + 1:
-        return 0
-    w = min(desired_window, n if n % 2 == 1 else n - 1)
-    if w <= polyorder:
-        w = make_odd(polyorder + 2)
-    if w > n:
-        w = n if n % 2 == 1 else n - 1
-    if w <= polyorder:
-        return 0
-    return w
 
 
 def moving_linear_fill_nan(arr: np.ndarray) -> np.ndarray:
@@ -142,13 +113,10 @@ def is_valid_zero_cross(a1: float, a2: float, gate_deg: float) -> bool:
     return (min(abs(a1), abs(a2)) <= gate_deg) or ((abs(a1) + abs(a2)) <= 2 * gate_deg)
 
 
+# 与 common.angle_from_vertical 逐位等价（相同 normalize → cross/dot → clip → atan2 序列），
+# 保留原名以维持函数签名与内部调用不变
 def signed_angle_deg_right_positive(vertical_unit: np.ndarray, radius_vec: np.ndarray) -> float:
-    r = normalize(radius_vec.astype(np.float64))
-    v = normalize(vertical_unit.astype(np.float64))
-    cross_z = v[0] * r[1] - v[1] * r[0]
-    dot_vr = np.clip(v[0] * r[0] + v[1] * r[1], -1.0, 1.0)
-    ang_std = math.degrees(math.atan2(cross_z, dot_vr))
-    return -ang_std
+    return angle_from_vertical(vertical_unit, radius_vec)
 
 
 def centers_to_angles(centers: np.ndarray, origin: np.ndarray, vertical_unit: np.ndarray) -> np.ndarray:

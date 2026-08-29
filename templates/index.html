@@ -432,6 +432,12 @@
   .upload-preview video{width:150px;max-height:86px;object-fit:cover;border-radius:6px;display:block;background:#000;}
   .upload-preview-name{flex:1;font-size:0.76rem;color:var(--t2);word-break:break-all;font-family:'JetBrains Mono','Consolas',monospace;line-height:1.5;}
 
+  /* 符号回归结果折叠块 */
+  .sr-details{margin-top:8px;}
+  .sr-details summary{cursor:pointer;font-size:0.8rem;font-weight:600;color:var(--a1);user-select:none;padding:2px 0;}
+  .sr-details summary:hover{text-decoration:underline;}
+  .sr-details[open] summary{margin-bottom:6px;}
+
   /* Reduced motion：尊重系统设置，关掉装饰性循环动画 */
   @media (prefers-reduced-motion: reduce){
     *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;}
@@ -1779,7 +1785,7 @@ async function startProcessing(){
             const sr=r.sr_result;
             h+=`<div class="result-item" style="grid-column:1/-1;background:color-mix(in srgb,var(--a1) 8%,var(--bg2));border-color:var(--a1);">`;
             h+=`<div class="key" style="color:var(--a1);font-size:0.85rem;">符号回归 · 运动方程识别 Symbolic Regression</div>`;
-            h+=`<div class="val" style="margin-top:8px;line-height:1.8;">`;
+            h+=`<details class="sr-details"><summary>展开查看方程与全部系数</summary><div class="val" style="margin-top:8px;line-height:1.8;">`;
             h+=`<b>阻尼类型:</b> ${sr.damping_type||'N/A'}<br>`;
             if(sr.omega0!=null)h+=`<b>固有频率 ω₀:</b> ${Number(sr.omega0).toFixed(6)} rad/s<br>`;
             if(sr.beta!=null){
@@ -1804,7 +1810,7 @@ async function startProcessing(){
               h+=`<b>加速度 R²:</b> ${Number(lc.accel_r2).toFixed(6)}`;
             }
             h+=`<br><b>来源:</b> ${sr.final_source||'N/A'}`;
-            h+=`</div></div>`;
+            h+=`</div></details></div></div>`;
           }
           resultGrid.innerHTML=h;animateCounters(resultGrid);cardResult.classList.remove('hidden');cardResult.scrollIntoView({behavior:'smooth'});showToast('处理完成！','info');
         }

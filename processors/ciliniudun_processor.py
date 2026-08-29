@@ -45,6 +45,8 @@ from scipy.ndimage import median_filter
 from scipy.optimize import linear_sum_assignment
 from ultralytics import YOLO
 
+from .common import normalize_strict
+
 plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "Arial Unicode MS"]
 plt.rcParams["axes.unicode_minus"] = False
 
@@ -76,12 +78,8 @@ VIDEO_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv", ".MP4", ".AVI", ".MOV")
 # ---------------------------------------------------------------------------
 # 基础工具
 # ---------------------------------------------------------------------------
-def normalize(v):
-    v = np.asarray(v, dtype=float)
-    n = np.linalg.norm(v)
-    if n < 1e-12:
-        raise ValueError("两点重合，无法确定方向。")
-    return v / n
+# 与 common.normalize_strict 同行为（零向量抛"两点重合"错），保留原名
+normalize = normalize_strict
 
 
 def compute_angle(center, origin, v_unit, right_positive=True, unit="deg"):

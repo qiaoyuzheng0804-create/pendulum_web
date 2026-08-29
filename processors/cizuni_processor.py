@@ -4,9 +4,11 @@
 import os, math, cv2, numpy as np, pandas as pd
 import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import matplotlib.font_manager as fm
 from scipy.ndimage import gaussian_filter1d
 from ultralytics import YOLO
+
+# 共享工具（KMP 环境变量在 common 导入时设置，须先于 torch/ultralytics 导入）
+from .common import setup_matplotlib_chinese, best_detection_center
 
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
@@ -20,39 +22,15 @@ GAUSSIAN_SIGMA  = 0.8
 TARGET_CLASS_IDS = None
 
 
-def _setup_matplotlib_chinese():
-    """Try to enable Chinese font in matplotlib (fallback gracefully)."""
-    chinese_fonts = [
-        "SimHei", "Microsoft YaHei", "WenQuanYi Micro Hei",
-        "Noto Sans CJK SC", "Source Han Sans CN", "PingFang SC",
-        "STHeiti", "Arial Unicode MS",
-    ]
-    available = {f.name for f in fm.fontManager.ttflist}
-    for font in chinese_fonts:
-        if font in available:
-            plt.rcParams["font.family"] = font
-            plt.rcParams["axes.unicode_minus"] = False
-            return True
-    plt.rcParams["axes.unicode_minus"] = False
-    return False
-
-
 def compute_angle(px, py, ox, oy, vertical_angle_rad, flip=False):
     dx, dy = px - ox, py - oy
     ca, sa = math.cos(-vertical_angle_rad), math.sin(-vertical_angle_rad)
     angle = math.degrees(math.atan2(dx*ca - dy*sa, dx*sa + dy*ca))
     return -angle if flip else angle
 
-def get_best_detection(results, target_class_ids):
-    if not results or len(results)==0: return None
-    r = results[0]
-    if r.boxes is None or len(r.boxes)==0: return None
-    bx = r.boxes.xywh.cpu().numpy(); bc = r.boxes.conf.cpu().numpy(); bcl = r.boxes.cls.cpu().numpy()
-    best = -1.0; bx_c, by_c = None, None
-    for box, conf, cls in zip(bx, bc, bcl):
-        if target_class_ids is not None and int(cls) not in target_class_ids: continue
-        if conf > best: best=float(conf); bx_c=float(box[0]); by_c=float(box[1])
-    return (bx_c, by_c, best) if bx_c is not None else None
+# 与 common.best_detection_center 逐字等价（同 xywh 遍历与严格大于挑选），保留原名
+get_best_detection = best_detection_center
+_setup_matplotlib_chinese = setup_matplotlib_chinese
 
 def auto_sample_step(total_frames, fps, ss, se, min_pts):
     sf = int(ss*fps); ef = int(se*fps); eff = total_frames - sf - ef
