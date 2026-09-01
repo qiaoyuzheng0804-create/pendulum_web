@@ -8,9 +8,6 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='22' r='4' fill='%234f46e5'/%3E%3Cline x1='16' y1='4' x2='16' y2='18' stroke='%237c3aed' stroke-width='1.5'/%3E%3C/svg%3E">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
@@ -21,50 +18,31 @@
      主色：靛蓝→紫单色系；语义色：成功=青 teal（与主色同属冷调，不再与紫冲突）、
      错误=红、警告=amber
      ============================================================ */
-  :root{--bg:#f3f5f9;--bg2:#e9edf3;--card:rgba(255,255,255,0.93);--border:#d4dae3;--ba:#a8b2bf;--text:#0f172a;--t2:#475569;--t3:#7d8da1;--a1:#4f46e5;--a2:#7c3aed;--a3:#8b5cf6;--a4:#a5b4fc;--red:#dc2626;--green:#0f766e;--amber:#d97706;--g1:rgba(79,70,229,0.06);--g2:rgba(124,58,237,0.04);--g3:rgba(79,70,229,0.03);--shadow:0 0 0 1px rgba(79,70,229,0.05),0 4px 16px rgba(15,23,42,0.07);--bt:#fff;--inp:#f8fafc;--modal:rgba(15,23,42,0.4);--i1b:rgba(124,58,237,0.1);--i1c:var(--a2);--i2b:rgba(139,92,246,0.1);--i2c:var(--a3);--i3b:rgba(79,70,229,0.1);--i3c:var(--a1);--i4b:rgba(15,118,110,0.1);--i4c:var(--green);--fr:rgba(79,70,229,0.14);--ci:inset 0 1px 0 rgba(0,0,0,0.03);--glc:rgba(79,70,229,0.07);}
+  :root{--bg:#f3f5f9;--bg2:#e9edf3;--card:#ffffff;--border:#d4dae3;--ba:#a8b2bf;--text:#0f172a;--t2:#475569;--t3:#7d8da1;--a1:#4f46e5;--a2:#7c3aed;--a3:#8b5cf6;--a4:#a5b4fc;--red:#dc2626;--green:#0f766e;--amber:#d97706;--g1:rgba(79,70,229,0.06);--g2:rgba(124,58,237,0.04);--g3:rgba(79,70,229,0.03);--shadow:0 1px 2px rgba(15,23,42,0.05),0 8px 24px rgba(15,23,42,0.06);--bt:#fff;--inp:#f8fafc;--modal:rgba(15,23,42,0.4);--i1b:rgba(124,58,237,0.1);--i1c:var(--a2);--i2b:rgba(139,92,246,0.12);--i2c:var(--a3);--i3b:rgba(79,70,229,0.1);--i3c:var(--a1);--i4b:rgba(15,118,110,0.1);--i4c:var(--green);--fr:rgba(79,70,229,0.14);--ci:inset 0 1px 0 rgba(0,0,0,0.03);}
 
   *{margin:0;padding:0;box-sizing:border-box;}
-  body{font-family:'Inter','PingFang SC','Microsoft YaHei','Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6;-webkit-font-smoothing:antialiased;transition:background 0.5s,color 0.5s;overflow-x:hidden;}
-  body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse 80% 60% at 50% -10%,var(--g1),transparent),radial-gradient(ellipse 50% 50% at 20% 70%,var(--g3),transparent),radial-gradient(ellipse 60% 50% at 80% 80%,var(--g2),transparent);}
+  body{font-family:system-ui,-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden;}
 
-  #bg-canvas{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:0.33;}
   .app{position:relative;z-index:1;max-width:980px;margin:0 auto;padding:32px 20px;}
 
   @keyframes fadeUp{from{opacity:0;transform:translateY(20px);}to{opacity:1;transform:translateY(0);}}
-  @keyframes breathe{0%,100%{box-shadow:0 0 0 0 rgba(56,189,248,0);}50%{box-shadow:0 0 0 6px rgba(56,189,248,0.08);}}
-  @keyframes borderGlow{0%{border-color:var(--a1);}33%{border-color:var(--a2);}66%{border-color:var(--a3);}100%{border-color:var(--a1);}}
   @keyframes toastIn{from{opacity:0;transform:translateX(40px);}to{opacity:1;transform:translateX(0);}}
   @keyframes toastOut{from{opacity:1;transform:translateX(0);}to{opacity:0;transform:translateX(40px);}}
   @keyframes swing{0%{transform:rotate(-14deg);}12.5%{transform:rotate(-9.9deg);}25%{transform:rotate(0deg);}37.5%{transform:rotate(9.9deg);}50%{transform:rotate(14deg);}62.5%{transform:rotate(9.9deg);}75%{transform:rotate(0deg);}87.5%{transform:rotate(-9.9deg);}100%{transform:rotate(-14deg);}}
   @keyframes dampedSwing{0%{transform:rotate(-16deg);}10%{transform:rotate(-11.3deg);}20%{transform:rotate(0deg);}30%{transform:rotate(9deg);}40%{transform:rotate(2.5deg);}50%{transform:rotate(-5.5deg);}60%{transform:rotate(-0.5deg);}70%{transform:rotate(2.5deg);}80%{transform:rotate(0deg);}90%{transform:rotate(-1deg);}100%{transform:rotate(0deg);}}
   @keyframes torsionRotate{0%{transform:rotate(-25deg);}12.5%{transform:rotate(-17.7deg);}25%{transform:rotate(0deg);}37.5%{transform:rotate(17.7deg);}50%{transform:rotate(25deg);}62.5%{transform:rotate(17.7deg);}75%{transform:rotate(0deg);}87.5%{transform:rotate(-17.7deg);}100%{transform:rotate(-25deg);}}
   @keyframes torsionRing{0%{transform:rotate(0deg);}25%{transform:rotate(90deg);}50%{transform:rotate(180deg);}75%{transform:rotate(270deg);}100%{transform:rotate(360deg);}}
-  @keyframes starFall1{0%{opacity:0;transform:translateY(-80px) rotate(-12deg) scale(0.85);}50%{opacity:0.7;transform:translateY(8px) rotate(3deg) scale(1.02);}70%{opacity:1;transform:translateY(-3px) rotate(-1deg) scale(0.98);}100%{opacity:1;transform:translateY(0) rotate(0deg) scale(1);}}
-  @keyframes starFall2{0%{opacity:0;transform:translateY(-70px) rotate(10deg) scale(0.8);}55%{opacity:0.7;transform:translateY(6px) rotate(-2deg) scale(1.03);}75%{opacity:1;transform:translateY(-2px) rotate(1deg) scale(0.99);}100%{opacity:1;transform:translateY(0) rotate(0deg) scale(1);}}
-  @keyframes starFall3{0%{opacity:0;transform:translateY(-90px) rotate(-8deg) scale(0.75);}45%{opacity:0.6;transform:translateY(10px) rotate(4deg) scale(1.04);}65%{opacity:1;transform:translateY(-4px) rotate(-2deg) scale(0.97);}100%{opacity:1;transform:translateY(0) rotate(0deg) scale(1);}}
-  @keyframes sparklePop{0%{opacity:0;transform:scale(0);}50%{opacity:1;transform:scale(1.4);}100%{opacity:0;transform:scale(0);}}
-  @keyframes pendulumEnter{0%{opacity:0;transform:perspective(800px) rotateX(25deg) rotateY(-30deg) translateY(-40px);transform-origin:top center;}25%{opacity:0.8;transform:perspective(800px) rotateX(-5deg) rotateY(12deg) translateY(0);}40%{opacity:1;transform:perspective(800px) rotateX(4deg) rotateY(-6deg) translateY(-4px);}60%{opacity:1;transform:perspective(800px) rotateX(-2deg) rotateY(3deg) translateY(1px);}80%{opacity:1;transform:perspective(800px) rotateX(1deg) rotateY(-1deg) translateY(0);}100%{opacity:1;transform:perspective(800px) rotateX(0) rotateY(0) translateY(0);}}
-  @keyframes titleFlip{0%{opacity:0;transform:perspective(800px) rotateX(-60deg) rotateY(-20deg) translateY(-30px);}40%{opacity:1;transform:perspective(800px) rotateX(8deg) rotateY(4deg) translateY(0);}60%{transform:perspective(800px) rotateX(-3deg) rotateY(-1deg);}80%{transform:perspective(800px) rotateX(1deg) rotateY(0deg);}100%{transform:perspective(800px) rotateX(0deg) rotateY(0deg) translateY(0);}}
-  @keyframes titleFlip{0%{opacity:0;transform:perspective(800px) rotateX(-60deg) rotateY(-20deg) translateY(-30px);}40%{opacity:1;transform:perspective(800px) rotateX(8deg) rotateY(4deg) translateY(0);}60%{transform:perspective(800px) rotateX(-3deg) rotateY(-1deg);}80%{transform:perspective(800px) rotateX(1deg) rotateY(0deg);}100%{transform:perspective(800px) rotateX(0deg) rotateY(0deg) translateY(0);}}
-  @keyframes dotPulse{0%{transform:translateY(-5px);box-shadow:0 0 20px var(--fr),0 0 40px var(--fr);}12.5%{transform:translateY(-2px);}25%{transform:translateY(2px);box-shadow:0 0 28px var(--fr),0 0 56px var(--fr);}37.5%{transform:translateY(5px);}50%{transform:translateY(5px);box-shadow:0 0 20px var(--fr),0 0 40px var(--fr);}62.5%{transform:translateY(2px);}75%{transform:translateY(-2px);box-shadow:0 0 28px var(--fr),0 0 56px var(--fr);}87.5%{transform:translateY(-5px);}100%{transform:translateY(-5px);box-shadow:0 0 20px var(--fr),0 0 40px var(--fr);}}
-  @keyframes formulaFloat{0%{opacity:0;transform:translateY(0) rotate(0deg);}10%{opacity:0.18;}90%{opacity:0.18;}100%{opacity:0;transform:translateY(-120px) rotate(3deg);}}
+  @keyframes dotPulse{0%{transform:translateY(-5px);}12.5%{transform:translateY(-2px);}25%{transform:translateY(2px);}37.5%{transform:translateY(5px);}50%{transform:translateY(5px);}62.5%{transform:translateY(2px);}75%{transform:translateY(-2px);}87.5%{transform:translateY(-5px);}100%{transform:translateY(-5px);}}
 
   #toast-container{position:fixed;top:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:10px;pointer-events:none;}
-  .toast{background:var(--card);border:1px solid var(--ba);border-radius:10px;padding:14px 20px;color:var(--text);font-size:0.88rem;font-weight:500;box-shadow:0 8px 24px rgba(0,0,0,0.4);animation:toastIn 0.35s ease-out;pointer-events:auto;backdrop-filter:blur(12px);max-width:380px;}
+  .toast{background:var(--card);border:1px solid var(--ba);border-radius:10px;padding:14px 20px;color:var(--text);font-size:0.88rem;font-weight:500;box-shadow:0 8px 24px rgba(15,23,42,0.12);animation:toastIn 0.35s ease-out;pointer-events:auto;max-width:380px;}
   .toast.removing{animation:toastOut 0.3s ease-in forwards;}
   .toast.error{border-left:3px solid var(--red);}
-  .toast.info{border-left:3px solid var(--a2);}
-
-  /* Formula watermarks（固定灰蓝低调色，无发光） */
-  .formula-text{position:fixed;pointer-events:none;z-index:0;font-family:'Georgia','Times New Roman',serif;font-style:italic;font-size:1.25rem;opacity:0;animation:formulaFloat 12s ease-in-out infinite;white-space:nowrap;color:var(--t3);}
-  /* 根号上横线：Unicode √ 无 vinculum，用 border-top 补画 */
-  .fsqrt{display:inline-block;line-height:1;}
-  .fsqrt .frad{display:inline-block;border-top:0.075em solid currentColor;padding:0.12em 0.18em 0 0.12em;margin-left:-0.08em;}
+  .toast.info{border-left:3px solid var(--a1);}
 
   /* Header */
   .header{text-align:center;margin-bottom:28px;}
-  .header h1{font-size:2.1rem;font-weight:800;letter-spacing:-0.03em;background:linear-gradient(105deg,var(--a2) 0%,var(--a1) 26%,var(--a3) 52%,var(--a1) 78%,var(--a2) 100%);background-size:220% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 2px 14px var(--fr));animation:titleFlip 1.2s cubic-bezier(0.22,0.61,0.36,1) both,titleShimmer 9s linear infinite;}
-  @keyframes titleShimmer{from{background-position:0% 50%;}to{background-position:-220% 50%;}}
+  .header h1{font-size:2.35rem;font-weight:800;letter-spacing:-0.025em;color:#000;animation:fadeUp 0.6s ease-out both;}
   .header .sub{animation:fadeUp 0.6s ease-out 0.6s both;color:var(--t3);margin-top:6px;font-size:0.88rem;}
   .header .sub em{font-style:normal;color:var(--a1);}
 
@@ -72,29 +50,23 @@
   .step-bar-wrap{position:sticky;top:0;z-index:100;padding:14px 20px 12px;margin-bottom:24px;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border);}
   .step-bar{display:flex;align-items:flex-start;justify-content:center;gap:0;max-width:720px;margin:0 auto;position:relative;}
   .step-node{display:flex;flex-direction:column;align-items:center;gap:8px;position:relative;flex-shrink:0;z-index:1;min-width:86px;}
-  .step-dot{display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;font-weight:700;font-size:0.85rem;font-family:'JetBrains Mono','Consolas',monospace;background:var(--bg2);border:2px solid var(--border);color:var(--t3);position:relative;z-index:1;transition:background .5s,color .5s,border-color .5s,box-shadow .5s,transform .5s cubic-bezier(.22,.61,.36,1);}
+  .step-dot{display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;font-weight:700;font-size:0.85rem;font-family:'Consolas',monospace;background:var(--bg2);border:2px solid var(--border);color:var(--t3);position:relative;z-index:1;transition:background .5s,color .5s,border-color .5s,box-shadow .5s,transform .5s cubic-bezier(.22,.61,.36,1);}
   .step-dot::after{content:'';position:absolute;inset:-7px;border-radius:50%;pointer-events:none;}
   .step-dot.done{background:linear-gradient(135deg,color-mix(in srgb,var(--a1) 82%,#fff),var(--a1));border-color:transparent;color:#fff;box-shadow:0 4px 16px color-mix(in srgb,var(--a1) 35%,transparent);}
   .step-dot.done::after{border:1px solid color-mix(in srgb,var(--a1) 40%,transparent);}
-  .step-dot.current{background:linear-gradient(135deg,var(--a1),var(--a2));border-color:transparent;color:var(--bt);box-shadow:0 6px 20px var(--fr);animation:stepPop .55s cubic-bezier(.34,1.56,.64,1) both;}
-  .step-dot.current::after{border:2px solid var(--a1);animation:stepHalo 2s ease-out infinite;}
+  .step-dot.current{background:var(--a1);border-color:transparent;color:var(--bt);box-shadow:0 4px 14px var(--fr);animation:stepPop .55s cubic-bezier(.34,1.56,.64,1) both;}
   .step-line-wrap{flex:1;display:flex;align-items:center;min-width:26px;max-width:110px;height:42px;}
   .step-line{width:100%;height:4px;border-radius:2px;background:var(--border);position:relative;overflow:hidden;}
-  .step-line::after{content:'';position:absolute;inset:0;border-radius:2px;background:linear-gradient(90deg,var(--a2),var(--a1));transform:scaleX(0);transform-origin:left center;transition:transform .7s cubic-bezier(.22,.61,.36,1);}
+  .step-line::after{content:'';position:absolute;inset:0;border-radius:2px;background:var(--a1);transform:scaleX(0);transform-origin:left center;transition:transform .7s cubic-bezier(.22,.61,.36,1);}
   .step-line.done::after{transform:scaleX(1);}
-  .step-line.current::after{transform:scaleX(.5);background:linear-gradient(90deg,var(--a1),var(--a2),var(--a1));background-size:200% 100%;animation:lineGrow 1.8s ease-in-out infinite alternate,lineShift 2.4s linear infinite;}
+  .step-line.current::after{transform:scaleX(.5);}
   @keyframes stepPop{0%{transform:scale(.5);}62%{transform:scale(1.14);}100%{transform:scale(1);}}
-  @keyframes stepHalo{0%{transform:scale(.9);opacity:.75;}75%,100%{transform:scale(1.5);opacity:0;}}
-  @keyframes lineGrow{from{transform:scaleX(.45);}to{transform:scaleX(1);}}
-  @keyframes lineShift{from{background-position:0% 0;}to{background-position:-200% 0;}}
   .step-label{font-size:0.68rem;color:var(--t3);font-weight:600;white-space:nowrap;text-transform:uppercase;letter-spacing:0.05em;padding:3px 12px;border-radius:999px;border:1px solid transparent;transition:color .45s,background .45s,border-color .45s;}
   .step-node.current .step-label{color:var(--a1);background:var(--g1);border-color:var(--fr);}
   .step-node.done .step-label{color:var(--a1);}
 
-  /* Cards with 3D tilt */
-  .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;margin-bottom:20px;box-shadow:var(--shadow),var(--ci);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);transition:transform 0.15s ease-out,border-color 0.3s,background 0.5s,box-shadow 0.3s;position:relative;transform-style:preserve-3d;perspective:1000px;}
-  .card::before{content:'';position:absolute;inset:0;border-radius:16px;pointer-events:none;border:1px solid var(--glc);opacity:0;transition:opacity 0.3s;}
-  .card:hover::before{opacity:1;}
+  /* Cards */
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:28px;margin-bottom:20px;box-shadow:var(--shadow);transition:border-color 0.3s;position:relative;}
   .card:hover{border-color:var(--ba);}
   .card-header{display:flex;align-items:center;gap:12px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border);}
   .card-header h2{font-size:1.05rem;font-weight:600;}
@@ -102,26 +74,29 @@
 
   /* Type selector cards */
   .type-cards{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-bottom:20px;}
-  .type-card{position:relative;background:var(--bg2);border:2px solid var(--border);border-radius:14px;padding:22px 16px 16px;cursor:pointer;text-align:center;transition:all 0.35s;overflow:hidden;transform-style:preserve-3d;}
-  .type-card:hover{border-color:var(--a2);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,0.3);}
-  .type-card:hover .p-icon{animation-duration:1.2s;}
-  .type-card:hover .d-icon{animation-duration:1.5s;}
-  .type-card:hover .t-icon{animation-duration:1.8s;}
-  .type-card.selected{border-color:var(--a1);box-shadow:0 0 0 4px var(--fr);background:color-mix(in srgb,var(--a1) 6%,var(--bg2));animation:borderGlow 3s ease-in-out infinite;}
-  .type-card[data-type="cizuni"]{border-radius:6px;}
-  .type-card[data-type="ciliniudun"]{border-radius:10px;}
+  .type-card{position:relative;background:var(--bg2);border:2px solid var(--border);border-radius:14px;padding:22px 16px 16px;cursor:pointer;text-align:center;transition:border-color 0.25s,box-shadow 0.25s;}
+  .type-card:hover{border-color:var(--ba);box-shadow:0 8px 24px rgba(15,23,42,0.08);}
+  .type-card.selected{border-color:var(--a1);box-shadow:0 0 0 3px var(--fr);background:color-mix(in srgb,var(--a1) 6%,var(--bg2));}
   .type-card .icon-area{width:70px;height:70px;margin:0 auto 10px;position:relative;display:flex;align-items:center;justify-content:center;}
   .type-card .name{font-weight:700;font-size:0.95rem;margin-bottom:2px;}
   .type-card .eng{font-size:0.7rem;color:var(--t3);text-transform:uppercase;letter-spacing:0.04em;}
   .type-card .check{position:absolute;top:10px;right:12px;width:22px;height:22px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:0.7rem;transition:all 0.3s;}
   .type-card.selected .check{border-color:var(--a1);background:var(--a1);color:var(--bt);}
-  .type-card::after{content:'';position:absolute;top:-4px;right:18px;width:6px;height:6px;border-radius:50%;background:var(--a1);animation:sparklePop 1.2s ease-out both;}
+  .type-card:hover .p-icon{animation:swing 2s linear infinite;}
+  .type-card:hover .d-icon{animation:dampedSwing 2.5s linear infinite;}
+  .type-card:hover .t-icon{animation:torsionRotate 3s linear infinite;}
+  .type-card:hover .t-icon::after{animation:torsionRing 3s linear infinite;}
+  .type-card:hover .np1{animation:nEndL 2.8s ease-in-out infinite;}
+  .type-card:hover .np2{animation:nMidA 1.4s ease-in-out infinite;}
+  .type-card:hover .np3{animation:nMidB 1.4s ease-in-out infinite;}
+  .type-card:hover .np4{animation:nMidA 1.4s ease-in-out infinite .35s;}
+  .type-card:hover .np5{animation:nEndR 2.8s ease-in-out infinite;}
 
   /* Video source acquisition cards (upload / experiment) */
   .acq-cards{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-bottom:20px;}
-  .acq-card{position:relative;background:var(--bg2);border:2px solid var(--border);border-radius:14px;padding:18px 16px 14px;cursor:pointer;text-align:center;transition:all 0.35s;overflow:hidden;transform-style:preserve-3d;}
-  .acq-card:hover{border-color:var(--a2);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,0.3);}
-  .acq-card.selected{border-color:var(--a1);box-shadow:0 0 0 4px var(--fr);background:color-mix(in srgb,var(--a1) 6%,var(--bg2));animation:borderGlow 3s ease-in-out infinite;}
+  .acq-card{position:relative;background:var(--bg2);border:2px solid var(--border);border-radius:14px;padding:18px 16px 14px;cursor:pointer;text-align:center;transition:border-color 0.25s,box-shadow 0.25s;}
+  .acq-card:hover{border-color:var(--ba);box-shadow:0 8px 24px rgba(15,23,42,0.08);}
+  .acq-card.selected{border-color:var(--a1);box-shadow:0 0 0 3px var(--fr);background:color-mix(in srgb,var(--a1) 6%,var(--bg2));}
   .acq-card .acq-icon{font-size:2rem;margin-bottom:8px;opacity:0.85;}
   .acq-card .name{font-weight:700;font-size:0.92rem;margin-bottom:2px;}
   .acq-card .eng{font-size:0.68rem;color:var(--t3);text-transform:uppercase;letter-spacing:0.04em;}
@@ -129,16 +104,16 @@
   .acq-card .check{position:absolute;top:10px;right:12px;width:22px;height:22px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:0.7rem;transition:all 0.3s;}
   .acq-card.selected .check{border-color:var(--a1);background:var(--a1);color:var(--bt);}
 
-  /* Pendulum icons */
-  .p-icon{position:relative;width:4px;height:36px;background:var(--t3);border-radius:2px;transform-origin:50% 0%;animation:swing 2s linear infinite;transition:animation-duration 0.3s;}
-  .p-icon::after{content:'';position:absolute;bottom:-10px;left:50%;transform:translateX(-50%);width:14px;height:14px;border-radius:50%;background:var(--a1);box-shadow:0 0 10px var(--a1);}
-  .d-icon{position:relative;width:3px;height:28px;background:var(--t3);border-radius:2px;transform-origin:50% 0%;animation:dampedSwing 2.5s linear infinite;transition:animation-duration 0.3s;}
-  .d-icon::after{content:'';position:absolute;bottom:-14px;left:50%;transform:translateX(-50%);width:18px;height:12px;border-radius:4px;background:linear-gradient(135deg,var(--a3),var(--a2));box-shadow:0 0 12px var(--a3),inset 0 1px 0 rgba(255,255,255,0.2);}
+  /* Pendulum icons（静态；hover 由 .type-card:hover 触发摆动） */
+  .p-icon{position:relative;width:4px;height:36px;background:var(--t3);border-radius:2px;transform-origin:50% 0%;}
+  .p-icon::after{content:'';position:absolute;bottom:-10px;left:50%;transform:translateX(-50%);width:14px;height:14px;border-radius:50%;background:var(--a1);}
+  .d-icon{position:relative;width:3px;height:28px;background:var(--t3);border-radius:2px;transform-origin:50% 0%;}
+  .d-icon::after{content:'';position:absolute;bottom:-14px;left:50%;transform:translateX(-50%);width:18px;height:12px;border-radius:4px;background:var(--a1);box-shadow:inset 0 1px 0 rgba(255,255,255,0.2);}
   .d-env{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:120px;height:50px;opacity:0.4;}
   .d-env svg{width:100%;height:100%;}
-  .t-icon{position:relative;width:36px;height:36px;border:3px solid var(--a2);border-radius:8px;animation:torsionRotate 3s linear infinite;display:flex;align-items:center;justify-content:center;transition:animation-duration 0.3s;}
-  .t-icon::before{content:'';width:4px;height:4px;border-radius:50%;background:var(--a2);}
-  .t-icon::after{content:'';position:absolute;inset:-2px;border-radius:10px;border:1.5px solid transparent;border-top-color:var(--a1);border-bottom-color:var(--a3);animation:torsionRing 3s linear infinite;}
+  .t-icon{position:relative;width:36px;height:36px;border:3px solid var(--a1);border-radius:8px;display:flex;align-items:center;justify-content:center;}
+  .t-icon::before{content:'';width:4px;height:4px;border-radius:50%;background:var(--a1);}
+  .t-icon::after{content:'';position:absolute;inset:-2px;border-radius:10px;border:1.5px solid transparent;border-top-color:var(--a1);border-bottom-color:var(--a1);}
 
   /* Magnetic Newton's cradle icon: 5 pendulums, classic sequential impact motion
      (left ball swings out & returns → impact → right ball swings out & returns → impact).
@@ -148,12 +123,12 @@
   .n-icon{position:relative;width:66px;height:34px;}
   .n-pend{position:absolute;top:0;width:12px;height:32px;transform-origin:50% 0%;will-change:transform;}
   .n-pend .n-string{position:absolute;top:0;left:50%;width:2px;height:19px;margin-left:-1px;background:var(--t3);border-radius:1px;}
-  .n-pend .n-ball{position:absolute;bottom:0;left:50%;width:12px;height:12px;margin-left:-6px;border-radius:50%;background:radial-gradient(circle at 35% 30%,var(--a4),var(--a2) 60%,var(--a1));box-shadow:0 0 10px var(--a1),inset 0 1px 1px rgba(255,255,255,0.35);}
-  .np1{left:0;animation:nEndL 2.8s ease-in-out infinite;}
-  .np2{left:13px;animation:nMidA 1.4s ease-in-out infinite;}
-  .np3{left:26px;animation:nMidB 1.4s ease-in-out infinite;}
-  .np4{left:39px;animation:nMidA 1.4s ease-in-out infinite .35s;}
-  .np5{left:52px;animation:nEndR 2.8s ease-in-out infinite;}
+  .n-pend .n-ball{position:absolute;bottom:0;left:50%;width:12px;height:12px;margin-left:-6px;border-radius:50%;background:var(--a1);box-shadow:inset 0 1px 1px rgba(255,255,255,0.35);}
+  .np1{left:0;}
+  .np2{left:13px;}
+  .np3{left:26px;}
+  .np4{left:39px;}
+  .np5{left:52px;}
   @keyframes nEndL{0%{transform:rotate(0deg);}25%{transform:rotate(20deg);}50%{transform:rotate(0deg);}100%{transform:rotate(0deg);}}
   @keyframes nEndR{0%{transform:rotate(0deg);}50%{transform:rotate(0deg);}75%{transform:rotate(-20deg);}100%{transform:rotate(0deg);}}
   @keyframes nMidA{0%{transform:rotate(0deg);}25%{transform:rotate(1.8deg);}50%{transform:rotate(-1.8deg);}75%{transform:rotate(1.2deg);}100%{transform:rotate(0deg);}}
@@ -164,23 +139,22 @@
   .field-label .zh{font-size:0.85rem;font-weight:600;color:var(--text);}
   .field-label .en{font-size:0.68rem;font-weight:500;color:var(--t3);text-transform:uppercase;letter-spacing:0.06em;}
   .input-wrap{position:relative;display:flex;align-items:center;}
-  .input-wrap input{width:100%;padding:10px 14px;padding-right:52px;border-radius:10px;border:1px solid var(--border);background:var(--inp);color:var(--text);font-size:0.92rem;font-family:'JetBrains Mono','Cascadia Code','Consolas',monospace;transition:border-color 0.2s,box-shadow 0.2s,background 0.5s;}
+  .input-wrap input{width:100%;padding:10px 14px;padding-right:52px;border-radius:10px;border:1px solid var(--border);background:var(--inp);color:var(--text);font-size:0.92rem;font-family:'Cascadia Code','Consolas',monospace;transition:border-color 0.2s,box-shadow 0.2s,background 0.5s;}
   .input-wrap input:focus{outline:none;border-color:var(--a1);box-shadow:0 0 0 3px var(--fr);}
-  .input-wrap .unit{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:0.7rem;color:var(--t3);font-weight:500;pointer-events:none;font-family:'Inter','Segoe UI',sans-serif;background:var(--bg);padding:2px 6px;border-radius:4px;}
-  input[type="text"]{font-family:'JetBrains Mono','Cascadia Code','Consolas',monospace;}
+  .input-wrap .unit{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:0.7rem;color:var(--t3);font-weight:500;pointer-events:none;background:var(--bg);padding:2px 6px;border-radius:4px;}
+  input[type="text"]{font-family:'Cascadia Code','Consolas',monospace;}
   select,input[type="text"]{width:100%;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:var(--inp);color:var(--text);font-size:0.92rem;font-family:inherit;transition:border-color 0.2s,box-shadow 0.2s,background 0.5s;}
   select:focus,input[type="text"]:focus{outline:none;border-color:var(--a1);box-shadow:0 0 0 3px var(--fr);}
 
   /* Param cards */
   .param-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;}
-  .param-card{background:var(--bg2);border:1px solid var(--border);border-radius:11px;padding:14px 16px;transition:border-color 0.3s,transform 0.2s;}
-  .param-card:hover{border-color:var(--ba);transform:translateY(-1px);}
+  .param-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;transition:border-color 0.3s;}
   .param-card .p-label{font-size:0.72rem;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;}
   .section-label{font-size:0.7rem;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:0.09em;margin-bottom:14px;padding-bottom:8px;border-bottom:1px dashed var(--border);}
 
   /* Upload */
-  .upload-zone{border:2px dashed var(--border);border-radius:14px;padding:40px 24px;text-align:center;cursor:pointer;transition:all 0.35s;background:var(--bg2);}
-  .upload-zone:hover{border-color:var(--a2);transform:translateY(-1px);animation:breathe 2s ease-in-out infinite;}
+  .upload-zone{border:2px dashed var(--border);border-radius:14px;padding:40px 24px;text-align:center;cursor:pointer;transition:border-color 0.25s,background 0.25s;background:var(--bg2);}
+  .upload-zone:hover{border-color:var(--a1);}
   .upload-zone.dragover{border-color:var(--a1);background:var(--g1);transform:scale(1.01);}
   .upload-zone.has-file{border-color:var(--green);border-style:solid;}
   .upload-zone .cloud{font-size:2.5rem;margin-bottom:8px;opacity:0.7;transition:all 0.3s;display:inline-block;}
@@ -190,7 +164,7 @@
   /* Buttons */
   .btn{display:inline-flex;align-items:center;gap:6px;padding:10px 20px;border-radius:10px;border:none;font-size:0.88rem;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.2s;white-space:nowrap;}
   .btn:disabled{opacity:0.4;cursor:not-allowed;transform:none!important;}
-  .btn-primary{background:var(--a1);color:var(--bt);}.btn-primary:hover:not(:disabled){filter:brightness(1.15);transform:translateY(-1px);box-shadow:0 4px 14px var(--fr);}
+  .btn-primary{background:var(--a1);color:var(--bt);}.btn-primary:hover:not(:disabled){background:color-mix(in srgb,var(--a1) 90%,#000);transform:translateY(-1px);box-shadow:0 4px 14px var(--fr);}
   .btn-secondary{background:var(--border);color:var(--text);}.btn-secondary:hover:not(:disabled){background:var(--ba);}
   .btn-outline{background:transparent;border:1px solid var(--border);color:var(--text);border-radius:10px;}.btn-outline:hover:not(:disabled){border-color:var(--t3);}
   .btn-lg{padding:13px 30px;font-size:0.95rem;border-radius:11px;}
@@ -205,7 +179,7 @@
   /* Modal */
   .modal-overlay{display:none;position:fixed;inset:0;z-index:1000;background:var(--modal);backdrop-filter:blur(6px);align-items:center;justify-content:center;}
   .modal-overlay.active{display:flex;}
-  .modal{background:var(--card);border:1px solid var(--ba);border-radius:16px;box-shadow:0 24px 64px rgba(0,0,0,0.6);max-width:95vw;max-height:95vh;width:auto;display:flex;flex-direction:column;}
+  .modal{background:var(--card);border:1px solid var(--ba);border-radius:14px;box-shadow:0 24px 64px rgba(15,23,42,0.25);max-width:95vw;max-height:95vh;width:auto;display:flex;flex-direction:column;}
   .modal-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);}
   .modal-header h3{font-size:1rem;font-weight:600;}
   .modal-body{padding:0;overflow:auto;display:flex;align-items:center;justify-content:center;background:var(--bg2);}
@@ -215,17 +189,17 @@
 
   /* Status */
   .status{padding:14px 18px;border-radius:10px;margin-top:16px;display:none;font-size:0.88rem;font-weight:500;}
-  .status.info{display:block;background:color-mix(in srgb,var(--a2) 8%,transparent);border:1px solid var(--a2);color:var(--a2);}
+  .status.info{display:block;background:color-mix(in srgb,var(--a1) 8%,transparent);border:1px solid var(--a1);color:var(--a1);}
   .status.success{display:block;background:color-mix(in srgb,var(--green) 8%,transparent);border:1px solid var(--green);color:var(--green);}
   .status.error{display:block;background:color-mix(in srgb,var(--red) 8%,transparent);border:1px solid var(--red);color:var(--red);}
   .progress-bar{width:100%;height:5px;border-radius:3px;background:var(--border);margin-top:10px;overflow:hidden;}
-  .progress-bar .fill{position:relative;height:100%;border-radius:3px;background:linear-gradient(90deg,var(--a1),var(--a2));transition:width 0.3s;width:0%;overflow:hidden;}
+  .progress-bar .fill{position:relative;height:100%;border-radius:3px;background:var(--a1);transition:width 0.3s;width:0%;overflow:hidden;}
   .progress-bar .fill::after{content:'';position:absolute;inset:0;background:repeating-linear-gradient(45deg,rgba(255,255,255,0.28) 0 8px,transparent 8px 18px);animation:stripeMove 0.9s linear infinite;}
   @keyframes stripeMove{to{background-position:25.5px 0;}}
-  .progress-text{font-size:0.75rem;color:var(--t2);margin-top:4px;font-family:'JetBrains Mono','Consolas',monospace;}
+  .progress-text{font-size:0.75rem;color:var(--t2);margin-top:4px;font-family:'Consolas',monospace;}
 
   /* Copy button */
-  .copy-btn{display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:5px;border:1px solid var(--border);background:var(--bg2);color:var(--t3);cursor:pointer;font-size:0.68rem;font-family:'Inter',sans-serif;transition:all 0.2s;margin-left:8px;}
+  .copy-btn{display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:5px;border:1px solid var(--border);background:var(--bg2);color:var(--t3);cursor:pointer;font-size:0.68rem;transition:all 0.2s;margin-left:8px;}
   .copy-btn:hover{border-color:var(--a1);color:var(--a1);}
   .copy-btn.copied{border-color:var(--green);color:var(--green);}
 
@@ -233,7 +207,7 @@
   .result-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:16px;}
   .result-item{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;}
   .result-item .key{font-size:0.7rem;color:var(--t3);text-transform:uppercase;letter-spacing:0.06em;}
-  .result-item .val{font-size:0.88rem;font-weight:600;margin-top:4px;word-break:break-all;font-family:'JetBrains Mono','Consolas',monospace;}
+  .result-item .val{font-size:0.88rem;font-weight:600;margin-top:4px;word-break:break-all;font-family:'Consolas',monospace;}
 
   /* Loading */
   .load-pendulum{display:inline-flex;align-items:center;gap:10px;}
@@ -242,14 +216,14 @@
 
   /* Theme toggle 按钮已随深色模式移除 */
 
-  /* Entrance animations */
-  .type-cards .type-card{animation:starFall1 1.2s cubic-bezier(0.22,0.61,0.36,1) both;}
-  .type-cards .type-card:nth-child(2){animation-delay:0.15s;}
-  .type-cards .type-card:nth-child(3){animation-delay:0.3s;}
-  .anim-card{animation:starFall1 0.9s cubic-bezier(0.22,0.61,0.36,1) both;}
-  .anim-card:nth-child(2){animation-name:starFall2;animation-delay:0.15s;}
-  .anim-card:nth-child(3){animation-name:starFall3;animation-delay:0.3s;}
-  .anim-card:nth-child(4){animation:starFall1 0.9s cubic-bezier(0.22,0.61,0.36,1) both;animation-delay:0.45s;}
+  /* Entrance animations（统一为淡入上移，仅一次） */
+  .type-cards .type-card{animation:fadeUp 0.6s ease-out both;}
+  .type-cards .type-card:nth-child(2){animation-delay:0.08s;}
+  .type-cards .type-card:nth-child(3){animation-delay:0.16s;}
+  .anim-card{animation:fadeUp 0.6s ease-out both;}
+  .anim-card:nth-child(2){animation-delay:0.08s;}
+  .anim-card:nth-child(3){animation-delay:0.16s;}
+  .anim-card:nth-child(4){animation-delay:0.24s;}
 
   .hidden{display:none!important;}.text-center{text-align:center;}.mt-16{margin-top:16px;}.mt-24{margin-top:24px;}
 
@@ -281,7 +255,7 @@
   .teach-panel.active{display:block;}
 
   /* Theory */
-  .theory-section{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:16px;backdrop-filter:blur(16px);transition:border-color 0.3s;}
+  .theory-section{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:16px;transition:border-color 0.3s;}
   .theory-section:hover{border-color:var(--ba);}
   .theory-section h3{font-size:1rem;font-weight:700;margin-bottom:10px;color:var(--a1);}
   .theory-section .en{font-size:0.72rem;color:var(--t3);font-weight:500;text-transform:uppercase;letter-spacing:0.05em;margin-left:8px;}
@@ -296,31 +270,31 @@
   html{scrollbar-width:thin;scrollbar-color:var(--ba) transparent;}
   .theory-note{margin-top:12px;padding:10px 14px;background:var(--g1);border-left:3px solid var(--a1);border-radius:0 8px 8px 0;font-size:0.82rem;color:var(--t2);line-height:1.7;white-space:pre-line;}
   .param-cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-top:14px;}
-  .param-card-teach{background:var(--bg2);border:1px solid var(--border);border-radius:11px;padding:16px;transition:border-color 0.3s;display:flex;flex-direction:column;align-items:center;text-align:center;}
+  .param-card-teach{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;transition:border-color 0.3s;display:flex;flex-direction:column;align-items:center;text-align:center;}
   .param-card-teach:hover{border-color:var(--ba);}
-  .param-card-teach .sym{font-size:1.3rem;font-weight:700;color:var(--a2);font-family:'JetBrains Mono','Consolas',monospace;padding:8px 0;}
+  .param-card-teach .sym{font-size:1.3rem;font-weight:700;color:var(--a1);font-family:'Consolas',monospace;padding:8px 0;}
   .param-card-teach .pname{font-size:0.82rem;font-weight:600;margin-top:6px;}
   .param-card-teach .punit{font-size:0.7rem;color:var(--t3);margin-top:2px;}
   .param-card-teach .pdesc{font-size:0.78rem;color:var(--t2);margin-top:6px;line-height:1.5;}
   .param-card-teach .katex-display{text-align:center;margin:10px 0 4px;}
   .damping-compare{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:14px;}
   .damping-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px;text-align:center;transition:all 0.3s;}
-  .damping-card:hover{border-color:var(--a2);transform:translateY(-2px);}
+  .damping-card:hover{border-color:var(--a1);transform:translateY(-2px);}
   .damping-card h4{font-size:0.88rem;font-weight:700;margin-bottom:6px;}
-  .damping-card .zeta{font-family:'JetBrains Mono','Consolas',monospace;font-size:0.78rem;color:var(--a1);margin-bottom:8px;}
+  .damping-card .zeta{font-family:'Consolas',monospace;font-size:0.78rem;color:var(--a1);margin-bottom:8px;}
   .damping-card canvas{width:100%;height:80px;border-radius:6px;margin-bottom:8px;}
   .damping-card p{font-size:0.75rem;color:var(--t2);line-height:1.5;}
   @media(max-width:700px){.damping-compare{grid-template-columns:1fr;}}
 
   /* Guide */
   .accordion{margin-bottom:12px;}
-  .accordion-header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:var(--card);border:1px solid var(--border);border-radius:12px;cursor:pointer;transition:all 0.3s;backdrop-filter:blur(16px);}
+  .accordion-header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:var(--card);border:1px solid var(--border);border-radius:14px;cursor:pointer;transition:all 0.3s;}
   .accordion-header:hover{border-color:var(--ba);}
   .accordion-header h3{font-size:0.92rem;font-weight:600;}
   .accordion-header .arrow{transition:transform 0.3s;color:var(--t3);}
-  .accordion-header.open{border-radius:12px 12px 0 0;border-color:var(--a1);}
+  .accordion-header.open{border-radius:14px 14px 0 0;border-color:var(--a1);}
   .accordion-header.open .arrow{transform:rotate(180deg);}
-  .accordion-body{display:none;padding:18px;background:var(--card);border:1px solid var(--border);border-top:none;border-radius:0 0 12px 12px;backdrop-filter:blur(16px);}
+  .accordion-body{display:none;padding:18px;background:var(--card);border:1px solid var(--border);border-top:none;border-radius:0 0 14px 14px;}
   .accordion-body.open{display:block;animation:fadeUp 0.3s ease-out;}
   .guide-section{margin-bottom:16px;}
   .guide-section h4{font-size:0.85rem;font-weight:700;color:var(--a1);margin-bottom:8px;padding-bottom:4px;border-bottom:1px dashed var(--border);}
@@ -329,7 +303,7 @@
   .guide-section li{margin-bottom:4px;}
   .tip-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-top:8px;}
   .tip-item{display:flex;gap:10px;padding:10px 12px;background:var(--bg2);border-radius:8px;border:1px solid var(--border);}
-  .tip-item .tip-label{font-size:0.78rem;font-weight:600;color:var(--a2);white-space:nowrap;min-width:70px;}
+  .tip-item .tip-label{font-size:0.78rem;font-weight:600;color:var(--a1);white-space:nowrap;min-width:70px;}
   .tip-item .tip-detail{font-size:0.78rem;color:var(--t2);}
   .calib-point-list{margin-top:8px;}
   .calib-point{display:flex;align-items:center;gap:10px;padding:8px 12px;margin-bottom:6px;background:var(--bg2);border-radius:8px;border:1px solid var(--border);}
@@ -343,26 +317,26 @@
   /* Simulation */
   .sim-container{display:grid;grid-template-columns:1fr 300px;gap:20px;align-items:start;}
   @media(max-width:800px){.sim-container{grid-template-columns:1fr;}}
-  .sim-canvas-wrap{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;backdrop-filter:blur(16px);}
+  .sim-canvas-wrap{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;}
   .sim-canvas-wrap canvas{width:100%;height:320px;border-radius:8px;display:block;}
-  .sim-controls{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;backdrop-filter:blur(16px);}
+  .sim-controls{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;}
   .sim-controls h3{font-size:0.92rem;font-weight:700;margin-bottom:16px;color:var(--a1);}
   .sim-slider{margin-bottom:16px;}
   .sim-slider label{display:flex;align-items:baseline;gap:6px;font-size:0.8rem;font-weight:600;color:var(--t2);margin-bottom:6px;}
-  .sim-slider label .sv{font-family:'JetBrains Mono','Consolas',monospace;color:var(--a1);font-size:0.82rem;}
+  .sim-slider label .sv{font-family:'Consolas',monospace;color:var(--a1);font-size:0.82rem;}
   .sim-slider input[type="range"]{width:100%;height:6px;border-radius:3px;background:var(--border);outline:none;-webkit-appearance:none;appearance:none;}
   .sim-slider input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--a1);cursor:pointer;box-shadow:0 0 8px var(--fr);}
   .sim-info{margin-top:14px;padding:12px;background:var(--bg2);border-radius:10px;border:1px solid var(--border);}
   .sim-info .si-row{display:flex;justify-content:space-between;font-size:0.8rem;margin-bottom:4px;}
   .sim-info .si-row .si-label{color:var(--t3);}
-  .sim-info .si-row .si-val{font-family:'JetBrains Mono','Consolas',monospace;color:var(--text);font-weight:600;}
+  .sim-info .si-row .si-val{font-family:'Consolas',monospace;color:var(--text);font-weight:600;}
   .sim-type-badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:0.75rem;font-weight:700;margin-top:8px;}
   .sim-type-badge.under{background:var(--i3b);color:var(--i3c);}
   .sim-type-badge.critical{background:var(--i2b);color:var(--i2c);}
   .sim-type-badge.over{background:var(--i1b);color:var(--i1c);}
 
   /* AI Chat */
-  .chat-container{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;backdrop-filter:blur(16px);display:flex;flex-direction:column;height:520px;}
+  .chat-container{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;height:520px;}
   .chat-messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;}
   .chat-msg{max-width:85%;padding:10px 14px;border-radius:12px;font-size:0.85rem;line-height:1.7;animation:fadeUp 0.3s ease-out;}
   .chat-msg.user{align-self:flex-end;background:var(--a1);color:var(--bt);border-bottom-right-radius:4px;}
@@ -375,7 +349,7 @@
   .chat-input-area input{flex:1;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:var(--inp);color:var(--text);font-size:0.88rem;font-family:inherit;outline:none;transition:border-color 0.2s;}
   .chat-input-area input:focus{border-color:var(--a1);}
   .chat-input-area button{padding:10px 18px;border-radius:10px;border:none;background:var(--a1);color:var(--bt);font-size:0.88rem;font-weight:600;cursor:pointer;transition:all 0.2s;white-space:nowrap;}
-  .chat-input-area button:hover{filter:brightness(1.15);}
+  .chat-input-area button:hover{background:color-mix(in srgb,var(--a1) 90%,#000);}
   .chat-input-area button:disabled{opacity:0.4;cursor:not-allowed;}
   .preset-questions{display:flex;flex-wrap:wrap;gap:6px;padding:0 16px 12px;}
   .preset-q{padding:5px 12px;border-radius:16px;border:1px solid var(--border);background:var(--bg2);color:var(--t3);font-size:0.73rem;cursor:pointer;transition:all 0.2s;font-family:inherit;}
@@ -388,7 +362,7 @@
   .chat-msg.bot ul,.chat-msg.bot ol{padding-left:18px;margin:6px 0;}
   .chat-msg.bot li{margin:3px 0;line-height:1.6;}
   .chat-msg.bot strong{color:var(--text);font-weight:600;}
-  .chat-msg.bot code{font-family:'JetBrains Mono','Consolas',monospace;font-size:0.82rem;background:var(--bg);padding:1px 5px;border-radius:4px;border:1px solid var(--border);color:var(--a2);}
+  .chat-msg.bot code{font-family:'Consolas',monospace;font-size:0.82rem;background:var(--bg);padding:1px 5px;border-radius:4px;border:1px solid var(--border);color:var(--a1);}
   .chat-msg.bot pre{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin:8px 0;overflow-x:auto;}
   .chat-msg.bot pre code{background:none;border:none;padding:0;font-size:0.8rem;color:var(--text);}
   .chat-msg.bot blockquote{border-left:3px solid var(--a2);padding:4px 12px;margin:8px 0;background:var(--g2);border-radius:0 6px 6px 0;color:var(--t2);}
@@ -413,7 +387,7 @@
   /* 图片灯箱 */
   .lightbox{display:none;position:fixed;inset:0;z-index:2000;padding:28px;background:var(--modal);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);align-items:center;justify-content:center;cursor:zoom-out;}
   .lightbox.active{display:flex;animation:lightboxFade .2s ease-out;}
-  .lightbox img{max-width:94vw;max-height:90vh;border-radius:12px;border:1px solid var(--ba);box-shadow:0 24px 64px rgba(0,0,0,0.6);animation:lightboxIn .3s cubic-bezier(.34,1.4,.64,1);}
+  .lightbox img{max-width:94vw;max-height:90vh;border-radius:12px;border:1px solid var(--ba);box-shadow:0 24px 64px rgba(15,23,42,0.25);animation:lightboxIn .3s cubic-bezier(.34,1.4,.64,1);}
   @keyframes lightboxFade{from{opacity:0;}to{opacity:1;}}
   @keyframes lightboxIn{from{opacity:0;transform:scale(.88);}to{opacity:1;transform:scale(1);}}
 
@@ -430,7 +404,7 @@
   /* 上传成功后的首帧预览条 */
   .upload-preview{margin-top:14px;display:flex;align-items:center;gap:12px;text-align:left;background:var(--bg);border:1px solid color-mix(in srgb,var(--green) 55%,var(--border));border-radius:10px;padding:8px;animation:fadeUp .35s ease-out;}
   .upload-preview video{width:150px;max-height:86px;object-fit:cover;border-radius:6px;display:block;background:#000;}
-  .upload-preview-name{flex:1;font-size:0.76rem;color:var(--t2);word-break:break-all;font-family:'JetBrains Mono','Consolas',monospace;line-height:1.5;}
+  .upload-preview-name{flex:1;font-size:0.76rem;color:var(--t2);word-break:break-all;font-family:'Consolas',monospace;line-height:1.5;}
 
   /* 符号回归结果折叠块 */
   .sr-details{margin-top:8px;}
@@ -438,10 +412,9 @@
   .sr-details summary:hover{text-decoration:underline;}
   .sr-details[open] summary{margin-bottom:6px;}
 
-  /* Reduced motion：尊重系统设置，关掉装饰性循环动画 */
+  /* Reduced motion：尊重系统设置，关掉装饰性动画 */
   @media (prefers-reduced-motion: reduce){
     *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;}
-    #bg-canvas,.formula-text{display:none;}
   }
 </style>
 </head>
@@ -458,24 +431,28 @@
   <symbol id="i-upload-cloud" viewBox="0 0 24 24"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 4 16.3"/></symbol>
   <symbol id="i-package" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></symbol>
   <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></symbol>
+  <symbol id="i-unlock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></symbol>
+  <symbol id="i-magnet" viewBox="0 0 24 24"><path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v7a8 8 0 0 1-16 0z"/><line x1="4" y1="10" x2="20" y2="10"/><line x1="9" y1="4" x2="9" y2="8"/><line x1="15" y1="4" x2="15" y2="8"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+  <symbol id="i-chev-u" viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"/></symbol>
+  <symbol id="i-chev-d" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></symbol>
+  <symbol id="i-chev-l" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></symbol>
+  <symbol id="i-chev-r" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></symbol>
 </svg>
 
-<canvas id="bg-canvas"></canvas>
 <div id="toast-container"></div>
-<div class="formula-text c1" style="top:6%;left:4%;" data-tex="\theta(t)=\theta_0\,e^{-\beta t}\cos(\omega t+\varphi)">θ(t) = θ₀ e<sup>−βt</sup> cos(ωt + φ)</div>
-<div class="formula-text c2" style="top:14%;right:6%;" data-tex="T=2\pi\sqrt{L/g}">T = 2π<span class="fsqrt">√<span class="frad">(L/g)</span></span></div>
-<div class="formula-text c3" style="top:26%;left:6%;" data-tex="\omega=\sqrt{k/I}">ω = <span class="fsqrt">√<span class="frad">(k/I)</span></span></div>
-<div class="formula-text c4" style="top:34%;right:4%;" data-tex="I=\sum m_i r_i^2">I = Σ mᵢ rᵢ²</div>
-<div class="formula-text c1" style="top:48%;left:3%;" data-tex="\beta=b/2m">β = b / 2m</div>
-<div class="formula-text c2" style="top:56%;right:8%;" data-tex="\omega_n=\omega_0\sqrt{1-\zeta^2}">ωₙ = ω₀ <span class="fsqrt">√<span class="frad">(1 − ζ²)</span></span></div>
-<div class="formula-text c3" style="top:66%;left:5%;" data-tex="E(t)=\tfrac{1}{2}kA^2e^{-2\beta t}">E(t) = ½ k A² e<sup>−2βt</sup></div>
-<div class="formula-text c4" style="top:78%;right:3%;" data-tex="\tau=I\alpha=-\kappa\theta">τ = I α = −κ θ</div>
-<div class="formula-text c1" style="top:88%;left:8%;" data-tex="F=-bv\;\text{(damping)}">F = −bv (damping)</div>
 
 <div class="app">
   <div class="header">
     <h1>Pendulum Motion Analyzer</h1>
-    <p class="sub">基于 <em>YOLOv8</em> 的物理摆运动数据提取 &nbsp;&#8226;&nbsp; 单摆 &nbsp;&#8226;&nbsp; 磁阻尼摆 &nbsp;&#8226;&nbsp; 扭摆 &nbsp;&#8226;&nbsp; 磁力牛顿摆</p>
+    <p class="sub">基于 <em>YOLOv8</em> 的物理摆运动数据提取 · 单摆 · 磁阻尼摆 · 扭摆 · 磁力牛顿摆</p>
     <div style="margin-top:14px;display:flex;align-items:center;justify-content:center;gap:5px;flex-wrap:wrap;">
       <div class="mode-switcher">
         <button class="mode-btn active" id="mode_analysis" onclick="switchMode('analysis')"><svg class="icon"><use href="#i-flask"/></svg> 数据分析</button>
@@ -513,23 +490,23 @@
 
   <!-- Step 1 -->
   <div class="card anim-card" id="card-setup">
-    <div class="card-header"><h2>&#9679; 选择实验类型 &amp; 上传视频</h2><div class="tag">Select Type &amp; Upload</div></div>
+    <div class="card-header"><h2>选择实验类型 &amp; 上传视频</h2><div class="tag">Select Type &amp; Upload</div></div>
     <div class="field-label"><span class="zh">运动类型</span><span class="en">Experiment Type</span></div>
     <div class="type-cards" id="type_cards">
       <div class="type-card" data-type="danbai" onclick="selectType('danbai')">
-        <div class="check">&#10003;</div><div class="icon-area"><div class="p-icon"></div></div>
+        <div class="check"><svg class="icon"><use href="#i-check"/></svg></div><div class="icon-area"><div class="p-icon"></div></div>
         <div class="name">单摆</div><div class="eng">Simple Pendulum</div>
       </div>
       <div class="type-card" data-type="cizuni" onclick="selectType('cizuni')">
-        <div class="check">&#10003;</div><div class="icon-area"><div class="d-icon"></div><div class="d-env"><svg viewBox="0 0 120 50"><path d="M0,25 Q12,10 24,25 Q36,40 48,25 Q60,18 72,25 Q84,22 96,25 Q108,24 120,25" fill="none" stroke="var(--a3)" stroke-width="1.5" opacity="0.6"/></svg></div></div>
+        <div class="check"><svg class="icon"><use href="#i-check"/></svg></div><div class="icon-area"><div class="d-icon"></div><div class="d-env"><svg viewBox="0 0 120 50"><path d="M0,25 Q12,10 24,25 Q36,40 48,25 Q60,18 72,25 Q84,22 96,25 Q108,24 120,25" fill="none" stroke="var(--a3)" stroke-width="1.5" opacity="0.6"/></svg></div></div>
         <div class="name">磁阻尼摆</div><div class="eng">Magnetic Damping</div>
       </div>
       <div class="type-card" data-type="niubai" onclick="selectType('niubai')">
-        <div class="check">&#10003;</div><div class="icon-area"><div class="t-icon"></div></div>
+        <div class="check"><svg class="icon"><use href="#i-check"/></svg></div><div class="icon-area"><div class="t-icon"></div></div>
         <div class="name">扭摆</div><div class="eng">Torsional Pendulum</div>
       </div>
       <div class="type-card" data-type="ciliniudun" onclick="selectType('ciliniudun')">
-        <div class="check">&#10003;</div>
+        <div class="check"><svg class="icon"><use href="#i-check"/></svg></div>
         <div class="icon-area">
           <div class="n-icon">
             <div class="n-pend np1"><div class="n-string"></div><div class="n-ball"></div></div>
@@ -546,12 +523,12 @@
     <div class="field-label" style="margin-top:18px;"><span class="zh">视频获取方式</span><span class="en">Video Source</span></div>
     <div class="acq-cards" id="acq_cards">
       <div class="acq-card selected" data-acq="upload" onclick="selectAcqMode('upload')">
-        <div class="check">&#10003;</div><div class="acq-icon"><svg class="icon"><use href="#i-package"/></svg></div>
+        <div class="check"><svg class="icon"><use href="#i-check"/></svg></div><div class="acq-icon"><svg class="icon"><use href="#i-package"/></svg></div>
         <div class="name">上传视频</div><div class="eng">Upload Existing Video</div>
         <div class="desc">使用已拍摄好的实验视频文件</div>
       </div>
       <div class="acq-card" data-acq="experiment" onclick="selectAcqMode('experiment')">
-        <div class="check">&#10003;</div><div class="acq-icon" style="color:var(--a2);"><svg class="icon"><use href="#i-link"/></svg></div>
+        <div class="check"><svg class="icon"><use href="#i-check"/></svg></div><div class="acq-icon" style="color:var(--a1);"><svg class="icon"><use href="#i-link"/></svg></div>
         <div class="name">实验获取</div><div class="eng">STM32 + OpenMV</div>
         <div class="desc">STM32 电磁铁释放小球，OpenMV 拍摄运动视频</div>
       </div>
@@ -565,12 +542,12 @@
       <div class="hint">MP4 / AVI / MOV / MKV</div>
     </div>
     <input type="file" id="video_input" accept="video/*" style="display:none;">
-    <div id="video_info" style="margin-top:8px;font-size:0.85rem;color:var(--green);font-family:'JetBrains Mono','Consolas',monospace;"></div>
+    <div id="video_info" style="margin-top:8px;font-size:0.85rem;color:var(--green);font-family:'Consolas',monospace;"></div>
     </div><!-- /acq_panel_upload -->
 
     <!-- 实验获取面板：STM32 串口释放控制 + OpenMV 拍摄 -->
     <div id="acq_panel_experiment" class="hidden" style="margin-top:16px;">
-      <div class="section-label">&#9881; 实验设备控制 Experiment Device Control</div>
+      <div class="section-label"><svg class="icon"><use href="#i-sliders"/></svg>实验设备控制 Experiment Device Control</div>
 
       <!-- 释放控制卡片：按实验类型切换（单摆→电磁铁；扭摆/磁阻尼摆→夹爪；磁力牛顿摆→手动） -->
       <div id="release_card_magnet" style="display:none;">
@@ -581,7 +558,7 @@
           <select id="serial_port_select" style="flex:1;min-width:170px;">
             <option value="">扫描中...</option>
           </select>
-          <button class="btn btn-outline" onclick="refreshSerialPorts()">&#8635; 刷新</button>
+          <button class="btn btn-outline" onclick="refreshSerialPorts()"><svg class="icon"><use href="#i-refresh"/></svg> 刷新</button>
           <button class="btn btn-primary" id="btn_serial_connect" onclick="toggleSerialConnect()">连接</button>
         </div>
         <div id="serial_status" style="font-size:0.78rem;color:var(--t3);margin-top:8px;">未连接串口</div>
@@ -591,8 +568,8 @@
       <div class="param-card" style="margin-bottom:12px;">
         <div class="p-label">电磁铁释放控制 Electromagnet Release</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;">
-          <button class="btn btn-outline" id="btn_magnet_on" disabled onclick="sendMagnetCommand('1')">&#129514; 吸合（准备）</button>
-          <button class="btn btn-primary btn-lg" id="btn_magnet_off" disabled onclick="sendMagnetCommand('0')">&#128279; 释放小球</button>
+          <button class="btn btn-outline" id="btn_magnet_on" disabled onclick="sendMagnetCommand('1')"><svg class="icon"><use href="#i-magnet"/></svg>吸合（准备）</button>
+          <button class="btn btn-primary btn-lg" id="btn_magnet_off" disabled onclick="sendMagnetCommand('0')"><svg class="icon"><use href="#i-unlock"/></svg>释放小球</button>
         </div>
         <div id="magnet_status" style="font-size:0.78rem;color:var(--t3);margin-top:8px;">先连接串口，再吸合电磁铁</div>
       </div>
@@ -605,24 +582,24 @@
           <select id="gripper_port_select" style="flex:1;min-width:170px;">
             <option value="">扫描中...</option>
           </select>
-          <button class="btn btn-outline" onclick="refreshGripperPorts()">&#8635; 刷新</button>
+          <button class="btn btn-outline" onclick="refreshGripperPorts()"><svg class="icon"><use href="#i-refresh"/></svg> 刷新</button>
           <button class="btn btn-primary" id="btn_gripper_connect" onclick="toggleGripperConnect()">连接</button>
         </div>
         <div id="gripper_status" style="font-size:0.78rem;color:var(--t3);margin-top:8px;">未连接串口</div>
 
         <div style="display:flex;flex-direction:column;align-items:center;gap:4px;margin-top:12px;">
-          <button class="btn btn-outline gripper-cmd-btn" data-cmd="U" style="width:52px;height:40px;padding:0;">&#9650;</button>
+          <button class="btn btn-outline gripper-cmd-btn" data-cmd="U" style="width:52px;height:40px;padding:0;"><svg class="icon"><use href="#i-chev-u"/></svg></button>
           <div style="display:flex;gap:4px;">
-            <button class="btn btn-outline gripper-cmd-btn" data-cmd="L" style="width:52px;height:40px;padding:0;">&#9664;</button>
-            <button class="btn btn-outline gripper-cmd-btn" data-cmd="D" style="width:52px;height:40px;padding:0;font-size:0.72rem;">&#9660;</button>
-            <button class="btn btn-outline gripper-cmd-btn" data-cmd="R" style="width:52px;height:40px;padding:0;">&#9654;</button>
+            <button class="btn btn-outline gripper-cmd-btn" data-cmd="L" style="width:52px;height:40px;padding:0;"><svg class="icon"><use href="#i-chev-l"/></svg></button>
+            <button class="btn btn-outline gripper-cmd-btn" data-cmd="D" style="width:52px;height:40px;padding:0;font-size:0.72rem;"><svg class="icon"><use href="#i-chev-d"/></svg></button>
+            <button class="btn btn-outline gripper-cmd-btn" data-cmd="R" style="width:52px;height:40px;padding:0;"><svg class="icon"><use href="#i-chev-r"/></svg></button>
           </div>
           <div style="font-size:0.68rem;color:var(--t3);margin-top:2px;">方向键每次约 2°</div>
         </div>
 
         <div style="display:flex;gap:10px;justify-content:center;margin-top:10px;">
-          <button class="btn btn-outline" id="btn_gripper_open" disabled onclick="sendGripperCommand('O')">&#128230; 开夹</button>
-          <button class="btn btn-primary" id="btn_gripper_close" disabled onclick="sendGripperCommand('C')">&#128279; 关夹释放</button>
+          <button class="btn btn-outline" id="btn_gripper_open" disabled onclick="sendGripperCommand('O')"><svg class="icon"><use href="#i-package"/></svg>开夹</button>
+          <button class="btn btn-primary" id="btn_gripper_close" disabled onclick="sendGripperCommand('C')"><svg class="icon"><use href="#i-unlock"/></svg>关夹释放</button>
         </div>
         <div id="gripper_cmd_status" style="font-size:0.78rem;color:var(--t3);margin-top:8px;text-align:center;">先连接串口，再控制夹爪</div>
       </div>
@@ -647,7 +624,7 @@
           <select id="openmv_ctrl_port_select" style="flex:1;min-width:130px;">
             <option value="">（可选）</option>
           </select>
-          <button class="btn btn-outline" onclick="refreshOpenMVPorts()">&#8635; 刷新</button>
+          <button class="btn btn-outline" onclick="refreshOpenMVPorts()"><svg class="icon"><use href="#i-refresh"/></svg> 刷新</button>
           <button class="btn btn-primary" id="btn_openmv_connect" onclick="toggleOpenMVConnect()">连接</button>
         </div>
         <div id="openmv_status" style="font-size:0.78rem;color:var(--t3);margin-top:8px;">未连接 OpenMV</div>
@@ -656,7 +633,7 @@
         <div id="openmv_preview_wrap" style="margin-top:10px;display:none;">
           <div style="position:relative;background:#000;border-radius:8px;overflow:hidden;max-height:360px;">
             <canvas id="openmv_canvas" style="width:100%;display:block;"></canvas>
-            <div id="openmv_overlay" style="position:absolute;top:6px;right:8px;background:rgba(0,0,0,0.65);color:#0f0;font:600 0.72rem 'JetBrains Mono','Consolas',monospace;padding:3px 8px;border-radius:4px;">
+            <div id="openmv_overlay" style="position:absolute;top:6px;right:8px;background:rgba(0,0,0,0.65);color:#0f0;font:600 0.72rem 'Consolas',monospace;padding:3px 8px;border-radius:4px;">
               -- FPS
             </div>
             <div id="openmv_rec_indicator" style="position:absolute;top:6px;left:8px;background:rgba(200,0,0,0.85);color:#fff;font:700 0.72rem monospace;padding:3px 10px;border-radius:4px;display:none;">
@@ -667,9 +644,9 @@
 
         <!-- 录制控制 -->
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
-          <button class="btn btn-primary" id="btn_openmv_record" disabled onclick="startOpenMVRecord()">&#9654; 开始拍摄</button>
-          <button class="btn btn-outline" id="btn_openmv_stop" disabled onclick="stopOpenMVRecord()" style="display:none;">&#9724; 停止拍摄</button>
-          <button class="btn btn-primary" id="btn_openmv_stop_upload" disabled onclick="stopOpenMVAndUpload()" style="display:none;">&#128228; 停止并上传</button>
+          <button class="btn btn-primary" id="btn_openmv_record" disabled onclick="startOpenMVRecord()"><svg class="icon"><use href="#i-play"/></svg>开始拍摄</button>
+          <button class="btn btn-outline" id="btn_openmv_stop" disabled onclick="stopOpenMVRecord()" style="display:none;"><svg class="icon"><use href="#i-stop"/></svg>停止拍摄</button>
+          <button class="btn btn-primary" id="btn_openmv_stop_upload" disabled onclick="stopOpenMVAndUpload()" style="display:none;"><svg class="icon"><use href="#i-upload-cloud"/></svg>停止并上传</button>
         </div>
       </div>
 
@@ -677,23 +654,23 @@
       <div class="param-card">
         <div class="p-label">云台控制 Gimbal Control</div>
         <div style="display:flex;flex-direction:column;align-items:center;gap:4px;margin-top:6px;">
-          <button class="btn btn-outline openmv-gimbal-btn" data-cmd="U" style="width:52px;height:40px;padding:0;">&#9650;</button>
+          <button class="btn btn-outline openmv-gimbal-btn" data-cmd="U" style="width:52px;height:40px;padding:0;"><svg class="icon"><use href="#i-chev-u"/></svg></button>
           <div style="display:flex;gap:4px;">
-            <button class="btn btn-outline openmv-gimbal-btn" data-cmd="L" style="width:52px;height:40px;padding:0;">&#9664;</button>
+            <button class="btn btn-outline openmv-gimbal-btn" data-cmd="L" style="width:52px;height:40px;padding:0;"><svg class="icon"><use href="#i-chev-l"/></svg></button>
             <button class="btn btn-outline openmv-gimbal-btn" data-cmd="C" style="width:52px;height:40px;padding:0;font-size:0.72rem;">回中</button>
-            <button class="btn btn-outline openmv-gimbal-btn" data-cmd="R" style="width:52px;height:40px;padding:0;">&#9654;</button>
+            <button class="btn btn-outline openmv-gimbal-btn" data-cmd="R" style="width:52px;height:40px;padding:0;"><svg class="icon"><use href="#i-chev-r"/></svg></button>
           </div>
-          <button class="btn btn-outline openmv-gimbal-btn" data-cmd="D" style="width:52px;height:40px;padding:0;">&#9660;</button>
+          <button class="btn btn-outline openmv-gimbal-btn" data-cmd="D" style="width:52px;height:40px;padding:0;"><svg class="icon"><use href="#i-chev-d"/></svg></button>
         </div>
         <div id="gimbal_status" style="font-size:0.78rem;color:var(--t3);margin-top:8px;text-align:center;">先连接 OpenMV，再控制云台</div>
       </div>
     </div><!-- /acq_panel_experiment -->
 
     <div id="params_area" class="hidden" style="margin-top:22px;">
-      <div class="section-label">&#9881; 处理参数 Processing Parameters</div>
+      <div class="section-label"><svg class="icon"><use href="#i-sliders"/></svg>处理参数 Processing Parameters</div>
       <div class="param-grid">
         <div class="param-card" id="damping_type_group" style="display:none;"><div class="p-label">阻尼类型 Damping Type</div>
-          <select id="param_damping_type" style="width:100%;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:var(--inp);color:var(--text);font-size:0.88rem;font-family:'JetBrains Mono','Consolas',monospace;cursor:pointer;">
+          <select id="param_damping_type" style="width:100%;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:var(--inp);color:var(--text);font-size:0.88rem;font-family:'Consolas',monospace;cursor:pointer;">
             <option value="欠阻尼">欠阻尼 Underdamped</option>
             <option value="临界阻尼">临界阻尼 Critically Damped</option>
             <option value="过阻尼">过阻尼 Overdamped</option>
@@ -724,13 +701,13 @@
 
   <!-- Step 2 -->
   <div class="card hidden anim-card" id="card-calib">
-    <div class="card-header"><h2>&#9679; 标定坐标系</h2><div class="tag">Coordinate Calibration</div></div>
+    <div class="card-header"><h2>标定坐标系</h2><div class="tag">Coordinate Calibration</div></div>
     <div class="calib-preview" id="calib_preview">
       <canvas class="thumb" id="thumb_canvas" width="200" height="110"></canvas>
       <div class="info">
         <div id="calib_preview_text" style="color:var(--t3);font-size:0.85rem;">尚未标定 — 请点击下方按钮，在弹窗中完成标定</div>
         <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="btn btn-primary" onclick="openCalibModal()">&#9998; 开始标定</button>
+          <button class="btn btn-primary" onclick="openCalibModal()"><svg class="icon"><use href="#i-edit"/></svg>开始标定</button>
           <button class="btn btn-outline" id="btn_reset_calib" onclick="resetCalib()" style="display:none;">重置</button>
         </div>
       </div>
@@ -739,11 +716,11 @@
 
   <!-- Step 3 -->
   <div class="card hidden anim-card" id="card-process">
-    <div class="card-header"><h2>&#9679; 运行处理</h2><div class="tag">Specify Output &amp; Run</div></div>
+    <div class="card-header"><h2>运行处理</h2><div class="tag">Specify Output &amp; Run</div></div>
     <div class="field-label"><span class="zh">结果保存路径</span><span class="en">Output Directory</span></div>
     <input type="text" id="output_dir" placeholder="D:\实验结果">
     <div style="color:var(--t3);font-size:0.75rem;margin-top:4px;">确保文件夹已存在且可写入 &middot; 输出 *_angle_time.csv &amp; *_angle_time.png</div>
-    <div style="margin-top:18px;"><button class="btn btn-primary btn-lg" id="btn_process" onclick="startProcessing()">&#9654; 开始处理</button></div>
+    <div style="margin-top:18px;"><button class="btn btn-primary btn-lg" id="btn_process" onclick="startProcessing()"><svg class="icon"><use href="#i-play"/></svg>开始处理</button></div>
     <div class="status" id="status"></div>
     <div class="progress-bar hidden" id="progress_bar"><div class="fill" id="progress_fill"></div></div>
     <div class="progress-text hidden" id="progress_text"></div>
@@ -751,12 +728,12 @@
 
   <!-- Step 4 -->
   <div class="card hidden anim-card" id="card-result">
-    <div class="card-header"><h2>&#10003; 处理完成</h2><div class="tag">Processing Complete</div></div>
+    <div class="card-header"><h2><svg class="icon"><use href="#i-check"/></svg> 处理完成</h2><div class="tag">Processing Complete</div></div>
     <div id="plot_preview_area" class="hidden" style="margin-bottom:18px;text-align:center;">
       <img id="plot_preview_img" style="max-width:100%;border-radius:10px;border:1px solid var(--border);cursor:zoom-in;transition:transform .25s;" onclick="openLightbox(this.src)" title="点击放大查看" onmouseover="this.style.transform='scale(1.01)'" onmouseout="this.style.transform=''">
     </div>
     <div class="result-grid" id="result_grid"></div>
-    <div class="text-center mt-24"><button class="btn btn-secondary" onclick="location.reload();">&#8634; 处理新视频</button></div>
+    <div class="text-center mt-24"><button class="btn btn-secondary" onclick="location.reload();"><svg class="icon"><use href="#i-refresh"/></svg>处理新视频</button></div>
   </div>
 </div><!-- /app-analysis -->
 
@@ -782,10 +759,10 @@
   <div class="teach-panel" id="teach_guide">
     <div id="guide_content"><div class="text-center" style="padding:40px;color:var(--t3);">点击下方实验类型查看指导</div></div>
     <div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;">
-      <button class="btn btn-primary" onclick="loadGuide('danbai')">&#9679; 单摆指导</button>
-      <button class="btn btn-primary" onclick="loadGuide('cizuni')">&#9679; 磁阻尼摆指导</button>
-      <button class="btn btn-primary" onclick="loadGuide('niubai')">&#9679; 扭摆指导</button>
-      <button class="btn btn-primary" onclick="loadGuide('ciliniudun')">&#9679; 磁力牛顿摆指导</button>
+      <button class="btn btn-primary" onclick="loadGuide('danbai')">单摆指导</button>
+      <button class="btn btn-primary" onclick="loadGuide('cizuni')">磁阻尼摆指导</button>
+      <button class="btn btn-primary" onclick="loadGuide('niubai')">扭摆指导</button>
+      <button class="btn btn-primary" onclick="loadGuide('ciliniudun')">磁力牛顿摆指导</button>
     </div>
   </div>
 
@@ -796,7 +773,7 @@
         <canvas id="sim_canvas"></canvas>
       </div>
       <div class="sim-controls">
-        <h3>&#9881; 参数控制</h3>
+        <h3><svg class="icon"><use href="#i-sliders"/></svg>参数控制</h3>
         <div class="sim-slider">
           <label>阻尼系数 β <span class="sv" id="sim_beta_val">0.50</span> s⁻¹</label>
           <input type="range" id="sim_beta" min="0" max="5" step="0.01" value="0.5" oninput="updateSim()">
@@ -824,7 +801,7 @@
   <div class="teach-panel" id="teach_ai">
     <div class="chat-container">
       <div class="chat-messages" id="chat_messages">
-        <div class="chat-msg bot">你好！我是阻尼振动实验教学助手 &#128075; 可以问我关于阻尼振动、实验操作、数据分析等方面的问题。</div>
+        <div class="chat-msg bot">你好！我是阻尼振动实验教学助手。可以问我关于阻尼振动、实验操作、数据分析等方面的问题。</div>
       </div>
       <div class="preset-questions">
         <button class="preset-q" onclick="askPreset('什么是阻尼比？它有什么物理意义？')">什么是阻尼比？</button>
@@ -850,14 +827,14 @@
 <!-- Calibration Modal -->
 <div class="modal-overlay" id="calib_modal_overlay">
   <div class="modal">
-    <div class="modal-header"><h3 id="calib_modal_title">标定坐标系</h3><button class="btn btn-outline" onclick="closeCalibModal()" style="padding:6px 12px;">&#10005;</button></div>
+    <div class="modal-header"><h3 id="calib_modal_title">标定坐标系</h3><button class="btn btn-outline" onclick="closeCalibModal()" style="padding:6px 12px;"><svg class="icon"><use href="#i-x"/></svg></button></div>
     <div class="modal-body"><canvas id="calib_canvas"></canvas></div>
     <div class="modal-footer">
       <div class="hint" id="calib_modal_hint">点击图片标定第 1 个点 &nbsp; <span class="kbd">Enter</span> 确认 &nbsp; <span class="kbd">R</span> 重置 &nbsp; <span class="kbd">Esc</span> 关闭</div>
       <div style="display:flex;gap:8px;">
-        <button class="btn btn-outline" id="calib_prev_btn" onclick="calibPrevPhase()" style="display:none;">↩ 上一步</button>
-        <button class="btn btn-outline" onclick="undoPoint()">↩ 撤销</button>
-        <button class="btn btn-outline" onclick="resetCalib()">&#8634; 重置</button>
+        <button class="btn btn-outline" id="calib_prev_btn" onclick="calibPrevPhase()" style="display:none;"><svg class="icon"><use href="#i-undo"/></svg> 上一步</button>
+        <button class="btn btn-outline" onclick="undoPoint()"><svg class="icon"><use href="#i-undo"/></svg> 撤销</button>
+        <button class="btn btn-outline" onclick="resetCalib()"><svg class="icon"><use href="#i-refresh"/></svg>重置</button>
         <button class="btn btn-primary" id="calib_done_btn" onclick="closeCalibModal()">确认完成</button>
       </div>
     </div>
@@ -904,111 +881,9 @@ document.addEventListener('keydown',e=>{
   if(e.key==='Escape'&&document.getElementById('lightbox').classList.contains('active')){e.preventDefault();closeLightbox();}
 });
 async function copyPath(path,btn){
-  try{await navigator.clipboard.writeText(path);btn.textContent='✓ 已复制';btn.classList.add('copied');setTimeout(()=>{btn.textContent='📋 复制';btn.classList.remove('copied');},2000);}
+  try{await navigator.clipboard.writeText(path);btn.innerHTML='<svg class="icon"><use href="#i-check"/></svg> 已复制';btn.classList.add('copied');setTimeout(()=>{btn.innerHTML='<svg class="icon"><use href="#i-copy"/></svg> 复制';btn.classList.remove('copied');},2000);}
   catch(e){showToast('复制失败，请手动复制','error');}
 }
-
-// ==================== Physics Background (with mouse avoidance) ====================
-(function(){
-  const c=document.getElementById('bg-canvas'),ctx=c.getContext('2d');
-  let W,H,t=0,particles=[],orbits=[],mx=-999,my=-999,scrollPhase=0;
-  // 主题色固定（仅浅色主题），启动时读取一次缓存，避免每帧 getComputedStyle
-  // 主题色固定（仅浅色），启动时读一次即可
-  const COL={a1:'#4f46e5',a2:'#7c3aed',a3:'#8b5cf6',a4:'#a5b4fc'};
-  function readPalette(){const s=getComputedStyle(document.documentElement);COL.a1=s.getPropertyValue('--a1').trim()||COL.a1;COL.a2=s.getPropertyValue('--a2').trim()||COL.a2;COL.a3=s.getPropertyValue('--a3').trim()||COL.a3;COL.a4=s.getPropertyValue('--a4').trim()||COL.a4;}
-  readPalette();
-  function resize(){W=c.width=window.innerWidth;H=c.height=window.innerHeight;initParticles();initOrbits();}
-  // 粒子数从 120 降至 85：视觉差异极小，持续 GPU/CPU 开销明显更低
-  function initParticles(){particles=[];for(let i=0;i<85;i++)particles.push({x:Math.random()*W,y:Math.random()*H,r:Math.random()*2.2+0.6,vx:(Math.random()-0.5)*0.25,vy:(Math.random()-0.5)*0.25,alpha:Math.random()*0.55+0.15,phase:Math.random()*Math.PI*2,sparkTimer:Math.random()*200});}
-  function initOrbits(){orbits=[];for(let i=0;i<3;i++)orbits.push({cx:W*(0.2+Math.random()*0.6),cy:H*(0.2+Math.random()*0.6),rx:60+Math.random()*180,ry:30+Math.random()*100,sp:0.3+Math.random()*0.7,phase:Math.random()*Math.PI*2,alpha:0.06+Math.random()*0.08});}
-  resize();window.addEventListener('resize',resize);
-  document.addEventListener('mousemove',e=>{mx=e.clientX;my=e.clientY;});
-  document.addEventListener('scroll',()=>{scrollPhase=window.scrollY*0.002;});
-  // 7 条波减为 5 条等距波：节奏更干净、层次不再互相打架
-  let WAVES=[];
-  function buildWaves(){
-    WAVES=[
-      {y:0.12,amp:36,lam:320,sp:0.50,dec:0.30,c:COL.a1,a:0.28},
-      {y:0.32,amp:26,lam:280,sp:0.44,dec:0.33,c:COL.a4,a:0.20},
-      {y:0.52,amp:38,lam:360,sp:0.47,dec:0.29,c:COL.a2,a:0.22},
-      {y:0.72,amp:26,lam:300,sp:0.52,dec:0.32,c:COL.a3,a:0.18},
-      {y:0.90,amp:34,lam:340,sp:0.45,dec:0.31,c:COL.a1,a:0.24}
-    ];
-  }
-  buildWaves();
-  function draw(){
-    ctx.clearRect(0,0,W,H);
-    WAVES.forEach(w=>{ctx.beginPath();const bY=H*w.y;for(let x=0;x<W;x+=2){const ph=(x/w.lam+(t+scrollPhase)*w.sp),dc=Math.exp(-x/(W*w.dec));const y=bY+w.amp*Math.sin(ph)*dc;x===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}ctx.strokeStyle=w.c;ctx.lineWidth=1.4;ctx.globalAlpha=w.a;ctx.stroke();});
-    orbits.forEach(o=>{ctx.beginPath();for(let a=0;a<Math.PI*2;a+=0.04){const x=o.cx+o.rx*Math.cos(a*1.7+o.phase+(t+scrollPhase)*o.sp*0.3);const y=o.cy+o.ry*Math.sin(a+o.phase+(t+scrollPhase)*o.sp*0.5);a===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}ctx.closePath();ctx.strokeStyle=COL.a2;ctx.lineWidth=0.8;ctx.globalAlpha=o.alpha;ctx.stroke();});
-    ctx.strokeStyle=COL.a1;ctx.lineWidth=0.4;ctx.globalAlpha=0.04;const gs=80;for(let x=gs;x<W;x+=gs){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}for(let y=gs;y<H;y+=gs){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
-    particles.forEach(p=>{
-      const dx=p.x-mx,dy=p.y-my,dist=Math.sqrt(dx*dx+dy*dy);
-      if(dist<120){const f=(1-dist/120)*1.5;p.x+=dx/dist*f;p.y+=dy/dist*f;}
-      p.x+=p.vx;p.y+=p.vy;p.phase+=0.02;
-      if(p.x<0)p.x=W;if(p.x>W)p.x=0;if(p.y<0)p.y=H;if(p.y>H)p.y=0;
-      const fl=p.alpha*(0.7+0.3*Math.sin(p.phase));
-      ctx.beginPath();ctx.arc(p.x,p.y,p.r+2,0,2*Math.PI);ctx.fillStyle=COL.a1;ctx.globalAlpha=fl*0.15;ctx.fill();
-      ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,2*Math.PI);ctx.fillStyle=COL.a2;ctx.globalAlpha=fl;ctx.fill();
-      p.sparkTimer-=1;if(p.sparkTimer<=0){p.sparkTimer=150+Math.random()*300;const sx=p.x+(Math.random()-0.5)*30,sy=p.y+(Math.random()-0.5)*30;ctx.beginPath();ctx.arc(sx,sy,1.5,0,2*Math.PI);ctx.fillStyle=COL.a3;ctx.globalAlpha=0.5;ctx.fill();}
-    });
-    const nodes=[{x:W*0.18,y:H*0.28},{x:W*0.65,y:H*0.55},{x:W*0.82,y:H*0.35}];
-    nodes.forEach((n,i)=>{const pulse=0.4+0.2*Math.sin((t+scrollPhase)*2+i);const nc=[COL.a1,COL.a2,COL.a3][i];ctx.beginPath();ctx.arc(n.x,n.y,4,0,2*Math.PI);ctx.fillStyle=nc;ctx.globalAlpha=pulse;ctx.fill();ctx.beginPath();ctx.arc(n.x,n.y,12,0,2*Math.PI);ctx.strokeStyle=nc;ctx.lineWidth=0.8;ctx.globalAlpha=pulse*0.4;ctx.stroke();});
-    ctx.globalAlpha=1;t+=0.016;
-    if(!REDUCED_MOTION)requestAnimationFrame(draw); // reduced-motion 下只画一帧静态底纹
-  }
-  draw();
-})();
-
-// ==================== Formula watermarks ====================
-(function(){
-  const formulas=document.querySelectorAll('.formula-text');
-  formulas.forEach((f,i)=>{
-    f.style.animationDelay=(i*3)+'s';
-    f.style.animationDuration=(10+Math.random()*6)+'s';
-  });
-  // 用 KaTeX 渲染背景水印公式（根号/上下标规范排版）；
-  // KaTeX 为 defer 加载，DOMContentLoaded 时必然已就绪；加载失败则保留纯文本降级
-  window.addEventListener('DOMContentLoaded',function(){
-    if(!window.katex)return;
-    document.querySelectorAll('.formula-text[data-tex]').forEach(el=>{
-      try{el.innerHTML=katex.renderToString(el.getAttribute('data-tex'),{throwOnError:false});}catch(e){}
-    });
-  });
-})();
-
-// ==================== Card 3D Tilt ====================
-if(!REDUCED_MOTION){
-document.querySelectorAll('.card').forEach(card=>{
-  card.addEventListener('mousemove',e=>{
-    const rect=card.getBoundingClientRect();
-    const x=(e.clientX-rect.left)/rect.width-0.5;
-    const y=(e.clientY-rect.top)/rect.height-0.5;
-    card.style.transform=`perspective(1000px) rotateY(${x*4}deg) rotateX(${-y*3}deg) translateZ(2px)`;
-  });
-  card.addEventListener('mouseleave',()=>{card.style.transform='';});
-});
-}
-
-// ==================== Favicon Animation (10fps 节流,避免每帧 toDataURL) ====================
-(function(){
-  const fc=document.createElement('canvas');fc.width=32;fc.height=32;const fctx=fc.getContext('2d');
-  let fa=0,last=0;
-  function drawFavicon(ts){
-    if(!REDUCED_MOTION)requestAnimationFrame(drawFavicon);
-    else ts=last+100; // reduced-motion: 只画一次
-    if(ts-last<90)return; // ~10fps 对肉眼足够
-    last=ts;
-    fctx.clearRect(0,0,32,32);
-    const angle=Math.sin(fa)*0.3;
-    const px=16,py=6,l=14,bx=px+Math.sin(angle)*l,by=py+Math.cos(angle)*l;
-    fctx.strokeStyle='#7c3aed';fctx.lineWidth=1.5;fctx.beginPath();fctx.moveTo(px,py);fctx.lineTo(bx,by);fctx.stroke();
-    fctx.fillStyle='#4f46e5';fctx.beginPath();fctx.arc(bx,by,3.5,0,2*Math.PI);fctx.fill();
-    const link=document.querySelector('link[rel="icon"]');
-    if(link)link.href=fc.toDataURL('image/png');
-    fa+=0.08;
-  }
-  requestAnimationFrame(drawFavicon);
-})();
 
 // ==================== State ====================
 const S={sessionId:null,motionType:'',firstFrameB64:null,firstFrameImg:null,calibSpec:null,calibPoints:[],calibPhase:null,_pivotCount:null};
@@ -1066,18 +941,17 @@ function selectType(type){
   animateVisibleParamCards();
 }
 
-// 对所有当前可见的参数卡片依次施加"落入+摇晃"入场动画（递增延迟、循环 starFall1/2/3）
+// 对所有当前可见的参数卡片依次施加淡入上移入场动画（递增延迟）
 // 按可见卡片顺序计数，避免 display:none 卡片占用 :nth-child 序号导致动画错乱。
 function animateVisibleParamCards(){
   const cards=Array.from(document.querySelectorAll('#params_area .param-card'));
-  const names=['starFall1','starFall2','starFall3'];
   let idx=0;
   cards.forEach(card=>{
     if(card.style.display==='none')return;
     card.style.animation='none';
     void card.offsetWidth; // 强制 reflow，重启动画
-    card.style.animation=`${names[idx%3]} 0.7s cubic-bezier(0.22,0.61,0.36,1) both`;
-    card.style.animationDelay=`${(idx*0.08).toFixed(2)}s`;
+    card.style.animation='fadeUp 0.5s ease-out both';
+    card.style.animationDelay=`${(idx*0.06).toFixed(2)}s`;
     idx++;
   });
 }
@@ -1771,15 +1645,15 @@ async function startProcessing(){
           const r=msg.result,data={output_dir:msg.output_dir};
           if(r.plot_preview){plotImg.src='data:image/png;base64,'+r.plot_preview;plotArea.classList.remove('hidden');}
           let h='';
-          h+=`<div class="result-item"><div class="key">保存目录</div><div class="val">${esc(data.output_dir)} <button class="copy-btn" onclick="copyPath('${esc(data.output_dir).replace(/'/g,"\\'")}',this)">📋 复制</button></div></div>`;
-          h+=`<div class="result-item"><div class="key">CSV 数据文件</div><div class="val">${esc(r.csv_path)} <button class="copy-btn" onclick="copyPath('${esc(r.csv_path).replace(/'/g,"\\'")}',this)">📋 复制</button></div></div>`;
-          if(r.peaks_csv)h+=`<div class="result-item"><div class="key">峰值 CSV</div><div class="val">${esc(r.peaks_csv)} <button class="copy-btn" onclick="copyPath('${esc(r.peaks_csv).replace(/'/g,"\\'")}',this)">📋 复制</button></div></div>`;
+          h+=`<div class="result-item"><div class="key">保存目录</div><div class="val">${esc(data.output_dir)} <button class="copy-btn" onclick="copyPath('${esc(data.output_dir).replace(/'/g,"\\'")}',this)"><svg class="icon"><use href="#i-copy"/></svg> 复制</button></div></div>`;
+          h+=`<div class="result-item"><div class="key">CSV 数据文件</div><div class="val">${esc(r.csv_path)} <button class="copy-btn" onclick="copyPath('${esc(r.csv_path).replace(/'/g,"\\'")}',this)"><svg class="icon"><use href="#i-copy"/></svg> 复制</button></div></div>`;
+          if(r.peaks_csv)h+=`<div class="result-item"><div class="key">峰值 CSV</div><div class="val">${esc(r.peaks_csv)} <button class="copy-btn" onclick="copyPath('${esc(r.peaks_csv).replace(/'/g,"\\'")}',this)"><svg class="icon"><use href="#i-copy"/></svg> 复制</button></div></div>`;
           if(r.per_pendulum_csvs&&r.per_pendulum_csvs.length){
-            const pcs=r.per_pendulum_csvs.map(p=>`<span style="display:block;font-size:0.78rem;">${esc(p)} <button class="copy-btn" onclick="copyPath('${esc(p).replace(/'/g,"\\'")}',this)">📋 复制</button></span>`).join('');
+            const pcs=r.per_pendulum_csvs.map(p=>`<span style="display:block;font-size:0.78rem;">${esc(p)} <button class="copy-btn" onclick="copyPath('${esc(p).replace(/'/g,"\\'")}',this)"><svg class="icon"><use href="#i-copy"/></svg> 复制</button></span>`).join('');
             h+=`<div class="result-item"><div class="key">各摆 CSV (${r.num_pendulums||r.per_pendulum_csvs.length} 个摆)</div><div class="val" style="line-height:1.9;">${pcs}</div></div>`;
           }
-          if(r.video_path)h+=`<div class="result-item"><div class="key">标注视频</div><div class="val">${esc(r.video_path)} <button class="copy-btn" onclick="copyPath('${esc(r.video_path).replace(/'/g,"\\'")}',this)">📋 复制</button></div></div>`;
-          h+=`<div class="result-item"><div class="key">角度-时间图</div><div class="val">${esc(r.plot_path)} <button class="copy-btn" onclick="copyPath('${esc(r.plot_path).replace(/'/g,"\\'")}',this)">📋 复制</button></div></div>`;
+          if(r.video_path)h+=`<div class="result-item"><div class="key">标注视频</div><div class="val">${esc(r.video_path)} <button class="copy-btn" onclick="copyPath('${esc(r.video_path).replace(/'/g,"\\'")}',this)"><svg class="icon"><use href="#i-copy"/></svg> 复制</button></div></div>`;
+          h+=`<div class="result-item"><div class="key">角度-时间图</div><div class="val">${esc(r.plot_path)} <button class="copy-btn" onclick="copyPath('${esc(r.plot_path).replace(/'/g,"\\'")}',this)"><svg class="icon"><use href="#i-copy"/></svg> 复制</button></div></div>`;
           h+=`<div class="result-item"><div class="key">数据点数</div><div class="val">${r.num_points}</div></div>`;
           if(r.sr_result&&!r.sr_result.error){
             const sr=r.sr_result;
@@ -1819,7 +1693,7 @@ async function startProcessing(){
   }catch(err){
     clearInterval(progTimer);progBar.classList.add('hidden');progText.classList.add('hidden');
     statusDiv.className='status error';statusDiv.textContent='处理失败: '+err.message;showToast('处理失败: '+err.message,'error');
-  }finally{btnProcess.disabled=false;btnProcess.innerHTML='&#9654; 开始处理';}
+  }finally{btnProcess.disabled=false;btnProcess.innerHTML='<svg class="icon"><use href="#i-play"/></svg>开始处理';}
 }
 
 // ==================== Mode Switching ====================
@@ -1920,7 +1794,7 @@ async function loadTheory(){
 
 function renderTheory(data){
   const c=document.getElementById('theory_content');
-  let h='<h2 style="font-size:1.2rem;font-weight:800;margin-bottom:20px;background:linear-gradient(135deg,var(--a1),var(--a2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">'+data.title+'</h2>';
+  let h='<h2 style="font-size:1.25rem;font-weight:700;margin-bottom:20px;color:var(--text);">'+data.title+'</h2>';
   let _secIdx=0;
   for(const sec of data.sections){
     h+=`<div class="theory-section" data-reveal style="transition-delay:${Math.min(_secIdx*60,360)}ms;">`;_secIdx++;
@@ -1961,7 +1835,7 @@ function renderTheory(data){
       }else{
         for(const sub of sec.subsections){
           h+='<div style="margin-top:14px;padding:14px;background:var(--bg2);border-radius:10px;border:1px solid var(--border);">';
-          h+='<h4 style="font-size:0.88rem;font-weight:700;color:var(--a2);margin-bottom:6px;">'+sub.title+'</h4>';
+          h+='<h4 style="font-size:0.88rem;font-weight:700;color:var(--a1);margin-bottom:6px;">'+sub.title+'</h4>';
           h+='<p style="font-size:0.84rem;color:var(--t2);line-height:1.7;">'+renderTheoryMarkdown(sub.content||sub.description||'')+'</p>';
           if(sub.typical_zeta)h+='<p style="font-size:0.78rem;color:var(--t3);margin-top:4px;">典型 ζ 范围: <code style="color:var(--a1);">'+sub.typical_zeta+'</code></p>';
           var fml=sub.formula||sub.solution||'';
@@ -2048,14 +1922,14 @@ function renderGuide(data){
     }
     if(sec.parameters){
       h+='<div style="margin-top:8px;">';
-      for(const p of sec.parameters)h+='<div style="display:flex;gap:8px;padding:6px 0;border-bottom:1px dashed var(--border);font-size:0.82rem;"><span style="color:var(--a2);font-weight:600;min-width:100px;">'+p.name+'</span><span style="color:var(--a1);font-family:monospace;min-width:80px;">'+p.value+'</span><span style="color:var(--t3);">'+p.reason+'</span></div>';
+      for(const p of sec.parameters)h+='<div style="display:flex;gap:8px;padding:6px 0;border-bottom:1px dashed var(--border);font-size:0.82rem;"><span style="color:var(--a1);font-weight:600;min-width:100px;">'+p.name+'</span><span style="color:var(--a1);font-family:monospace;min-width:80px;">'+p.value+'</span><span style="color:var(--t3);">'+p.reason+'</span></div>';
       h+='</div>';
     }
     if(sec.steps){h+='<ol style="padding-left:18px;">';for(const s of sec.steps)h+='<li style="font-size:0.84rem;color:var(--t2);margin-bottom:4px;">'+s+'</li>';h+='</ol>';}
     if(sec.damping_types){
       for(const d of sec.damping_types){
         h+='<div style="padding:10px 14px;margin-bottom:8px;background:var(--bg2);border-radius:8px;border:1px solid var(--border);">';
-        h+='<div style="font-weight:700;color:var(--a2);font-size:0.88rem;">'+d.type+' <span style="color:var(--t3);font-weight:400;font-size:0.75rem;">'+d.zeta_range+'</span></div>';
+        h+='<div style="font-weight:700;color:var(--a1);font-size:0.88rem;">'+d.type+' <span style="color:var(--t3);font-weight:400;font-size:0.75rem;">'+d.zeta_range+'</span></div>';
         h+='<div style="font-size:0.8rem;color:var(--t2);margin-top:4px;">条件: '+d.condition+'</div>';
         h+='<div style="font-size:0.8rem;color:var(--t2);">特征: '+d.feature+'</div></div>';
       }
@@ -2169,9 +2043,9 @@ function drawSimCanvas(beta,omega0,theta0){
     ctx.stroke();ctx.setLineDash([]);
   }
   // Labels
-  ctx.globalAlpha=0.7;ctx.fillStyle=t3;ctx.font='22px "JetBrains Mono",monospace';
+  ctx.globalAlpha=0.7;ctx.fillStyle=t3;ctx.font='22px Consolas,monospace';
   ctx.fillText('θ(t)',12,28);ctx.fillText('t (s)',w-60,h-10);
-  ctx.fillStyle=col1;ctx.globalAlpha=0.5;ctx.font='20px "Inter",sans-serif';
+  ctx.fillStyle=col1;ctx.globalAlpha=0.5;ctx.font='20px "Segoe UI",sans-serif';
   ctx.fillText('θ₀='+theta0+'°  β='+beta.toFixed(2)+'  ω₀='+omega0.toFixed(1),12,h-12);
 }
 
