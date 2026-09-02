@@ -925,6 +925,9 @@ def dashboard_summary():
                            (u["username"],)).fetchone()["n"]
         my_graded = c.execute("SELECT COUNT(*) AS n FROM submissions WHERE username=?"
                               " AND status='graded'", (u["username"],)).fetchone()["n"]
+        my_submitted = c.execute("SELECT COUNT(*) AS n FROM submissions WHERE username=?"
+                                 " AND status IN ('submitted','graded')",
+                                 (u["username"],)).fetchone()["n"]
         my_avg = c.execute("SELECT AVG(score) AS a FROM submissions WHERE username=?"
                            " AND status='graded'", (u["username"],)).fetchone()["a"]
         my_qa = c.execute(
@@ -935,7 +938,8 @@ def dashboard_summary():
                                   " AND (SELECT COUNT(*) FROM replies r WHERE r.qid=q.id)=0",
                                   (u["username"],)).fetchone()["n"]
     my = {
-        "pre_done": my_pre, "lab_done": my_lab, "graded": my_graded,
+        "pre_done": my_pre, "lab_done": my_lab,
+        "submitted": my_submitted, "graded": my_graded,
         "avg_score": round(float(my_avg), 1) if my_avg is not None else None,
         "qa_replied": my_qa, "qa_pending": my_qa_pending,
         "class_name": u["class_name"],

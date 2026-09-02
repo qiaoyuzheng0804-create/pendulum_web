@@ -486,12 +486,6 @@
   .fstep{display:inline-flex;align-items:center;gap:5px;font-size:0.7rem;font-weight:600;color:var(--t3);background:var(--bg2);border:1px solid var(--border);border-radius:999px;padding:3px 9px;}
   .fstep.done{color:var(--green);background:var(--i4b);border-color:transparent;}
   .fstep.now{color:var(--a1);background:var(--i3b);border-color:transparent;}
-  .myflow-row{display:flex;align-items:center;gap:12px;padding:10px 4px;border-bottom:1px dashed var(--border);flex-wrap:wrap;}
-  .myflow-row:last-child{border-bottom:none;}
-  .myflow-row .mf-name{width:150px;font-size:0.84rem;font-weight:600;flex-shrink:0;}
-  .myflow-row .stages{flex:1;min-width:300px;}
-  .myflow-row .mf-score{font-size:0.8rem;font-weight:700;}
-  .myflow-row .mf-btn{flex-shrink:0;}
 
   /* ============ 师生问答（文字/图片/语音） ============ */
   .qa-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:14px;align-items:start;}
@@ -539,6 +533,51 @@
   .qa-tab.active{background:var(--text);color:#fff;border-color:var(--text);}
   .empty-tip{text-align:center;padding:36px 16px;color:var(--t3);font-size:0.84rem;}
   .micro-tip{font-size:0.7rem;color:var(--t3);}
+
+  /* ============ 工作台图表化（环形 / 堆叠 / 分段条） ============ */
+  .panel-sec{display:flex;align-items:center;gap:8px;margin-bottom:14px;}
+  .panel-sec h3{font-size:0.9rem;font-weight:700;display:flex;align-items:center;gap:7px;margin:0;}
+  .panel-sec .en{font-size:0.66rem;color:var(--t3);font-weight:500;}
+  .panel-sec .x{margin-left:auto;font-size:0.7rem;color:var(--t3);font-weight:600;}
+  .donut-wrap{position:relative;display:inline-flex;align-items:center;justify-content:center;}
+  .donut-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;line-height:1.2;pointer-events:none;}
+  .donut-center b{font-size:1.2rem;font-weight:800;font-variant-numeric:tabular-nums;}
+  .donut-center .d-sub{font-size:0.6rem;color:var(--t3);}
+  .stackbar{display:flex;width:100%;border-radius:6px;overflow:hidden;}
+  .st-seg{height:100%;}
+  .legend-line{display:flex;gap:14px;flex-wrap:wrap;font-size:0.7rem;color:var(--t3);margin-top:12px;justify-content:center;}
+  .legend-line i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:-1px;}
+  .cls-row{padding:11px 0;border-bottom:1px dashed var(--border);}
+  .cls-row:last-child{border-bottom:none;}
+  .cls-top{display:flex;align-items:baseline;gap:8px;font-size:0.84rem;margin-bottom:7px;}
+  .cls-top b{font-weight:700;}
+  .cls-top .cnt{color:var(--t3);font-size:0.72rem;}
+  .cls-top .avg{margin-left:auto;font-weight:800;font-variant-numeric:tabular-nums;font-size:0.92rem;}
+  .cls-top .avg small{font-size:0.62rem;color:var(--t3);font-weight:500;margin-right:3px;}
+  .cls-sub{font-size:0.7rem;color:var(--t3);margin-top:5px;display:flex;gap:12px;flex-wrap:wrap;}
+  .cls-sub b{font-variant-numeric:tabular-nums;}
+  .exp-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px dashed var(--border);font-size:0.78rem;}
+  .exp-row:last-child{border-bottom:none;}
+  .exp-row .en-label{width:96px;font-weight:600;color:var(--t2);flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .exp-row .stackbar{flex:1;}
+  .exp-row .en-num{width:28px;text-align:right;font-variant-numeric:tabular-nums;color:var(--t3);}
+  .ring4{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:14px;justify-items:center;}
+  .ring-cell{display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center;}
+  .ring-cell .rl{font-size:0.72rem;color:var(--t3);font-weight:600;margin-top:2px;}
+  .mf-row{display:flex;align-items:center;gap:14px;padding:11px 2px;border-bottom:1px dashed var(--border);cursor:pointer;transition:background .15s;border-radius:8px;padding-left:6px;padding-right:6px;margin:0 -6px;}
+  .mf-row:hover{background:var(--g1);}
+  .mf-row:last-child{border-bottom:none;}
+  .mf-name{width:116px;font-size:0.84rem;font-weight:600;flex-shrink:0;line-height:1.3;}
+  .mf-name small{display:block;font-size:0.62rem;color:var(--t3);font-weight:400;letter-spacing:.02em;}
+  .segbar{display:flex;gap:4px;flex:1;min-width:110px;}
+  .segbar .sg{flex:1;height:10px;border-radius:5px;background:var(--bg2);transition:background .3s;}
+  .segbar .sg.on{background:var(--green);}
+  .segbar .sg.warn{background:var(--amber);}
+  .segbar .sg.half{background:linear-gradient(90deg,var(--amber) 0 50%,var(--bg2) 50% 100%);}
+  .mf-score{width:52px;text-align:right;font-weight:800;font-size:0.9rem;font-variant-numeric:tabular-nums;flex-shrink:0;}
+  .mf-score.off{color:var(--t3);font-weight:500;font-size:0.74rem;}
+  .mf-actions{flex-shrink:0;min-width:92px;text-align:right;}
+  .badge-sub{display:inline-block;font-size:0.68rem;font-weight:700;color:var(--a1);background:var(--i3b);border-radius:999px;padding:3px 10px;white-space:nowrap;}
 </style>
 </head>
 <body>
@@ -2567,10 +2606,9 @@ async function renderDashboard(){
   }catch(e){root.innerHTML='<div class="status error" style="display:block;margin:20px;">加载看板失败: '+e.message+'</div>';return;}
   const role=sum.user?sum.user.role:null;
   const title=role==='teacher'?'教学数据看板':(role==='student'?'我的学习工作台':'平台数据看板');
-  const tagText=`${sum.exp_total} 个实验 · ${sum.classes.length} 个教学班 · ${sum.students} 名学生`;
   root.innerHTML=`
     <div class="dash-head">
-      <h2>${title}</h2><span class="tag">${tagText}</span>
+      <h2>${title}</h2>
       <span style="flex:1;"></span>
       <span class="online-pill" id="online_pill"><span class="dot"></span>在线 ${online} 人</span>
     </div>
@@ -2590,50 +2628,93 @@ function statCards(items){
       <div class="lbl">${it.lbl}</div>
     </div>`).join('')}</div>`;
 }
-function hbar(items,max){
-  if(!items.length)return '<div class="empty-tip">暂无数据</div>';
-  const m=max||Math.max(...items.map(x=>x.v),1);
-  return items.map(x=>`<div class="hbar-row"><span class="hl">${x.k}</span>
-    <div class="hbar-track"><div class="hbar-fill" style="width:${Math.max(x.v/m*100,1)}%;"></div></div>
-    <span class="hv">${x.v}</span></div>`).join('');
+// ---------- 图表工具（纯 SVG / CSS，无第三方库） ----------
+const C_GREEN='#15803d',C_AMBER='#b45309',C_GREY='#c9c1b3';
+function donutSvg(segs,size,stroke){
+  const tot=segs.reduce((a,s)=>a+(s.v>0?s.v:0),0)||1;
+  const r=(size-stroke)/2,c=size/2,circ=2*Math.PI*r;
+  let acc=0,parts='';
+  for(const s of segs){
+    const frac=s.v/tot;
+    if(frac<=0)continue;
+    const dash=Math.max(frac*circ-2,0),gap=circ-dash,off=-acc*circ+1;
+    acc+=frac;
+    parts+=`<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${s.color}" stroke-width="${stroke}" stroke-dasharray="${dash} ${gap}" stroke-dashoffset="${off}" transform="rotate(-90 ${c} ${c})"/>`;
+  }
+  if(!parts)parts=`<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${C_GREY}" stroke-width="${stroke}" transform="rotate(-90 ${c} ${c})"/>`;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${parts}</svg>`;
+}
+function donutCard(size,segs,big,sub){
+  return `<div class="donut-wrap" style="width:${size+10}px;height:${size+10}px;">${donutSvg(segs,size,Math.max(9,Math.round(size*0.11)))}
+    <div class="donut-center"><b>${big}</b><span class="d-sub">${sub||''}</span></div></div>`;
+}
+function pct(done,total){return total?Math.round(done/total*100):0;}
+function stackBar(parts){
+  const tot=parts.reduce((a,p)=>a+p.v,0)||1;
+  const segs=parts.map(p=>p.v>0?`<div class="st-seg" style="width:${(p.v/tot*100).toFixed(1)}%;background:${p.color};"></div>`:'').join('');
+  return `<div class="stackbar" style="height:12px;">${segs||''}</div>`;
 }
 function distColors(){return [['90-100','#15803d'],['80-89','#4d7c0f'],['70-79','#a16207'],['60-69','#b45309'],['<60','#b91c1c']];}
 
 function publicDash(sum){
-  return `<div class="dash-cols">
+  const cols=distColors();
+  const dist=sum.score_dist||{};
+  const distSegs=cols.map(([k,col])=>({v:dist[k]||0,color:col}));
+  const distTotal=distSegs.reduce((a,s)=>a+s.v,0);
+  const distCard=distTotal?donutCard(150,distSegs,sum.avg_score??'—','平均分')
+    +`<div class="legend-line" style="justify-content:flex-start;">${cols.map(([k,col])=>`<span><i style="background:${col};"></i>${k}</span>`).join('')}</div>`
+    :'<div class="empty-tip">暂无批改数据</div>';
+  return `
+  ${statCards([
+    {num:sum.exp_total,lbl:'开设实验',cls:'accent'},
+    {num:sum.students,lbl:'注册学生',cls:''},
+    {num:sum.reports,lbl:'实验报告',cls:''},
+    {num:sum.graded,lbl:'已批改',cls:'ok'},
+    {num:sum.avg_score??'—',lbl:'平均分',cls:'accent'},
+  ])}
+  <div class="dash-cols">
     <div class="panel">
-      <h3>平台概览<svg class="icon"><use href="#i-activity"/></svg><span class="en">Overview</span></h3>
-      ${statCards([
-        {num:sum.exp_total,lbl:'开设实验',cls:'accent'},
-        {num:sum.students,lbl:'注册学生',cls:''},
-        {num:sum.reports,lbl:'实验报告',cls:''},
-        {num:sum.graded,lbl:'已批改',cls:'ok'},
-        {num:sum.avg_score??'—',lbl:'平均分',cls:'accent'},
-      ])}
-      <div class="empty-tip" style="text-align:left;padding:10px 2px;">
-        登录后查看各教学班的学生人数、报告进度与成绩分布等完整教学数据。
-      </div>
+      <div class="panel-sec"><h3><svg class="icon"><use href="#i-activity"/></svg>成绩分布</h3><span class="en">Score Distribution</span></div>
+      <div style="text-align:center;">${distCard}</div>
     </div>
-    <div class="panel" style="text-align:center;">
-      <div style="font-weight:700;margin-bottom:8px;">登录后查看</div>
-      <div style="color:var(--t2);font-size:0.84rem;margin-bottom:18px;">教师：班级成绩、掌握情况、待批改<br>学生：个人学习进度与反馈</div>
-      <button class="btn btn-primary btn-lg" onclick="location.href='/login'">前往登录</button>
+    <div class="panel" style="display:flex;flex-direction:column;justify-content:center;text-align:center;min-height:200px;">
+      <div style="font-weight:700;margin-bottom:6px;">登录后解锁完整教学数据</div>
+      <div style="color:var(--t2);font-size:0.84rem;margin-bottom:16px;">
+        教师：班级掌握情况、待批改、各实验报告量<br>学生：个人学习进度、师生问答
+      </div>
+      <div><button class="btn btn-primary btn-lg" onclick="location.href='/login'">前往登录</button></div>
     </div>
   </div>`;
 }
 
 function teacherDash(sum){
+  const cols=distColors();
+  const dist=sum.score_dist||{};
+  const distSegs=cols.map(([k,col])=>({v:dist[k]||0,color:col}));
+  const distTotal=distSegs.reduce((a,s)=>a+s.v,0);
+  const distLegend=cols.map(([k,col])=>`<span><i style="background:${col};"></i>${k} · ${dist[k]||0}人</span>`).join('');
+  const distCard=distTotal?donutCard(150,distSegs,sum.avg_score??'—','平均分')
+    +`<div class="legend-line">${distLegend}</div>`:'<div class="empty-tip">暂无批改数据</div>';
   const clsRows=sum.class_stats||[];
-  const classHtml=clsRows.length?`<table class="class-table">
-    <tr><th>教学班</th><th>人数</th><th>报告</th><th>待批改</th><th>平均分</th></tr>
-    ${clsRows.map(c=>`<tr><td><b>${c.name}</b></td><td>${c.students}</td><td>${c.reports}</td>
-      <td>${Math.max(c.submitted-c.graded,0)}</td>
-      <td class="avg-big">${c.avg_score!=null?c.avg_score:'—'}</td></tr>`).join('')}
-  </table>`:'<div class="empty-tip">暂无教学班数据</div>';
-  const dist=sum.score_dist||{};const colors=distColors();
-  const distHtml=hbar(colors.map(([k,col])=>({k,col,v:dist[k]||0})),sum.graded);
-  const expHtml=hbar((sum.by_exp||[]).slice(0,7).map(e=>({k:e.exp_name,v:e.count})),null);
-  const recent=(sum.recent||[]).map(r=>`<div class="recent-item">
+  const classHtml=clsRows.length?clsRows.map(c=>{
+    const pend=Math.max(c.submitted-c.graded,0);
+    const none=Math.max(c.students-c.reports,0);
+    return `<div class="cls-row">
+      <div class="cls-top"><b>${esc(c.name)}</b><span class="cnt">${c.students} 人</span>
+        <span class="avg">${c.avg_score!=null?c.avg_score:'—'}<small>平均分</small></span></div>
+      ${stackBar([{v:c.graded,color:C_GREEN},{v:pend,color:C_AMBER},{v:none,color:C_GREY}])}
+      <div class="cls-sub"><span>已批改 <b>${c.graded}</b></span><span>待批改 <b>${pend}</b></span><span>未提交 <b>${none}</b></span></div>
+    </div>`;}).join('')
+    :'<div class="empty-tip">暂无教学班（可在「报告中心 → 查看/导入学生」按 学号,姓名,班级 添加）</div>';
+  const clsLegend=`<div class="legend-line" style="justify-content:flex-start;"><span><i style="background:${C_GREEN};"></i>已批改</span><span><i style="background:${C_AMBER};"></i>待批改</span><span><i style="background:${C_GREY};"></i>未提交</span></div>`;
+  const exps=(sum.by_exp||[]).slice(0,8);
+  const expHtml=exps.length?exps.map(e=>{
+    const pend=e.count-e.graded;
+    return `<div class="exp-row"><span class="en-label" title="${esc(e.exp_name)}">${esc(e.exp_name)}</span>
+      ${stackBar([{v:e.graded,color:C_GREEN},{v:pend,color:C_AMBER}])}
+      <span class="en-num">${e.count}</span></div>`;}).join('')
+    :'<div class="empty-tip">暂无报告</div>';
+  const recent=(sum.recent||[]).slice(0,6).map(r=>`<div class="recent-item">
     <span class="who">${r.display_name||r.username}</span><span class="cls">${r.class_name||''}</span>
     <span class="mid">${r.exp_name}</span>
     <span class="pill ${r.status}">${r.status==='graded'?(r.score+' 分'):'待批改'}</span></div>`).join('')||'<div class="empty-tip">暂无动态</div>';
@@ -2649,62 +2730,68 @@ function teacherDash(sum){
   <div class="dash-cols">
     <div>
       <div class="panel">
-        <h3>教学班成绩<svg class="icon"><use href="#i-users"/></svg><span class="en">Classes</span></h3>
-        ${classHtml}
-        ${sum.qa_open>0?`<div style="margin-top:12px;padding:10px 12px;background:var(--i3b);border:1px solid var(--fr);border-radius:10px;font-size:0.8rem;color:var(--a2);display:flex;align-items:center;gap:8px;">
-          <svg class="icon"><use href="#i-message"/></svg>有 <b>${sum.qa_open}</b> 个学生提问待回复
-          <span style="flex:1;"></span><button class="btn btn-primary" style="padding:4px 12px;font-size:0.74rem;" onclick="switchView('qas')">去回复</button></div>`:''}
+        <div class="panel-sec"><h3><svg class="icon"><use href="#i-users"/></svg>班级掌握情况</h3><span class="en">Class Mastery</span>
+          <span class="x">${sum.qa_open>0?`<button class="btn btn-primary" style="padding:3px 12px;font-size:0.72rem;" onclick="switchView('qas')">${sum.qa_open} 个提问待回复 →</button>`:'图例见下'}</span></div>
+        ${classHtml}${clsLegend}
       </div>
       <div class="panel">
-        <h3>最近动态<svg class="icon"><use href="#i-clock"/></svg><span class="en">Recent</span></h3>
-        ${recent}
+        <div class="panel-sec"><h3><svg class="icon"><use href="#i-clipboard"/></svg>各实验报告量</h3><span class="en">Reports by Experiment</span><span class="x">绿=已批改 · 橙=待批改</span></div>
+        ${expHtml}
       </div>
     </div>
     <div>
       <div class="panel">
-        <h3>成绩分布<svg class="icon"><use href="#i-activity"/></svg><span class="en">Score Dist.</span></h3>
-        <div style="margin-top:4px;">${distHtml}</div>
-        <div class="dist-legend">${colors.map(([k,col])=>`<span><i style="background:${col};"></i>${k}</span>`).join('')}</div>
+        <div class="panel-sec"><h3><svg class="icon"><use href="#i-activity"/></svg>成绩分布</h3><span class="en">Score Distribution</span></div>
+        <div style="text-align:center;">${distCard}</div>
       </div>
       <div class="panel">
-        <h3>各实验报告量<svg class="icon"><use href="#i-clipboard"/></svg><span class="en">By Experiment</span></h3>
-        ${expHtml}
+        <div class="panel-sec"><h3><svg class="icon"><use href="#i-clock"/></svg>最近动态</h3><span class="en">Recent</span></div>
+        ${recent}
       </div>
     </div>
   </div>`;
 }
 
 function studentDash(sum){
-  const my=sum.my||{};
-  const progressTxt=my.pre_done+' / '+sum.exp_total;
+  const my=sum.my||{},T=sum.exp_total||1;
+  const rings=[
+    {lbl:'课前预习',done:my.pre_done,color:C_GREEN},
+    {lbl:'课中实验',done:my.lab_done,color:C_GREEN},
+    {lbl:'报告提交',done:my.submitted,color:C_AMBER},
+    {lbl:'批改完成',done:my.graded,color:C_GREEN},
+  ];
+  const ringHtml=`<div class="ring4">${rings.map(r=>{
+    const p=pct(r.done,T);
+    return `<div class="ring-cell">${donutCard(96,[{v:r.done,color:r.color},{v:T-r.done,color:C_GREY}],p+'%',r.done+' / '+T)}
+      <span class="rl">${r.lbl}</span></div>`;}).join('')}</div>`;
   return `
   ${statCards([
-    {num:my.pre_done,unit:' / '+sum.exp_total,lbl:'课前预习完成',cls:'ok'},
-    {num:my.lab_done,unit:' / '+sum.exp_total,lbl:'课中实验完成',cls:''},
-    {num:my.graded,lbl:'已批改报告',cls:''},
+    {num:my.pre_done,unit:' / '+T,lbl:'课前预习',cls:'ok'},
+    {num:my.lab_done,unit:' / '+T,lbl:'课中实验',cls:''},
+    {num:my.graded,unit:' / '+T,lbl:'已批改报告',cls:''},
     {num:my.avg_score??'—',lbl:'我的平均分',cls:'accent'},
   ])}
-  <div class="panel">
-    <h3>我的实验流程<svg class="icon"><use href="#i-check"/></svg><span class="en">预习 → 课中 → 报告 → 批改</span></h3>
-    <div id="myflow_box"><div class="skel"></div><div class="skel w70"></div></div>
-  </div>
   <div class="dash-cols">
-    <div class="panel">
-      <h3>学习提示<svg class="icon"><use href="#i-book"/></svg></h3>
-      <div style="font-size:0.82rem;color:var(--t2);line-height:2;">
-        <div>① 课前：先阅读「实验指导」并完成预习标记；</div>
-        <div>② 课中：按指导完成实验（视频分析 / 仪器操作）；</div>
-        <div>③ 课后：在「实验报告」中撰写并提交报告；</div>
-        <div>④ 教师批改后查看分数与评语，可追问交流。</div>
+    <div>
+      <div class="panel">
+        <div class="panel-sec"><h3><svg class="icon"><use href="#i-check"/></svg>我的实验流程</h3><span class="en">预习 → 课中 → 报告 → 批改</span><span class="x">点击行进入实验</span></div>
+        <div id="myflow_box"><div class="skel"></div><div class="skel w70"></div></div>
       </div>
     </div>
-    <div class="panel">
-      <h3>师生互动<svg class="icon"><use href="#i-message"/></svg></h3>
-      <div style="font-size:0.82rem;color:var(--t2);line-height:2;">
-        <div>已收到回复的问题：<b>${my.qa_replied}</b> 个</div>
-        <div>等待回复的问题：<b>${my.qa_pending}</b> 个</div>
+    <div>
+      <div class="panel">
+        <div class="panel-sec"><h3><svg class="icon"><use href="#i-activity"/></svg>完成进度</h3><span class="en">Completion</span></div>
+        ${ringHtml}
       </div>
-      <button class="btn btn-outline" style="margin-top:8px;" onclick="switchView('qas')"><svg class="icon"><use href="#i-message"/></svg> 去提问 / 查看回复</button>
+      <div class="panel">
+        <div class="panel-sec"><h3><svg class="icon"><use href="#i-message"/></svg>师生互动</h3><span class="en">Q&amp;A</span></div>
+        <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;font-size:0.82rem;color:var(--t2);">
+          <span>已收到回复：<b style="color:var(--green);font-variant-numeric:tabular-nums;">${my.qa_replied}</b> 个</span>
+          <span>等待回复：<b style="color:var(--a1);font-variant-numeric:tabular-nums;">${my.qa_pending}</b> 个</span>
+          <span style="flex:1;"></span>
+          <button class="btn btn-outline" style="padding:5px 14px;font-size:0.76rem;" onclick="switchView('qas')"><svg class="icon"><use href="#i-message"/></svg>去提问</button>
+        </div>
+      </div>
     </div>
   </div>`;
 }
@@ -2714,23 +2801,23 @@ async function fillMyFlow(boxId){
   let flow=[];try{flow=await (await fetch('/api/flow')).json();}catch(e){box.innerHTML='<div class="empty-tip">加载失败</div>';return;}
   if(!flow.length){box.innerHTML='<div class="empty-tip">暂无实验</div>';return;}
   box.innerHTML=flow.map(f=>{
-    const preCls=f.pre_done?'done':'now',labCls=f.lab_done?'done':'now';
-    const repOk=(f.report_status==='submitted'||f.report_status==='graded');
-    const gradOk=f.report_status==='graded';
-    const repName=f.report_status==='graded'?'报告 ✓':(f.report_status==='submitted'?'报告 ✓':(f.report_status==='draft'?'报告 ○':'报告'));
-    return `<div class="myflow-row">
-      <div class="mf-name">${f.exp_name}</div>
-      <div class="stages">
-        <span class="fstep ${preCls}">预习${f.pre_done?' ✓':''}</span>
-        <span class="fstep ${labCls}">课中${f.lab_done?' ✓':''}</span>
-        <span class="fstep ${repOk?'done':''}">${repName}</span>
-        <span class="fstep ${gradOk?'done':''}">批改${gradOk?' ✓':''}</span>
-        ${f.score!=null?`<span class="mf-score">${f.score} 分</span>`:''}
-      </div>
-      <span style="flex:1;"></span>
-      ${!f.pre_done?`<button class="btn btn-outline" style="padding:4px 10px;font-size:0.72rem;" onclick="markPre('${f.exp_id}')">完成预习</button>`:''}
-      ${!f.lab_done?`<button class="btn btn-outline" style="padding:4px 10px;font-size:0.72rem;" onclick="markLab('${f.exp_id}')">完成课中</button>`:''}
-      <button class="btn btn-primary" style="padding:4px 12px;font-size:0.72rem;" onclick="goExpLearn('${f.exp_id}')">去学习</button>
+    const rep=f.report_status;
+    const sgPre=f.pre_done?'on':'';
+    const sgLab=f.lab_done?'on':'';
+    const sgRep=rep==='graded'?'on':(rep==='submitted'?'warn':(rep==='draft'?'half':''));
+    const sgGrade=rep==='graded'?'on':'';
+    const tip=`预习${f.pre_done?'✓':'未'} · 课中${f.lab_done?'✓':'未'} · 报告${rep==='graded'?'✓批改':rep==='submitted'?'待批改':rep==='draft'?'草稿':'未'} · 批改${rep==='graded'?'✓':'未'}`;
+    let act='';
+    if(!f.pre_done)act=`<button class="btn btn-primary" style="padding:4px 12px;font-size:0.72rem;" onclick="event.stopPropagation();markPre('${f.exp_id}')">完成预习</button>`;
+    else if(!f.lab_done)act=`<button class="btn btn-primary" style="padding:4px 12px;font-size:0.72rem;" onclick="event.stopPropagation();markLab('${f.exp_id}')">完成课中</button>`;
+    else if(rep==='none'||rep==='draft')act=`<button class="btn btn-primary" style="padding:4px 12px;font-size:0.72rem;" onclick="event.stopPropagation();goReportFor('${f.exp_id}')">写报告</button>`;
+    else if(rep==='submitted')act=`<span class="badge-sub">待批改</span>`;
+    else act=`<span class="badge-sub" style="background:var(--i4b);color:var(--green);">已批改</span>`;
+    return `<div class="mf-row" title="${tip} · 点击查看实验" onclick="goExpLearn('${f.exp_id}')">
+      <div class="mf-name">${f.exp_name}<small>${f.mode==='video'?'视频分析':'指导实验'}</small></div>
+      <div class="segbar">${[sgPre,sgLab,sgRep,sgGrade].map(c=>`<span class="sg ${c}"></span>`).join('')}</div>
+      <div class="mf-score ${f.score==null?'off':''}">${f.score!=null?f.score+' 分':'—'}</div>
+      <div class="mf-actions">${act}</div>
     </div>`;
   }).join('');
 }
