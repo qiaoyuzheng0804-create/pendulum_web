@@ -1175,6 +1175,15 @@ def client_exit():
     return jsonify({"success": True})
 
 
+@app.route("/api/dashboard/online")
+def dashboard_online():
+    """数据看板：当前在线客户端数（心跳 90s 内视为在线）。"""
+    with _watchdog_lock:
+        now = _time.time()
+        online = sum(1 for v in _clients.values() if now - v <= 90)
+    return jsonify({"online": online})
+
+
 def _shutdown_safety():
     """退出前安全清理：电磁铁断电、关闭全部串口与 OpenMV。"""
     global _serial_conn, _gripper_conn
