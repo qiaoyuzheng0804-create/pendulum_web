@@ -591,6 +591,29 @@
   .mf-score.off{color:var(--t3);font-weight:500;font-size:0.74rem;}
   .mf-actions{flex-shrink:0;min-width:92px;text-align:right;}
   .badge-sub{display:inline-block;font-size:0.68rem;font-weight:700;color:var(--a1);background:var(--i3b);border-radius:999px;padding:3px 10px;white-space:nowrap;}
+
+  /* ============ 看板图表形态 2：班级环形卡 / 竖向柱状图 / 流程圆点 ============ */
+  .cls-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;}
+  .cls-card{border:1px solid var(--border);border-radius:12px;padding:12px 10px 10px;text-align:center;background:var(--card);}
+  .cls-card .cc-name{font-size:0.78rem;font-weight:700;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .cls-card .cc-sub{font-size:0.68rem;color:var(--t3);margin-top:5px;line-height:1.8;}
+  .cls-card .cc-sub b{color:var(--t2);font-variant-numeric:tabular-nums;}
+  .cls-card .cc-avg{font-size:0.68rem;color:var(--t3);margin-top:1px;}
+  .cls-card .cc-avg b{color:var(--a1);font-size:1rem;font-variant-numeric:tabular-nums;}
+  .bar-chart{display:flex;align-items:flex-end;gap:12px;height:176px;padding:4px 6px 0;background:repeating-linear-gradient(to top,transparent 0 33px,rgba(28,25,23,.05) 33px 34px);border-bottom:1px solid var(--border);}
+  .bar-col{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:3px;}
+  .bar-col .bv{font-size:0.64rem;color:var(--t3);font-variant-numeric:tabular-nums;line-height:1;}
+  .bar-col .bars{width:100%;max-width:38px;display:flex;flex-direction:column-reverse;justify-content:flex-start;border-radius:5px 5px 0 0;overflow:hidden;}
+  .bar-col .bl{font-size:0.58rem;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;line-height:1.6;}
+  .bar-legend{display:flex;gap:14px;font-size:0.7rem;color:var(--t3);margin-top:10px;justify-content:center;}
+  .bar-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:-1px;}
+  .stepper{display:flex;align-items:center;flex:1;min-width:130px;}
+  .st-dot{width:13px;height:13px;border-radius:50%;background:var(--card);border:2px solid var(--ba);flex-shrink:0;box-sizing:border-box;transition:background .2s,border-color .2s;}
+  .st-dot.on{background:var(--green);border-color:var(--green);}
+  .st-dot.warn{background:var(--amber);border-color:var(--amber);}
+  .st-dot.cur{border-color:var(--a1);border-width:2.5px;background:#fff;}
+  .st-line{flex:1;height:2px;background:var(--border);min-width:10px;border-radius:1px;}
+  .st-line.on{background:var(--green);}
 </style>
 </head>
 <body>
@@ -2342,6 +2365,12 @@ function renderGuide(data){
     +secs.map((x,k)=>'<div class="doc-sec'+(k?' hidden':'')+'">'+x+'</div>').join('');
   bindReveal(c);
   initDocPager(c);
+  // 指导内容里嵌的 $...$ / $$...$$ LaTeX 公式渲染为 KaTeX（content 走 marked，此处处理全部文本节点）
+  if(window.katex){
+    c.querySelectorAll('.guide-section p,.guide-section li,.faq-item,.tip-item').forEach(el=>{
+      try{el.innerHTML=renderKaTeXinHTML(el.innerHTML);}catch(e){}
+    });
+  }
 }
 
 // ==================== AI Chat ====================
@@ -2736,6 +2765,25 @@ function stackBar(parts){
   return `<div class="stackbar" style="height:12px;">${segs||''}</div>`;
 }
 function distColors(){return [['90-100','#15803d'],['80-89','#4d7c0f'],['70-79','#a16207'],['60-69','#b45309'],['<60','#b91c1c']];}
+// 竖向柱状图：items=[{label,v,segs:[{v,color}],tip?}] segs 自底部向上叠加
+function verticalBars(items){
+  if(!items.length)return '<div class="empty-tip">暂无数据</div>';
+  const max=Math.max(...items.map(x=>x.v),1);
+  const H=108;
+  return `<div class="bar-chart">${items.map(x=>{
+    const hgt=Math.max(x.v/max*H,x.v>0?8:0);
+    const segs=(x.segs||[]).filter(s=>s.v>0);
+    let bars='';
+    if(x.v>0&&segs.length){
+      const unit=hgt/segs.reduce((a,s)=>a+s.v,0);
+      bars=segs.map(s=>`<div class="bar-seg" style="height:${(s.v*unit).toFixed(1)}px;background:${s.color};"></div>`).join('');
+    }
+    return `<div class="bar-col" title="${esc(x.label||'')}${x.tip?('：'+x.tip):''} · 共 ${x.v}">
+      <span class="bv">${x.v||''}</span>
+      <div class="bars" style="height:${hgt}px;">${bars}</div>
+      <span class="bl">${esc(x.label||'')}</span>
+    </div>`;}).join('')}</div>`;
+}
 
 function publicDash(sum){
   const cols=distColors();
@@ -2777,23 +2825,22 @@ function teacherDash(sum){
   const distCard=distTotal?donutCard(150,distSegs,sum.avg_score??'—','平均分')
     +`<div class="legend-line">${distLegend}</div>`:'<div class="empty-tip">暂无批改数据</div>';
   const clsRows=sum.class_stats||[];
-  const classHtml=clsRows.length?clsRows.map(c=>{
+  const classHtml=clsRows.length?`<div class="cls-grid">${clsRows.map(c=>{
     const pend=Math.max(c.submitted-c.graded,0);
-    const none=Math.max(c.students-c.reports,0);
-    return `<div class="cls-row">
-      <div class="cls-top"><b>${esc(c.name)}</b><span class="cnt">${c.students} 人</span>
-        <span class="avg">${c.avg_score!=null?c.avg_score:'—'}<small>平均分</small></span></div>
-      ${stackBar([{v:c.graded,color:C_GREEN},{v:pend,color:C_AMBER},{v:none,color:C_GREY}])}
-      <div class="cls-sub"><span>已批改 <b>${c.graded}</b></span><span>待批改 <b>${pend}</b></span><span>未提交 <b>${none}</b></span></div>
-    </div>`;}).join('')
+    const rate=c.students?Math.round(c.graded/c.students*100):0;
+    return `<div class="cls-card">
+      <div class="cc-name" title="${esc(c.name)}">${esc(c.name)}</div>
+      ${donutCard(76,[{v:c.graded,color:'#c2410c'},{v:Math.max(c.students-c.graded,0),color:'#ece5d8'}],rate+'%','批改率')}
+      <div class="cc-sub">已提交 <b>${c.submitted}</b>/${c.students} 人 · 待批 <b>${pend}</b></div>
+      <div class="cc-avg">平均 <b>${c.avg_score!=null?c.avg_score:'—'}</b> 分</div>
+    </div>`;}).join('')}</div>`
     :'<div class="empty-tip">暂无教学班（可在「报告中心 → 查看/导入学生」按 学号,姓名,班级 添加）</div>';
-  const clsLegend=`<div class="legend-line" style="justify-content:flex-start;"><span><i style="background:${C_GREEN};"></i>已批改</span><span><i style="background:${C_AMBER};"></i>待批改</span><span><i style="background:${C_GREY};"></i>未提交</span></div>`;
   const exps=(sum.by_exp||[]).slice(0,8);
-  const expHtml=exps.length?exps.map(e=>{
-    const pend=e.count-e.graded;
-    return `<div class="exp-row"><span class="en-label" title="${esc(e.exp_name)}">${esc(e.exp_name)}</span>
-      ${stackBar([{v:e.graded,color:C_GREEN},{v:pend,color:C_AMBER}])}
-      <span class="en-num">${e.count}</span></div>`;}).join('')
+  const expHtml=exps.length?verticalBars(exps.map(e=>({
+      label:e.exp_name,v:e.count,
+      segs:[{label:'已批改',v:e.graded,color:'#c2410c'},
+            {label:'待批改',v:Math.max(e.count-e.graded,0),color:'#f0c9a6'}],
+    })))+'<div class="bar-legend"><span><i style="background:#c2410c;"></i>已批改</span><span><i style="background:#f0c9a6;"></i>待批改</span></div>'
     :'<div class="empty-tip">暂无报告</div>';
   const recent=(sum.recent||[]).slice(0,6).map(r=>`<div class="recent-item">
     <span class="who">${r.display_name||r.username}</span><span class="cls">${r.class_name||''}</span>
@@ -2811,12 +2858,12 @@ function teacherDash(sum){
   <div class="dash-cols">
     <div>
       <div class="panel">
-        <div class="panel-sec"><h3><svg class="icon"><use href="#i-users"/></svg>班级掌握情况</h3><span class="en">Class Mastery</span>
-          <span class="x">${sum.qa_open>0?`<button class="btn btn-primary" style="padding:3px 12px;font-size:0.72rem;" onclick="switchView('qas')">${sum.qa_open} 个提问待回复 →</button>`:'图例见下'}</span></div>
-        ${classHtml}${clsLegend}
+        <div class="panel-sec"><h3><svg class="icon"><use href="#i-users"/></svg>班级掌握情况</h3><span class="en">Class Mastery · 环=批改完成率</span>
+          <span class="x">${sum.qa_open>0?`<button class="btn btn-primary" style="padding:3px 12px;font-size:0.72rem;" onclick="switchView('qas')">${sum.qa_open} 个提问待回复 →</button>`:''}</span></div>
+        ${classHtml}
       </div>
       <div class="panel">
-        <div class="panel-sec"><h3><svg class="icon"><use href="#i-clipboard"/></svg>各实验报告量</h3><span class="en">Reports by Experiment</span><span class="x">绿=已批改 · 橙=待批改</span></div>
+        <div class="panel-sec"><h3><svg class="icon"><use href="#i-clipboard"/></svg>各实验报告量</h3><span class="en">Reports by Experiment</span></div>
         ${expHtml}
       </div>
     </div>
@@ -2883,10 +2930,15 @@ async function fillMyFlow(boxId){
   if(!flow.length){box.innerHTML='<div class="empty-tip">暂无实验</div>';return;}
   box.innerHTML=flow.map(f=>{
     const rep=f.report_status;
-    const sgPre=f.pre_done?'on':'';
-    const sgLab=f.lab_done?'on':'';
-    const sgRep=rep==='graded'?'on':(rep==='submitted'?'warn':(rep==='draft'?'half':''));
-    const sgGrade=rep==='graded'?'on':'';
+    const d1=f.pre_done?'on':'';
+    const d2=f.lab_done?'on':'';
+    const d3=rep==='graded'?'on':(rep==='submitted'?'warn':(rep==='draft'?'cur':''));
+    const d4=rep==='graded'?'on':'';
+    const dots=[d1,d2,d3,d4];
+    let stepper=`<span class="st-dot ${dots[0]}" title="课前预习"></span>`;
+    for(let i=1;i<4;i++){
+      stepper+=`<span class="st-line ${dots[i-1]?'on':''}"></span><span class="st-dot ${dots[i]}" title=""></span>`;
+    }
     const tip=`预习${f.pre_done?'✓':'未'} · 课中${f.lab_done?'✓':'未'} · 报告${rep==='graded'?'✓批改':rep==='submitted'?'待批改':rep==='draft'?'草稿':'未'} · 批改${rep==='graded'?'✓':'未'}`;
     let act='';
     if(!f.pre_done)act=`<button class="btn btn-primary" style="padding:4px 12px;font-size:0.72rem;" onclick="event.stopPropagation();markPre('${f.exp_id}')">完成预习</button>`;
@@ -2896,7 +2948,7 @@ async function fillMyFlow(boxId){
     else act=`<span class="badge-sub" style="background:var(--i4b);color:var(--green);">已批改</span>`;
     return `<div class="mf-row" title="${tip} · 点击查看实验" onclick="goExpLearn('${f.exp_id}')">
       <div class="mf-name">${f.exp_name}<small>${f.mode==='video'?'视频分析':'指导实验'}</small></div>
-      <div class="segbar">${[sgPre,sgLab,sgRep,sgGrade].map(c=>`<span class="sg ${c}"></span>`).join('')}</div>
+      <div class="stepper">${stepper}</div>
       <div class="mf-score ${f.score==null?'off':''}">${f.score!=null?f.score+' 分':'—'}</div>
       <div class="mf-actions">${act}</div>
     </div>`;
