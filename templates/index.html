@@ -28,10 +28,15 @@
   /* ============ 三栏应用外壳（类 IDE 布局） ============ */
   /* 关键：显式锁定唯一网格行为视口高（minmax(0,1fr)），否则中栏长内容会把整行
      连同侧栏/AI 面板一起撑出视口，导致内容被裁、AI 输入框不可见 */
-  .shell{display:grid;grid-template-columns:224px minmax(0,1fr) auto;grid-template-rows:minmax(0,1fr);height:100vh;overflow:hidden;}
+  .shell{display:grid;grid-template-columns:var(--w-nav,224px) minmax(0,1fr) var(--w-ai,380px);grid-template-rows:minmax(0,1fr);height:100vh;overflow:hidden;position:relative;}
   .sidenav{background:var(--card);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;padding:14px 10px;min-height:0;}
   .nav-brand{font-weight:800;font-size:0.95rem;padding:6px 10px 14px;letter-spacing:-0.01em;}
-  .nav-group-label{font-size:0.66rem;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:0.08em;padding:14px 10px 6px;}
+  .nav-group-label{font-size:0.66rem;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:0.08em;padding:12px 10px 6px;display:flex;align-items:center;gap:6px;width:100%;border:none;background:none;font-family:inherit;cursor:pointer;text-align:left;transition:color .15s;}
+  .nav-group-label:hover{color:var(--t2);}
+  .nav-group-label .chev{margin-left:auto;width:12px;height:12px;flex-shrink:0;transition:transform .2s;opacity:.85;}
+  .nav-group.collapsed .nav-group-label .chev{transform:rotate(-90deg);}
+  .nav-group.collapsed .nav-group-body{display:none;}
+  .nav-group-body{padding:1px 0 2px;}
   .nav-item{display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;border:none;background:transparent;border-radius:10px;color:var(--t2);font-size:0.84rem;font-weight:500;font-family:inherit;cursor:pointer;text-align:left;transition:background .2s,color .2s;}
   .nav-item:hover{background:var(--g1);color:var(--text);}
   .nav-item.active{background:var(--g1);color:var(--a1);font-weight:600;}
@@ -49,14 +54,22 @@
   .card{scroll-margin-top:110px;}
   .view{display:none;}
   .view.active{display:block;animation:fadeUp .35s ease-out;}
-  .ai-panel{width:380px;background:var(--card);border-left:1px solid var(--border);display:flex;flex-direction:column;min-height:0;}
+  .ai-panel{width:auto;background:var(--card);border-left:1px solid var(--border);display:flex;flex-direction:column;min-height:0;min-width:0;}
   .ai-ctx-chip{font-size:0.68rem;font-weight:600;color:var(--a1);background:var(--g1);border:1px solid var(--fr);border-radius:999px;padding:2px 10px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:1;}
   .ai-panel.collapsed{display:none;}
   .ai-panel-head{display:flex;align-items:center;gap:8px;padding:0 14px;height:52px;border-bottom:1px solid var(--border);font-weight:700;font-size:0.88rem;flex-shrink:0;color:var(--a1);}
   .ai-panel-head .spacer{flex:1;}
   .ai-panel-head .icon-btn{border:none;background:transparent;color:var(--t3);cursor:pointer;padding:6px;border-radius:10px;display:flex;}
   .ai-panel-head .icon-btn:hover{background:var(--g1);color:var(--text);}
-  @media (max-width:1250px){.shell{grid-template-columns:200px minmax(0,1fr) auto;}.ai-panel{width:340px;}}
+  @media (max-width:1250px){.shell{--w-nav:200px;--w-ai:340px;}}
+  /* 三栏横向拖拽调节把手 */
+  .gutter{position:absolute;top:0;bottom:0;width:7px;left:var(--w-nav,224px);margin-left:-3px;z-index:60;cursor:col-resize;background:transparent;transition:background .15s;}
+  .gutter:hover,.gutter.drag{background:rgba(194,65,12,.25);}
+  #gut_ai{left:calc(100% - var(--w-ai,380px));}
+  .shell.resizing,.shell.resizing *{cursor:col-resize!important;user-select:none!important;}
+  .shell.ai-off{grid-template-columns:var(--w-nav,224px) minmax(0,1fr);}
+  .shell.ai-off .ai-panel{display:none;}
+  .shell.ai-off #gut_ai{display:none;}
 
   /* ============ 分析向导（一页一步） ============ */
   #view_analysis.active{display:flex;flex-direction:column;height:100%;}
@@ -622,20 +635,39 @@
 <div id="toast-container"></div>
 
 <div class="shell">
+  <!-- 三栏拖拽调节把手 -->
+  <div class="gutter" id="gut_nav" title="拖动调整导航栏宽度"></div>
+  <div class="gutter" id="gut_ai" title="拖动调整 AI 面板宽度"></div>
   <!-- ========== 左侧功能导航 ========== -->
   <aside class="sidenav" id="sidenav">
     <div class="nav-brand">大学物理实验平台</div>
     <button class="nav-item" id="nav_dashboard" onclick="switchView('dashboard')"><svg class="icon"><use href="#i-grid"/></svg><span class="txt">工作台</span></button>
-    <div class="nav-group-label">视频分析实验</div>
-    <div id="nav_video_exps"></div>
-    <div class="nav-group-label">指导型实验</div>
-    <div id="nav_guide_exps"></div>
-    <div class="nav-group-label">学习中心</div>
-    <button class="nav-item" id="nav_theory" onclick="switchView('theory')"><svg class="icon"><use href="#i-book"/></svg><span class="txt">理论知识</span></button>
-    <div class="nav-group-label">师生互动</div>
-    <button class="nav-item" id="nav_qas" onclick="switchView('qas')"><svg class="icon"><use href="#i-message"/></svg><span class="txt">师生问答</span><span class="qa-badge" id="qa_badge" style="display:none;"></span></button>
-    <div class="nav-group-label">报告中心</div>
-    <button class="nav-item" id="nav_reports" onclick="switchView('reports')"><svg class="icon"><use href="#i-clipboard"/></svg><span class="txt">实验报告</span></button>
+    <div class="nav-group" data-g="video">
+      <button class="nav-group-label" onclick="toggleNavGroup('video')">视频分析实验<svg class="icon chev"><use href="#i-chev-d"/></svg></button>
+      <div class="nav-group-body" id="navg_video"><div id="nav_video_exps"></div></div>
+    </div>
+    <div class="nav-group" data-g="guide">
+      <button class="nav-group-label" onclick="toggleNavGroup('guide')">指导型实验<svg class="icon chev"><use href="#i-chev-d"/></svg></button>
+      <div class="nav-group-body" id="navg_guide"><div id="nav_guide_exps"></div></div>
+    </div>
+    <div class="nav-group" data-g="learn">
+      <button class="nav-group-label" onclick="toggleNavGroup('learn')">学习中心<svg class="icon chev"><use href="#i-chev-d"/></svg></button>
+      <div class="nav-group-body">
+        <button class="nav-item" id="nav_theory" onclick="switchView('theory')"><svg class="icon"><use href="#i-book"/></svg><span class="txt">理论知识</span></button>
+      </div>
+    </div>
+    <div class="nav-group" data-g="qa">
+      <button class="nav-group-label" onclick="toggleNavGroup('qa')">师生互动<svg class="icon chev"><use href="#i-chev-d"/></svg></button>
+      <div class="nav-group-body">
+        <button class="nav-item" id="nav_qas" onclick="switchView('qas')"><svg class="icon"><use href="#i-message"/></svg><span class="txt">师生问答</span><span class="qa-badge" id="qa_badge" style="display:none;"></span></button>
+      </div>
+    </div>
+    <div class="nav-group" data-g="report">
+      <button class="nav-group-label" onclick="toggleNavGroup('report')">报告中心<svg class="icon chev"><use href="#i-chev-d"/></svg></button>
+      <div class="nav-group-body">
+        <button class="nav-item" id="nav_reports" onclick="switchView('reports')"><svg class="icon"><use href="#i-clipboard"/></svg><span class="txt">实验报告</span></button>
+      </div>
+    </div>
     <div class="nav-footer">
       <div id="nav_user_area">
         <div class="nav-user"><div class="avatar">?</div><div class="u-meta"><div id="nav_user_name">未登录</div><div class="u-role" id="nav_user_role">—</div></div></div>
@@ -943,7 +975,6 @@
   <div class="view" id="view_guide">
     <div id="guide_flowbar" class="flow-bar" style="display:none;"></div>
     <div id="guide_content"><div class="text-center" style="padding:40px;color:var(--t3);">在左侧选择一个实验查看指导</div></div>
-    <div id="guide_buttons" style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;"></div>
   </div>
 
   <!-- ========== 视图：实验报告 ========== -->
@@ -1956,13 +1987,68 @@ function currentViewName(){
 
 function toggleAIPanel(){
   document.getElementById('ai_panel').classList.toggle('collapsed');
+  const sh=document.querySelector('.shell');
+  if(sh)sh.classList.toggle('ai-off');
+}
+
+// ---------- 左侧导航：大类折叠（记忆状态） ----------
+function toggleNavGroup(g){
+  const grp=document.querySelector('.nav-group[data-g="'+g+'"]');
+  if(!grp)return;
+  grp.classList.toggle('collapsed');
+  try{localStorage.setItem('navg_'+g,grp.classList.contains('collapsed')?'1':'0');}catch(e){}
+}
+function restoreNavGroups(){
+  document.querySelectorAll('.nav-group').forEach(grp=>{
+    const g=grp.getAttribute('data-g');
+    let collapsed=false;
+    try{collapsed=localStorage.getItem('navg_'+g)==='1';}catch(e){}
+    grp.classList.toggle('collapsed',collapsed);
+  });
+}
+
+// ---------- 三栏横向拖拽调节（宽度记忆） ----------
+function initGutters(){
+  const sh=document.querySelector('.shell');
+  if(!sh)return;
+  try{
+    const n=parseFloat(localStorage.getItem('nav_w'));
+    const a=parseFloat(localStorage.getItem('ai_w'));
+    if(n>=170&&n<=460)sh.style.setProperty('--w-nav',n+'px');
+    if(a>=300&&a<=760)sh.style.setProperty('--w-ai',a+'px');
+  }catch(e){}
+  const bind=(gut,key,min,max)=>{
+    if(!gut)return;
+    gut.addEventListener('mousedown',e=>{
+      e.preventDefault();
+      sh.classList.add('resizing');gut.classList.add('drag');
+      const startX=e.clientX;
+      const base=parseFloat(getComputedStyle(sh).getPropertyValue('--'+key))
+        ||(key==='w-nav'?224:380);
+      let finalV=base;
+      const move=ev=>{
+        const dx=ev.clientX-startX;
+        finalV=Math.max(min,Math.min(max,key==='w-nav'?base+dx:base-dx));
+        sh.style.setProperty('--'+key,finalV+'px');
+      };
+      const up=()=>{
+        window.removeEventListener('mousemove',move);
+        window.removeEventListener('mouseup',up);
+        sh.classList.remove('resizing');gut.classList.remove('drag');
+        try{localStorage.setItem(key==='w-nav'?'nav_w':'ai_w',String(finalV));}catch(e){}
+      };
+      window.addEventListener('mousemove',move);
+      window.addEventListener('mouseup',up);
+    });
+  };
+  bind(document.getElementById('gut_nav'),'w-nav',170,460);
+  bind(document.getElementById('gut_ai'),'w-ai',300,760);
 }
 
 // ---------- 左导航渲染（来自实验注册表） ----------
 function renderNav(){
   const videoBox=document.getElementById('nav_video_exps');
   const guideBox=document.getElementById('nav_guide_exps');
-  const gb=document.getElementById('guide_buttons');
   EXPERIMENTS.forEach(e=>{
     const btn=document.createElement('button');
     btn.className='nav-item';
@@ -1975,11 +2061,6 @@ function renderNav(){
       else{switchView('guide');loadGuide(e.id);}
     };
     (e.mode==='video'?videoBox:guideBox).appendChild(btn);
-    const b=document.createElement('button');
-    b.className='btn btn-primary';
-    b.textContent=e.name+'指导';
-    b.onclick=()=>{setActiveExpNav(e.id);loadGuide(e.id);};
-    gb.appendChild(b);
   });
 }
 
@@ -3152,6 +3233,8 @@ async function startRec(btn,ctx){
 
 // ==================== 启动初始化 ====================
 renderNav();
+restoreNavGroups();
+initGutters();
 (async function boot(){
   await refreshAuth();
   switchView('dashboard');
