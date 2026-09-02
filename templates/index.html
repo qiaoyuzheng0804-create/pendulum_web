@@ -24,8 +24,10 @@
   body{font-family:system-ui,-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:var(--bg);color:var(--text);height:100vh;line-height:1.6;-webkit-font-smoothing:antialiased;overflow:hidden;}
 
   /* ============ 三栏应用外壳（类 IDE 布局） ============ */
-  .shell{display:grid;grid-template-columns:224px minmax(0,1fr) auto;height:100vh;}
-  .sidenav{background:var(--card);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;padding:14px 10px;}
+  /* 关键：显式锁定唯一网格行为视口高（minmax(0,1fr)），否则中栏长内容会把整行
+     连同侧栏/AI 面板一起撑出视口，导致内容被裁、AI 输入框不可见 */
+  .shell{display:grid;grid-template-columns:224px minmax(0,1fr) auto;grid-template-rows:minmax(0,1fr);height:100vh;overflow:hidden;}
+  .sidenav{background:var(--card);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;padding:14px 10px;min-height:0;}
   .nav-brand{font-weight:800;font-size:0.95rem;padding:6px 10px 14px;letter-spacing:-0.01em;}
   .nav-group-label{font-size:0.66rem;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:0.08em;padding:14px 10px 6px;}
   .nav-item{display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;border:none;background:transparent;border-radius:8px;color:var(--t2);font-size:0.84rem;font-weight:500;font-family:inherit;cursor:pointer;text-align:left;transition:background .2s,color .2s;}
@@ -37,14 +39,16 @@
   .nav-user{display:flex;align-items:center;gap:8px;padding:6px 8px;font-size:0.78rem;color:var(--t2);}
   .nav-user .avatar{width:26px;height:26px;border-radius:50%;background:var(--a1);color:#fff;display:flex;align-items:center;justify-content:center;font-size:0.72rem;font-weight:700;flex-shrink:0;}
   .nav-user .u-role{font-size:0.66rem;color:var(--t3);}
-  .main-col{display:flex;flex-direction:column;min-width:0;}
+  .main-col{display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;}
   .topbar{display:flex;align-items:center;gap:12px;padding:0 20px;height:52px;background:var(--card);border-bottom:1px solid var(--border);flex-shrink:0;}
   .topbar .view-title{font-size:0.95rem;font-weight:700;}
   .topbar .spacer{flex:1;}
-  .center{flex:1;overflow-y:auto;padding:22px 26px;}
+  .center{flex:1;overflow-y:auto;padding:22px 26px;min-height:0;}
+  .card{scroll-margin-top:110px;}
   .view{display:none;}
   .view.active{display:block;animation:fadeUp .35s ease-out;}
-  .ai-panel{width:380px;background:var(--card);border-left:1px solid var(--border);display:flex;flex-direction:column;}
+  .ai-panel{width:380px;background:var(--card);border-left:1px solid var(--border);display:flex;flex-direction:column;min-height:0;}
+  .ai-ctx-chip{font-size:0.68rem;font-weight:600;color:var(--a1);background:var(--g1);border:1px solid var(--fr);border-radius:999px;padding:2px 10px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:1;}
   .ai-panel.collapsed{display:none;}
   .ai-panel-head{display:flex;align-items:center;gap:8px;padding:0 14px;height:52px;border-bottom:1px solid var(--border);font-weight:700;font-size:0.88rem;flex-shrink:0;color:var(--a1);}
   .ai-panel-head .spacer{flex:1;}
@@ -825,6 +829,7 @@
   <aside class="ai-panel" id="ai_panel">
     <div class="ai-panel-head">
       <svg class="icon"><use href="#i-bot"/></svg> AI 实验助手
+      <span class="ai-ctx-chip" id="ai_ctx_chip" style="display:none;"></span>
       <div class="spacer"></div>
       <button class="icon-btn" title="折叠面板" onclick="toggleAIPanel()"><svg class="icon"><use href="#i-x"/></svg></button>
     </div>
@@ -923,7 +928,11 @@ const statusDiv=$('#status'),btnProcess=$('#btn_process'),resultGrid=$('#result_
 const calibModalOverlay=$('#calib_modal_overlay'),calibCanvas=$('#calib_canvas'),calibModalHint=$('#calib_modal_hint'),calibModalTitle=$('#calib_modal_title');
 
 // ==================== Step Bar ====================
+// 注意：此函数在脚本早期（顶层）就会被调用，其依赖必须在声明顺序上先行可用
+var CURRENT_STEP=1;
+var STEP_NAMES={1:'选择类型',2:'标定',3:'运行处理',4:'查看结果'};
 function updateStepBar(n){
+  CURRENT_STEP=n;
   for(let i=1;i<=4;i++){
     const dot=document.getElementById('sd'+i),node=document.getElementById('sn'+i);
     dot.classList.remove('done','current');if(node)node.classList.remove('done','current');
@@ -932,6 +941,12 @@ function updateStepBar(n){
     else{dot.textContent=i;}
   }
   for(let i=1;i<=3;i++){const line=document.getElementById('sl'+i);if(!line)continue;line.classList.remove('done','current');if(i<n)line.classList.add('done');else if(i===n)line.classList.add('current');}
+  updateAICtx();
+}
+// 完成当前模块后，新出现的模块自动滚入视野（"弹出下一个模块"）
+function revealCard(card){
+  card.classList.remove('hidden');
+  setTimeout(()=>{card.scrollIntoView({behavior:'smooth',block:'start'});},80);
 }
 updateStepBar(1);
 
@@ -1463,7 +1478,7 @@ async function stopOpenMVRecord(){
       S.firstFrameImg=new Image();S.firstFrameImg.src='data:image/jpeg;base64,'+S.firstFrameB64;
       // Fetch calibration spec and enter calibration UI
       const resp2=await fetch('api/calibration_spec/'+S.motionType);S.calibSpec=await resp2.json();
-      cardCalib.classList.remove('hidden');cardProcess.classList.add('hidden');cardResult.classList.add('hidden');
+      revealCard(cardCalib);cardProcess.classList.add('hidden');cardResult.classList.add('hidden');
       updateStepBar(2);updateThumbCanvas();updateCalibPreviewText();btnResetCalib.style.display='none';
       showToast('视频已获取，请继续标定坐标系','info');
     }
@@ -1528,7 +1543,7 @@ async function handleVideoFile(file){
     videoInfo.textContent=`已上传: ${file.name}`;
     showVideoPreview(file);
     const resp2=await fetch(`api/calibration_spec/${S.motionType}`);S.calibSpec=await resp2.json();
-    cardCalib.classList.remove('hidden');cardProcess.classList.add('hidden');cardResult.classList.add('hidden');
+    revealCard(cardCalib);cardProcess.classList.add('hidden');cardResult.classList.add('hidden');
     updateStepBar(2);updateThumbCanvas();updateCalibPreviewText();btnResetCalib.style.display='none';
     showToast('视频上传成功，请继续标定坐标系','info');
   }catch(err){videoInfo.textContent='';uploadZone.classList.remove('has-file');clearVideoPreview();showToast('上传失败: '+err.message,'error');}
@@ -1618,7 +1633,7 @@ calibCanvas.addEventListener('click',e=>{
     const rect=calibCanvas.getBoundingClientRect(),scale=S._modalScale||1;
     S.calibPoints.push({x:Math.round((e.clientX-rect.left)/scale),y:Math.round((e.clientY-rect.top)/scale)});
     redrawCalibCanvas();updateModalHint();
-    if(isCiliniudunCalibDone()){updateThumbCanvas();updateCalibPreviewText();cardProcess.classList.remove('hidden');updateStepBar(3);}
+    if(isCiliniudunCalibDone()){updateThumbCanvas();updateCalibPreviewText();revealCard(cardProcess);updateStepBar(3);}
     return;
   }
   if(S.calibPoints.length>=S.calibSpec.num_points)return;const rect=calibCanvas.getBoundingClientRect(),scale=S._modalScale||1;S.calibPoints.push({x:Math.round((e.clientX-rect.left)/scale),y:Math.round((e.clientY-rect.top)/scale)});redrawCalibCanvas();updateModalHint();if(S.calibPoints.length>=S.calibSpec.num_points){updateThumbCanvas();updateCalibPreviewText();cardProcess.classList.remove('hidden');updateStepBar(3);}
@@ -1737,6 +1752,34 @@ function switchView(view){
   if(view==='theory'&&!window._theoryLoaded){window._theoryLoaded=true;loadTheory();}
   if(view==='sim'&&!window._simStarted){window._simStarted=true;initSimulation();}
   if(view==='reports'){renderReports();}
+  updateAICtx();
+}
+
+// ---------- AI 面板：当前实验上下文徽章 ----------
+function updateAICtx(){
+  const chip=document.getElementById('ai_ctx_chip');
+  if(!chip)return;
+  let txt='';
+  try{
+    const exp=S.motionType||window._currentGuideExp||'';
+    const meta=(typeof EXPERIMENTS!=='undefined')?EXPERIMENTS.find(e=>e.id===exp):null;
+    const view=VIEW_TITLES[currentViewName()]||'';
+    if(meta){
+      txt=meta.name;
+      if(meta.mode==='video')txt+=' · 步骤'+CURRENT_STEP+' '+STEP_NAMES[CURRENT_STEP];
+      if(currentViewName()==='guide')txt+=' · 实验指导';
+      if(currentViewName()==='reports')txt+=' · 报告';
+    }else{
+      txt=view;
+    }
+  }catch(e){/* 初始化早期依赖未就绪，跳过 */}
+  if(!txt){chip.style.display='none';return;}
+  chip.textContent=txt;
+  chip.style.display='';
+}
+function currentViewName(){
+  const v=document.querySelector('.view.active');
+  return v?v.id.replace('view_',''):'analysis';
 }
 
 function toggleAIPanel(){
@@ -1958,6 +2001,7 @@ function drawDampingPreview(canvas,type){
 async function loadGuide(type){
   const c=document.getElementById('guide_content');
   window._currentGuideExp=type;
+  updateAICtx();
   c.innerHTML='<div class="skel t"></div><div class="skel w70"></div><div class="skel"></div><div class="skel w40"></div><div class="skel"></div><div class="skel-box" style="height:90px;"></div><div class="skel w70"></div><div class="skel"></div>';
   try{
     const resp=await fetch('/api/teaching_content/guide_'+type);
@@ -2168,11 +2212,18 @@ function askPreset(q){
 function aiContext(){
   const exp=S.motionType||window._currentGuideExp||'';
   const meta=EXPERIMENTS.find(e=>e.id===exp);
+  const hasVideo=!!S.sessionId;
+  const calibTarget=(S.motionType==='ciliniudun')?((S._pivotCount||4)+4):(S.calibSpec?S.calibSpec.num_points:0);
+  const calibDone=S.calibSpec?S.calibPoints.length+'/'+calibTarget+'点':'';
   return {
     exp_id:exp,
     exp_name:meta?meta.name:'',
     exp_mode:meta?meta.mode:'',
-    view:document.querySelector('.view.active')?document.querySelector('.view.active').id.replace('view_',''):'',
+    view:currentViewName(),
+    step:meta&&meta.mode==='video'?CURRENT_STEP:null,
+    step_name:meta&&meta.mode==='video'?STEP_NAMES[CURRENT_STEP]:'',
+    has_video:hasVideo,
+    calib_points:calibDone,
     user:CURRENT_USER?{role:CURRENT_USER.role,name:CURRENT_USER.display_name||CURRENT_USER.username}:null
   };
 }

@@ -105,6 +105,14 @@ TOOLS_SPEC = [
 
 
 # ---------- 上下文注入 ----------
+STEP_GUIDE = {
+    1: "学生正在选择实验类型/上传视频：帮忙确认实验选择、拍摄要点与参数设置。",
+    2: "学生正在标定坐标系：解释各标定点的含义与正确点法，提醒常见标定错误。",
+    3: "学生准备/正在运行处理：确认参数合理，解释进度中的滤波、找峰等环节。",
+    4: "学生已得到结果：帮其解读 CSV/角度-时间图、阻尼系数等输出，指导误差分析与报告撰写。",
+}
+
+
 def build_system_prompt(base_prompt, context):
     if not context:
         return base_prompt
@@ -113,12 +121,22 @@ def build_system_prompt(base_prompt, context):
         u = context["user"]
         lines.append(f"- 用户：{u.get('name','')}（{'教师' if u.get('role')=='teacher' else '学生'}）")
     if context.get("exp_id"):
-        lines.append(f"- 当前实验：{context.get('exp_name') or ''}（id={context['exp_id']}，模式={context.get('exp_mode','')}）")
+        lines.append(f"- 当前实验：{context.get('exp_name') or ''}"
+                     f"（id={context['exp_id']}，模式={context.get('exp_mode','')}）")
     view_name = {"analysis": "数据分析", "theory": "理论知识", "guide": "实验指导",
                  "sim": "交互模拟", "reports": "实验报告"}.get(context.get("view"), context.get("view"))
     if view_name:
         lines.append(f"- 用户正在查看：{view_name}")
-    lines.append("- 学生提问实验相关问题时，可调用 get_experiment_guide / analyze_numeric_data 工具获取准确资料后再回答。")
+    if context.get("step"):
+        step = int(context["step"])
+        lines.append(f"- 实验进度：步骤 {step}（{context.get('step_name','')}）；"
+                     f"已上传视频={'是' if context.get('has_video') else '否'}；"
+                     f"标定点={context.get('calib_points','')}")
+        if step in STEP_GUIDE:
+            lines.append(f"- 当前阶段的辅导重点：{STEP_GUIDE[step]}")
+    lines.append("- 你是学生的实验全流程助教：主动结合当前进度回答，"
+                 "学生问实验相关问题时优先调用 get_experiment_guide / get_report_template / "
+                 "analyze_numeric_data 工具获取平台内的准确资料，再组织回答。")
     return base_prompt + "\n".join(lines)
 
 
