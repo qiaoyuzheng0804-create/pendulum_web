@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>登录 — 大学物理实验平台</title>
 <style>
-  :root{--bg:#f3f5f9;--bg2:#e9edf3;--card:#ffffff;--border:#d4dae3;--text:#0f172a;--t2:#475569;--t3:#7d8da1;--a1:#4f46e5;--red:#dc2626;--fr:rgba(79,70,229,0.14);}
+  :root{--bg:#f5f3ef;--bg2:#edeae3;--card:#ffffff;--border:#e4dfd5;--text:#1c1917;--t2:#57534e;--t3:#948c7f;--a1:#c2410c;--red:#b91c1c;--fr:rgba(194,65,12,.18);}
   *{margin:0;padding:0;box-sizing:border-box;}
   body{font-family:system-ui,-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;line-height:1.6;}
   .login-card{background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:0 1px 2px rgba(15,23,42,.05),0 8px 24px rgba(15,23,42,.06);padding:36px 32px;width:360px;max-width:92vw;}
@@ -14,8 +14,8 @@
   label{display:block;font-size:0.8rem;font-weight:600;color:var(--t2);margin-bottom:6px;}
   input{width:100%;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:#f8fafc;color:var(--text);font-size:0.92rem;margin-bottom:14px;transition:border-color .2s,box-shadow .2s;}
   input:focus{outline:none;border-color:var(--a1);box-shadow:0 0 0 3px var(--fr);}
-  button{width:100%;padding:11px;border-radius:10px;border:none;background:var(--a1);color:#fff;font-size:0.92rem;font-weight:600;cursor:pointer;transition:background .2s;}
-  button:hover{background:color-mix(in srgb,var(--a1) 90%,#000);}
+  button{width:100%;padding:11px;border-radius:6px;border:none;background:var(--text);color:#fff;font-size:0.92rem;font-weight:600;cursor:pointer;transition:background .2s;}
+  button:hover{background:#000;}
   button:disabled{opacity:.5;cursor:not-allowed;}
   .err{display:none;background:color-mix(in srgb,var(--red) 8%,transparent);border:1px solid var(--red);color:var(--red);border-radius:10px;padding:10px 14px;font-size:0.82rem;margin-bottom:14px;}
   .hint{margin-top:18px;padding-top:14px;border-top:1px dashed var(--border);font-size:0.74rem;color:var(--t3);line-height:1.8;}
