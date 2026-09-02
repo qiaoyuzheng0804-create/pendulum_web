@@ -8,10 +8,12 @@
 
 1. **视频分析实验**（4 种摆：单摆/磁阻尼摆/扭摆/磁力牛顿摆）：上传或 OpenMV 采集视频 → YOLOv8 逐帧检测 → 提取角度-时间数据 → 拟合阻尼参数，输出 CSV/图/标注视频。
 2. **指导型实验**（三线摆、杨氏模量、牛顿环、迈克尔逊、示波器、落球法粘度等）：理论/实验指导 + 报告模板 + AI 辅导，无视频分析。
-3. **师生交互**：学生按模板写实验报告并提交，教师批改/退回。
-4. **AI 实验助手**：右侧常驻面板，自研轻量 agent（工具调用循环），随上下文全流程辅导。
+3. **实验课全流程闭环**：课前预习（读实验指导 → 完成标记）→ 课中实验（完成标记）→ 课后报告（按模板撰写提交）→ 教师批改打分/退回 → 学生查看反馈。`progress` 表记录 预习/课中；`submissions` 记录 报告/批改。
+4. **师生问答（多模态）**：学生留言提问（文字 / 图片 / 语音附件），教师回复（文字 / 图片 / 语音），支持多轮追问。
+5. **工作台数据看板（默认首页视图）**：教师看 班级维度成绩/报告进度/待批改/成绩分布/各实验报告量/待回复提问；学生看 个人流程进度与统计；未登录看公共概览。在线人数来自看门狗 `_clients`（`/api/dashboard/online`）。
+6. **AI 实验助手**：右侧常驻面板，自研轻量 agent（工具调用循环），随上下文全流程辅导。
 
-三栏类 IDE 布局：左导航（实验列表/学习中心/报告中心）+ 中央区 + 右 AI 面板。
+三栏类 IDE 布局：左导航（工作台/实验列表/学习中心/师生互动/报告中心）+ 中央区 + 右 AI 面板。
 
 ## 运行
 
@@ -19,7 +21,8 @@
 - 依赖：见 requirements.txt（flask/opencv/ultralytics/torch/openai/pyserial 等，模型权重在 `models/*_best.pt`，缺失时 YOLO 自动降级）。
 - LLM 配置在 `.env`：`LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL`（任意 OpenAI 兼容服务）。
 - **看门狗**：所有页面关闭后约 10s 自动关停服务器（`server.pid` + `/api/heartbeat`）。调试时若进程"自己消失"是正常行为，不是 bug。
-- 演示账号：`teacher/123456`、`student/123456`（platform.db 首次运行自动建库）。
+- 演示账号：`teacher/123456`（教师）、`student/123456`（学生）、`s240101/123456`（物电 2401，看板演示班级学生，共 3 班 12 人自动预置；删 platform.db 即重置）。
+- 删除交互模拟：该视图已移除（nav/view/CSS/JS 与 ai_agent 映射均清理），勿再引用 `sim`。
 
 ## 架构与关键文件
 
@@ -27,13 +30,25 @@
 |---|---|
 | `app.py` | 全部视频分析/串口/OpenMV 路由 + 页面入口；YOLO 懒加载；全局处理锁 |
 | `experiments.py` | **实验注册表（单一数据源）**。新增实验 = 加一条记录 + `teaching/guide_<id>.json` + `report_templates/<id>.json`，不改 app.py |
-| `platform_hub.py` | Blueprint：登录(session cookie)/用户/报告提交与批改，SQLite(`platform.db`)。**不能改名为 platform.py**——会遮蔽标准库 platform，cv2/torch 会炸 |
+| `platform_hub.py` | Blueprint：登录(session cookie)/用户(含班级)/报告提交批改退回/预习课中进度/师生问答+附件上传/数据看板统计。SQLite(`platform.db`)。**不能改名为 platform.py**——会遮蔽标准库 platform，cv2/torch 会炸 |
 | `ai_agent.py` | AI 工具调用循环：get_experiment_guide / get_report_template / analyze_numeric_data；`build_system_prompt` 注入实验/步骤/角色上下文 |
 | `processors/` | 每种摆一个处理器（`_run_processing` 的 if/elif 分派）+ openmv_manager + symbolic_regression |
 | `teaching/*.json` | 教学内容（theory.json + guide_<id>.json），API 下发，前端渲染 |
 | `report_templates/*.json` | 报告分节模板（purpose/principle/apparatus/data/analysis/conclusion） |
-| `templates/index.html` | **单文件前端**（约 2500 行，含全部 CSS/JS），无构建步骤 |
+| `templates/index.html` | **单文件前端**（约 3100 行，含全部 CSS/JS），无构建步骤 |
 | `templates/login.html` | 登录页（独立小页） |
+
+## 平台 API 速查（platform_hub.py / app.py）
+
+- 认证：`POST /api/auth/login|logout`、`GET /api/auth/me`（含 class_name）
+- 报告：`GET|POST /api/reports`（教师支持 `?exp=&status=&class=` 筛选）、`GET /api/reports/<id>`、`POST .../submit`、`POST .../<id>/grade|return`、`GET /api/report_template/<exp>`
+- 全流程：`POST /api/progress/pre|lab`（学生标记预习/课中）、`GET /api/flow`（学生=10 实验状态；教师=`?class=` 全班聚合）
+- 问答：`GET /api/qas`（学生 scope=mine；教师 scope=all&pending=1）、`POST /api/qas`（提问，attachments=[附件id]）、`GET /api/qas/<id>`、`POST /api/qas/<id>/reply`
+- 附件：`POST /api/qas/attachment`（multipart file，图片/音频/文档白名单）、`GET /api/qas/attachment/<id>/file`（鉴权：线程参与者或教师）
+- 看板：`GET /api/dashboard/summary`（未登录/教师/学生三种视图）、`GET /api/dashboard/online`（在线人数=心跳客户端数，app.py）
+- 用户/班级：`GET|POST /api/admin/users`（导入行格式：学号,姓名,班级）、`GET /api/classes`（教师）
+
+演示数据：`_seed_demo_if_empty()` 在 users 无带班级学生时注入 3 班 12 学生 + 24 演示报告 + 演示进度/问答（幂等，删除 platform.db 重置）。
 
 ## 前端设计规范（务必遵守，勿回退）
 

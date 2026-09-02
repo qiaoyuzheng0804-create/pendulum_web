@@ -124,8 +124,9 @@ def build_system_prompt(base_prompt, context):
     if context.get("exp_id"):
         lines.append(f"- 当前实验：{context.get('exp_name') or ''}"
                      f"（id={context['exp_id']}，模式={context.get('exp_mode','')}）")
-    view_name = {"analysis": "数据分析", "theory": "理论知识", "guide": "实验指导",
-                 "reports": "实验报告"}.get(context.get("view"), context.get("view"))
+    view_name = {"dashboard": "工作台（数据看板）", "analysis": "数据分析",
+                 "theory": "理论知识", "guide": "实验指导",
+                 "reports": "实验报告", "qas": "师生问答"}.get(context.get("view"), context.get("view"))
     if view_name:
         lines.append(f"- 用户正在查看：{view_name}")
     if context.get("step"):
