@@ -2149,6 +2149,25 @@ function wrapBareLatex(text){
 function decodeHtmlEntities(s){
   var t=document.createElement('textarea');t.innerHTML=s;return t.value;
 }
+// KaTeX 由 CDN defer 异步加载，可能与异步内容渲染存在竞态：
+// 内容先渲染而库未就绪时公式会以 $...$ 源码显示——用 whenKatex 挂起回调，
+// 库加载完成后自动补渲染一次（最多等约 40s，超时放弃）
+let _katexPoll=null,_katexWaiters=[];
+function whenKatex(fn){
+  if(window.katex){try{fn();}catch(e){}return;}
+  _katexWaiters.push(fn);
+  if(!_katexPoll){
+    let tries=0;
+    _katexPoll=setInterval(()=>{
+      tries++;
+      if(window.katex||tries>160){
+        clearInterval(_katexPoll);_katexPoll=null;
+        const ws=_katexWaiters.splice(0);_katexWaiters=[];
+        if(window.katex)ws.forEach(f=>{try{f();}catch(e){}});
+      }
+    },250);
+  }
+}
 function renderKaTeXinHTML(html){
   if(!window.katex)return html;
   // 先剥离真实 HTML 标签，再解码 &lt;/&gt;/&amp; 等实体——否则 KaTeX 会把
@@ -2263,16 +2282,15 @@ function renderTheory(data){
     +secs.map((x,k)=>'<div class="doc-sec'+(k?' hidden':'')+'">'+x+'</div>').join('');
   bindReveal(c);
   initDocPager(c);
-  // Render KaTeX
-  if(window.katex){
-    document.querySelectorAll('[data-katex]').forEach(el=>{
+  // Render KaTeX（库未就绪时挂起，就绪后自动补渲染）
+  whenKatex(()=>{
+    document.querySelectorAll('#theory_content [data-katex]').forEach(el=>{
       try{katex.render(el.getAttribute('data-katex'),el,{displayMode:true,throwOnError:false});}catch(e){}
     });
-    // Also render inline $...$ in theory content
-    document.querySelectorAll('.theory-note,.theory-content').forEach(el=>{
-      el.innerHTML=renderKaTeXinHTML(el.innerHTML);
+    document.querySelectorAll('#theory_content .theory-note,#theory_content .theory-content').forEach(el=>{
+      try{el.innerHTML=renderKaTeXinHTML(el.innerHTML);}catch(e){}
     });
-  }
+  });
 }
 
 function drawDampingPreview(canvas,type){
@@ -2365,12 +2383,13 @@ function renderGuide(data){
     +secs.map((x,k)=>'<div class="doc-sec'+(k?' hidden':'')+'">'+x+'</div>').join('');
   bindReveal(c);
   initDocPager(c);
-  // 指导内容里嵌的 $...$ / $$...$$ LaTeX 公式渲染为 KaTeX（content 走 marked，此处处理全部文本节点）
-  if(window.katex){
+  // 指导内容里嵌的 $...$ / $$...$$ LaTeX 公式渲染为 KaTeX（content 走 marked，此处处理全部文本节点；
+  // 库未就绪时挂起，就绪后自动补渲染）
+  whenKatex(()=>{
     c.querySelectorAll('.guide-section p,.guide-section li,.faq-item,.tip-item').forEach(el=>{
       try{el.innerHTML=renderKaTeXinHTML(el.innerHTML);}catch(e){}
     });
-  }
+  });
 }
 
 // ==================== AI Chat ====================
