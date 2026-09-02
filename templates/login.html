@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>登录 — 大学物理实验平台</title>
+<style>
+  :root{--bg:#f3f5f9;--bg2:#e9edf3;--card:#ffffff;--border:#d4dae3;--text:#0f172a;--t2:#475569;--t3:#7d8da1;--a1:#4f46e5;--red:#dc2626;--fr:rgba(79,70,229,0.14);}
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:system-ui,-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;line-height:1.6;}
+  .login-card{background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:0 1px 2px rgba(15,23,42,.05),0 8px 24px rgba(15,23,42,.06);padding:36px 32px;width:360px;max-width:92vw;}
+  .login-card h1{font-size:1.3rem;font-weight:700;text-align:center;margin-bottom:4px;}
+  .login-card .sub{font-size:0.8rem;color:var(--t3);text-align:center;margin-bottom:24px;}
+  label{display:block;font-size:0.8rem;font-weight:600;color:var(--t2);margin-bottom:6px;}
+  input{width:100%;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:#f8fafc;color:var(--text);font-size:0.92rem;margin-bottom:14px;transition:border-color .2s,box-shadow .2s;}
+  input:focus{outline:none;border-color:var(--a1);box-shadow:0 0 0 3px var(--fr);}
+  button{width:100%;padding:11px;border-radius:10px;border:none;background:var(--a1);color:#fff;font-size:0.92rem;font-weight:600;cursor:pointer;transition:background .2s;}
+  button:hover{background:color-mix(in srgb,var(--a1) 90%,#000);}
+  button:disabled{opacity:.5;cursor:not-allowed;}
+  .err{display:none;background:color-mix(in srgb,var(--red) 8%,transparent);border:1px solid var(--red);color:var(--red);border-radius:10px;padding:10px 14px;font-size:0.82rem;margin-bottom:14px;}
+  .hint{margin-top:18px;padding-top:14px;border-top:1px dashed var(--border);font-size:0.74rem;color:var(--t3);line-height:1.8;}
+  .hint b{color:var(--t2);}
+</style>
+</head>
+<body>
+  <div class="login-card">
+    <h1>大学物理实验平台</h1>
+    <div class="sub">University Physics Experiment Platform</div>
+    <div class="err" id="err"></div>
+    <form onsubmit="return doLogin(event)">
+      <label for="username">用户名</label>
+      <input id="username" autocomplete="username" required>
+      <label for="password">密码</label>
+      <input id="password" type="password" autocomplete="current-password" required>
+      <button id="btn" type="submit">登 录</button>
+    </form>
+    <div class="hint">
+      演示账号：<b>teacher / 123456</b>（教师）　<b>student / 123456</b>（学生）<br>
+      教师登录后可在批改台导入学生名单。
+    </div>
+  </div>
+<script>
+async function doLogin(ev){
+  ev.preventDefault();
+  const btn=document.getElementById('btn'),err=document.getElementById('err');
+  err.style.display='none';btn.disabled=true;btn.textContent='登录中…';
+  try{
+    const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({username:document.getElementById('username').value.trim(),
+                           password:document.getElementById('password').value})});
+    const d=await r.json();
+    if(!r.ok){err.textContent=d.error||'登录失败';err.style.display='block';return false;}
+    location.href='/';
+  }catch(e){err.textContent='网络错误：'+e;err.style.display='block';}
+  finally{btn.disabled=false;btn.textContent='登 录';}
+  return false;
+}
+</script>
+</body>
+</html>

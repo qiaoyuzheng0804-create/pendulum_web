@@ -1,0 +1,42 @@
+{
+  "experiment": "sanxianbai",
+  "title": "三线摆测转动惯量实验报告",
+  "sections": [
+    {
+      "id": "purpose",
+      "title": "一、实验目的",
+      "placeholder": "列出本实验的目的（3~4 条）：要测什么物理量、用什么方法、训练哪些技能。可参考实验指导中的'实验目的'一节。",
+      "prefill": "测空盘周期 $T_0$ 与加载周期，计算圆盘/圆环转动惯量并验证平行轴定理。"
+    },
+    {
+      "id": "principle",
+      "title": "二、实验原理",
+      "placeholder": "简述实验原理，写出主要公式并说明各量含义。\n支持 LaTeX：行内 $E=mc^2$，独立 $$\\eta = \\frac{d^2(\\rho-\\rho_0)g}{18v}$$",
+      "prefill": "$$J_0 = \\frac{m_0 g R r}{4\\pi^2 H} T_0^2$$ 圆环 $J_1 = m(R_{外}^2+R_{内}^2)/2$；平行轴定理 $J_d = J_c + md^2$。"
+    },
+    {
+      "id": "apparatus",
+      "title": "三、实验仪器",
+      "placeholder": "列出所用仪器及其规格/精度（量程、分度值），这是不确定度评定的依据。",
+      "prefill": ""
+    },
+    {
+      "id": "data",
+      "title": "四、数据记录与处理",
+      "placeholder": "记录 $m_0$、$m$、悬点间距 $a$（算 $R=a/\\sqrt{3}$）、$H$、周期累计测量表（30~50 个周期 × 5 次）。",
+      "prefill": ""
+    },
+    {
+      "id": "analysis",
+      "title": "五、误差分析与不确定度",
+      "placeholder": "重点：周期测量的 B 类不确定度、$H$ 与 $R,r$ 的测量误差传递；上下盘不水平的系统误差。",
+      "prefill": ""
+    },
+    {
+      "id": "conclusion",
+      "title": "六、结论与讨论",
+      "placeholder": "总结实验结果，与理论/参考值比较给出相对误差，回答思考题，提出改进建议。",
+      "prefill": ""
+    }
+  ]
+}

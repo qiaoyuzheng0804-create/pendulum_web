@@ -1,0 +1,42 @@
+{
+  "experiment": "ciliniudun",
+  "title": "磁力牛顿摆实验报告",
+  "sections": [
+    {
+      "id": "purpose",
+      "title": "一、实验目的",
+      "placeholder": "列出本实验的目的（3~4 条）：要测什么物理量、用什么方法、训练哪些技能。可参考实验指导中的'实验目的'一节。",
+      "prefill": "观察多摆球间的动量/能量传递，分析碰撞前后动量守恒与能量损耗。"
+    },
+    {
+      "id": "principle",
+      "title": "二、实验原理",
+      "placeholder": "简述实验原理，写出主要公式并说明各量含义。\n支持 LaTeX：行内 $E=mc^2$，独立 $$\\eta = \\frac{d^2(\\rho-\\rho_0)g}{18v}$$",
+      "prefill": "碰撞过程动量守恒 $\\sum m_iv_i = \\sum m_iv_i'$；恢复系数 $e = v_2'/v_1$。"
+    },
+    {
+      "id": "apparatus",
+      "title": "三、实验仪器",
+      "placeholder": "列出所用仪器及其规格/精度（量程、分度值），这是不确定度评定的依据。",
+      "prefill": ""
+    },
+    {
+      "id": "data",
+      "title": "四、数据记录与处理",
+      "placeholder": "附平台输出的各摆球角度-时间曲线，提取碰撞前后摆球最大摆幅换算速度。",
+      "prefill": ""
+    },
+    {
+      "id": "analysis",
+      "title": "五、误差分析与不确定度",
+      "placeholder": "能量损耗来源：磁耦合非完全弹性、悬挂点摩擦、空气阻尼。",
+      "prefill": ""
+    },
+    {
+      "id": "conclusion",
+      "title": "六、结论与讨论",
+      "placeholder": "总结实验结果，与理论/参考值比较给出相对误差，回答思考题，提出改进建议。",
+      "prefill": ""
+    }
+  ]
+}

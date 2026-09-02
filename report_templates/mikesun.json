@@ -1,0 +1,42 @@
+{
+  "experiment": "mikesun",
+  "title": "迈克尔逊干涉仪实验报告",
+  "sections": [
+    {
+      "id": "purpose",
+      "title": "一、实验目的",
+      "placeholder": "列出本实验的目的（3~4 条）：要测什么物理量、用什么方法、训练哪些技能。可参考实验指导中的'实验目的'一节。",
+      "prefill": "用迈克尔逊干涉仪测 He-Ne 激光波长，理解等倾干涉与相干长度。"
+    },
+    {
+      "id": "principle",
+      "title": "二、实验原理",
+      "placeholder": "简述实验原理，写出主要公式并说明各量含义。\n支持 LaTeX：行内 $E=mc^2$，独立 $$\\eta = \\frac{d^2(\\rho-\\rho_0)g}{18v}$$",
+      "prefill": "$$\\lambda = \\frac{2\\Delta d}{N}$$ 每 100 条条纹记录一次读数；说明空程差的消除方法。"
+    },
+    {
+      "id": "apparatus",
+      "title": "三、实验仪器",
+      "placeholder": "列出所用仪器及其规格/精度（量程、分度值），这是不确定度评定的依据。",
+      "prefill": ""
+    },
+    {
+      "id": "data",
+      "title": "四、数据记录与处理",
+      "placeholder": "5 组以上'100 条条纹'鼓轮读数表；波长逐组计算表；（选做）空气折射率数据。",
+      "prefill": ""
+    },
+    {
+      "id": "analysis",
+      "title": "五、误差分析与不确定度",
+      "placeholder": "空程差、数错条纹、丝杠周期误差；条纹可见度随光程差下降的原因。",
+      "prefill": ""
+    },
+    {
+      "id": "conclusion",
+      "title": "六、结论与讨论",
+      "placeholder": "总结实验结果，与理论/参考值比较给出相对误差，回答思考题，提出改进建议。",
+      "prefill": ""
+    }
+  ]
+}

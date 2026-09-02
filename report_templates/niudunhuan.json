@@ -1,0 +1,42 @@
+{
+  "experiment": "niudunhuan",
+  "title": "牛顿环测曲率半径实验报告",
+  "sections": [
+    {
+      "id": "purpose",
+      "title": "一、实验目的",
+      "placeholder": "列出本实验的目的（3~4 条）：要测什么物理量、用什么方法、训练哪些技能。可参考实验指导中的'实验目的'一节。",
+      "prefill": "用读数显微镜测牛顿环直径，由环序差法求透镜曲率半径 $R$。"
+    },
+    {
+      "id": "principle",
+      "title": "二、实验原理",
+      "placeholder": "简述实验原理，写出主要公式并说明各量含义。\n支持 LaTeX：行内 $E=mc^2$，独立 $$\\eta = \\frac{d^2(\\rho-\\rho_0)g}{18v}$$",
+      "prefill": "暗环 $D_k^2 = 4kR\\lambda$；$$R = \\frac{D_m^2 - D_n^2}{4(m-n)\\lambda}$$ 说明用环序差消除中心形变的道理。"
+    },
+    {
+      "id": "apparatus",
+      "title": "三、实验仪器",
+      "placeholder": "列出所用仪器及其规格/精度（量程、分度值），这是不确定度评定的依据。",
+      "prefill": ""
+    },
+    {
+      "id": "data",
+      "title": "四、数据记录与处理",
+      "placeholder": "第 10~30 级暗环左右读数表（单向测量）、各环直径 $D_k$ 表、逐差分组计算表；$\\lambda=589.3$ nm。",
+      "prefill": ""
+    },
+    {
+      "id": "analysis",
+      "title": "五、误差分析与不确定度",
+      "placeholder": "回程差、叉丝对准误差、环序判读误差；讨论中心形变被消除的验证。",
+      "prefill": ""
+    },
+    {
+      "id": "conclusion",
+      "title": "六、结论与讨论",
+      "placeholder": "总结实验结果，与理论/参考值比较给出相对误差，回答思考题，提出改进建议。",
+      "prefill": ""
+    }
+  ]
+}

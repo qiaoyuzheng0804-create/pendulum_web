@@ -1,0 +1,42 @@
+{
+  "experiment": "danbai",
+  "title": "单摆实验报告",
+  "sections": [
+    {
+      "id": "purpose",
+      "title": "一、实验目的",
+      "placeholder": "列出本实验的目的（3~4 条）：要测什么物理量、用什么方法、训练哪些技能。可参考实验指导中的'实验目的'一节。",
+      "prefill": "观察单摆摆动，测量周期 T 与有效摆长 L，验证 $T=2\\pi\\sqrt{L/g}$ 并测当地重力加速度。"
+    },
+    {
+      "id": "principle",
+      "title": "二、实验原理",
+      "placeholder": "简述实验原理，写出主要公式并说明各量含义。\n支持 LaTeX：行内 $E=mc^2$，独立 $$\\eta = \\frac{d^2(\\rho-\\rho_0)g}{18v}$$",
+      "prefill": "小角度单摆 $T=2\\pi\\sqrt{L/g}$；说明小角度近似条件（$\\theta<5^\\circ$）。"
+    },
+    {
+      "id": "apparatus",
+      "title": "三、实验仪器",
+      "placeholder": "列出所用仪器及其规格/精度（量程、分度值），这是不确定度评定的依据。",
+      "prefill": ""
+    },
+    {
+      "id": "data",
+      "title": "四、数据记录与处理",
+      "placeholder": "记录摆长 L（悬点到球心）、30~50 个周期总时间；平台视频分析结果（CSV/角度-时间图）摘要。",
+      "prefill": ""
+    },
+    {
+      "id": "analysis",
+      "title": "五、误差分析与不确定度",
+      "placeholder": "主要误差：摆长测量（球心位置）、计时反应、摆角过大修正 $T\\approx T_0(1+\\theta^2/16)$。",
+      "prefill": ""
+    },
+    {
+      "id": "conclusion",
+      "title": "六、结论与讨论",
+      "placeholder": "总结实验结果，与理论/参考值比较给出相对误差，回答思考题，提出改进建议。",
+      "prefill": ""
+    }
+  ]
+}

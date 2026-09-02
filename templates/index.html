@@ -21,9 +21,42 @@
   :root{--bg:#f3f5f9;--bg2:#e9edf3;--card:#ffffff;--border:#d4dae3;--ba:#a8b2bf;--text:#0f172a;--t2:#475569;--t3:#7d8da1;--a1:#4f46e5;--a2:#7c3aed;--a3:#8b5cf6;--a4:#a5b4fc;--red:#dc2626;--green:#0f766e;--amber:#d97706;--g1:rgba(79,70,229,0.06);--g2:rgba(124,58,237,0.04);--g3:rgba(79,70,229,0.03);--shadow:0 1px 2px rgba(15,23,42,0.05),0 8px 24px rgba(15,23,42,0.06);--bt:#fff;--inp:#f8fafc;--modal:rgba(15,23,42,0.4);--i1b:rgba(124,58,237,0.1);--i1c:var(--a2);--i2b:rgba(139,92,246,0.12);--i2c:var(--a3);--i3b:rgba(79,70,229,0.1);--i3c:var(--a1);--i4b:rgba(15,118,110,0.1);--i4c:var(--green);--fr:rgba(79,70,229,0.14);--ci:inset 0 1px 0 rgba(0,0,0,0.03);}
 
   *{margin:0;padding:0;box-sizing:border-box;}
-  body{font-family:system-ui,-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden;}
+  body{font-family:system-ui,-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:var(--bg);color:var(--text);height:100vh;line-height:1.6;-webkit-font-smoothing:antialiased;overflow:hidden;}
 
-  .app{position:relative;z-index:1;max-width:980px;margin:0 auto;padding:32px 20px;}
+  /* ============ 三栏应用外壳（类 IDE 布局） ============ */
+  .shell{display:grid;grid-template-columns:224px minmax(0,1fr) auto;height:100vh;}
+  .sidenav{background:var(--card);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;padding:14px 10px;}
+  .nav-brand{font-weight:800;font-size:0.95rem;padding:6px 10px 14px;letter-spacing:-0.01em;}
+  .nav-group-label{font-size:0.66rem;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:0.08em;padding:14px 10px 6px;}
+  .nav-item{display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;border:none;background:transparent;border-radius:8px;color:var(--t2);font-size:0.84rem;font-weight:500;font-family:inherit;cursor:pointer;text-align:left;transition:background .2s,color .2s;}
+  .nav-item:hover{background:var(--g1);color:var(--text);}
+  .nav-item.active{background:var(--g1);color:var(--a1);font-weight:600;}
+  .nav-item .nav-badge{margin-left:auto;font-size:0.62rem;color:var(--t3);}
+  .nav-item.mode-video .nav-badge{color:var(--a1);}
+  .nav-footer{margin-top:auto;padding:12px 6px 2px;border-top:1px solid var(--border);}
+  .nav-user{display:flex;align-items:center;gap:8px;padding:6px 8px;font-size:0.78rem;color:var(--t2);}
+  .nav-user .avatar{width:26px;height:26px;border-radius:50%;background:var(--a1);color:#fff;display:flex;align-items:center;justify-content:center;font-size:0.72rem;font-weight:700;flex-shrink:0;}
+  .nav-user .u-role{font-size:0.66rem;color:var(--t3);}
+  .main-col{display:flex;flex-direction:column;min-width:0;}
+  .topbar{display:flex;align-items:center;gap:12px;padding:0 20px;height:52px;background:var(--card);border-bottom:1px solid var(--border);flex-shrink:0;}
+  .topbar .view-title{font-size:0.95rem;font-weight:700;}
+  .topbar .spacer{flex:1;}
+  .center{flex:1;overflow-y:auto;padding:22px 26px;}
+  .view{display:none;}
+  .view.active{display:block;animation:fadeUp .35s ease-out;}
+  .ai-panel{width:380px;background:var(--card);border-left:1px solid var(--border);display:flex;flex-direction:column;}
+  .ai-panel.collapsed{display:none;}
+  .ai-panel-head{display:flex;align-items:center;gap:8px;padding:0 14px;height:52px;border-bottom:1px solid var(--border);font-weight:700;font-size:0.88rem;flex-shrink:0;color:var(--a1);}
+  .ai-panel-head .spacer{flex:1;}
+  .ai-panel-head .icon-btn{border:none;background:transparent;color:var(--t3);cursor:pointer;padding:6px;border-radius:8px;display:flex;}
+  .ai-panel-head .icon-btn:hover{background:var(--g1);color:var(--text);}
+  @media (max-width:1250px){.shell{grid-template-columns:200px minmax(0,1fr) auto;}.ai-panel{width:340px;}}
+  @media (max-width:1050px){
+    .shell{grid-template-columns:64px minmax(0,1fr) auto;}
+    .nav-brand,.nav-group-label,.nav-item span.txt,.nav-user .u-meta{display:none;}
+    .nav-item{justify-content:center;}.nav-item .nav-badge{display:none;}
+    .ai-panel{position:fixed;right:0;top:52px;bottom:0;z-index:900;box-shadow:-8px 0 24px rgba(15,23,42,.1);}
+  }
 
   @keyframes fadeUp{from{opacity:0;transform:translateY(20px);}to{opacity:1;transform:translateY(0);}}
   @keyframes toastIn{from{opacity:0;transform:translateX(40px);}to{opacity:1;transform:translateX(0);}}
@@ -228,31 +261,11 @@
   .hidden{display:none!important;}.text-center{text-align:center;}.mt-16{margin-top:16px;}.mt-24{margin-top:24px;}
 
   @media(max-width:700px){
-    .app{padding:16px 12px;}.card{padding:18px;}.type-cards{grid-template-columns:1fr;}
-    .modal{max-width:100vw;max-height:100vh;border-radius:0;}.header h1{font-size:1.5rem;}
+    .center{padding:14px 12px;}.card{padding:18px;}.type-cards{grid-template-columns:1fr;}
+    .modal{max-width:100vw;max-height:100vh;border-radius:0;}
     .param-grid{grid-template-columns:1fr 1fr;}.step-line-wrap{max-width:40px;}
+    .shell{grid-template-columns:minmax(0,1fr) auto;}
   }
-
-  /* ============================================================
-     MODE SWITCHER
-     ============================================================ */
-  .mode-switcher{display:inline-flex;align-items:center;gap:0;border:1px solid var(--border);border-radius:20px;overflow:hidden;background:var(--bg2);margin-right:10px;}
-  .mode-btn{padding:5px 14px;border:none;background:transparent;color:var(--t3);font-size:0.73rem;font-family:inherit;cursor:pointer;transition:all 0.25s;letter-spacing:0.04em;white-space:nowrap;border-right:1px solid var(--border);}
-  .mode-btn:last-child{border-right:none;}
-  .mode-btn:hover{color:var(--text);background:var(--g1);}
-  .mode-btn.active{background:var(--a1);color:var(--bt);font-weight:600;}
-
-  /* ============================================================
-     TEACHING MODULE
-     ============================================================ */
-  .app-teaching{animation:fadeUp 0.5s ease-out;}
-  .teach-tab-bar{display:flex;gap:0;margin-bottom:24px;border-bottom:2px solid var(--border);overflow-x:auto;}
-  .teach-tab{padding:12px 22px;border:none;background:transparent;color:var(--t3);font-size:0.88rem;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.25s;position:relative;white-space:nowrap;}
-  .teach-tab:hover{color:var(--text);}
-  .teach-tab.active{color:var(--a1);}
-  .teach-tab.active::after{content:'';position:absolute;bottom:-2px;left:0;right:0;height:2px;background:var(--a1);border-radius:1px;}
-  .teach-panel{display:none;animation:fadeUp 0.4s ease-out;}
-  .teach-panel.active{display:block;}
 
   /* Theory */
   .theory-section{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:16px;transition:border-color 0.3s;}
@@ -336,7 +349,7 @@
   .sim-type-badge.over{background:var(--i1b);color:var(--i1c);}
 
   /* AI Chat */
-  .chat-container{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;height:520px;}
+  .chat-container{background:var(--card);border:none;overflow:hidden;display:flex;flex-direction:column;flex:1;min-height:0;}
   .chat-messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;}
   .chat-msg{max-width:85%;padding:10px 14px;border-radius:12px;font-size:0.85rem;line-height:1.7;animation:fadeUp 0.3s ease-out;}
   .chat-msg.user{align-self:flex-end;background:var(--a1);color:var(--bt);border-bottom-right-radius:4px;}
@@ -449,20 +462,38 @@
 
 <div id="toast-container"></div>
 
-<div class="app">
-  <div class="header">
-    <h1>Pendulum Motion Analyzer</h1>
-    <p class="sub">基于 <em>YOLOv8</em> 的物理摆运动数据提取 · 单摆 · 磁阻尼摆 · 扭摆 · 磁力牛顿摆</p>
-    <div style="margin-top:14px;display:flex;align-items:center;justify-content:center;gap:5px;flex-wrap:wrap;">
-      <div class="mode-switcher">
-        <button class="mode-btn active" id="mode_analysis" onclick="switchMode('analysis')"><svg class="icon"><use href="#i-flask"/></svg> 数据分析</button>
-        <button class="mode-btn" id="mode_teaching" onclick="switchMode('teaching')"><svg class="icon"><use href="#i-book-open"/></svg> 阻尼实验教学</button>
+<div class="shell">
+  <!-- ========== 左侧功能导航 ========== -->
+  <aside class="sidenav" id="sidenav">
+    <div class="nav-brand">大学物理实验平台</div>
+    <div class="nav-group-label">视频分析实验</div>
+    <div id="nav_video_exps"></div>
+    <div class="nav-group-label">指导型实验</div>
+    <div id="nav_guide_exps"></div>
+    <div class="nav-group-label">学习中心</div>
+    <button class="nav-item" id="nav_theory" onclick="switchView('theory')"><svg class="icon"><use href="#i-book"/></svg><span class="txt">理论知识</span></button>
+    <button class="nav-item" id="nav_sim" onclick="switchView('sim')"><svg class="icon"><use href="#i-sliders"/></svg><span class="txt">交互模拟</span></button>
+    <div class="nav-group-label">报告中心</div>
+    <button class="nav-item" id="nav_reports" onclick="switchView('reports')"><svg class="icon"><use href="#i-clipboard"/></svg><span class="txt">实验报告</span></button>
+    <div class="nav-footer">
+      <div id="nav_user_area">
+        <div class="nav-user"><div class="avatar">?</div><div class="u-meta"><div id="nav_user_name">未登录</div><div class="u-role" id="nav_user_role">—</div></div></div>
+        <button class="nav-item" id="nav_login_btn" onclick="location.href='/login'"><svg class="icon"><use href="#i-unlock"/></svg><span class="txt">登录 / 切换身份</span></button>
       </div>
     </div>
-  </div>
+  </aside>
 
-  <!-- ========== ANALYSIS MODE ========== -->
-  <div class="app-analysis" id="app_analysis">
+  <!-- ========== 中栏：顶栏 + 中央区 ========== -->
+  <div class="main-col">
+    <header class="topbar">
+      <div class="view-title" id="view_title">数据分析</div>
+      <div class="spacer"></div>
+      <button class="btn btn-outline" id="ai_toggle" onclick="toggleAIPanel()" style="padding:6px 12px;"><svg class="icon"><use href="#i-bot"/></svg> AI 助手</button>
+    </header>
+
+    <main class="center" id="center">
+    <!-- ========== 视图：数据分析 ========== -->
+    <div class="view active" id="view_analysis">
   <!-- Step Progress Bar (sticky) -->
   <div class="step-bar-wrap">
     <div class="step-bar">
@@ -735,19 +766,10 @@
     <div class="result-grid" id="result_grid"></div>
     <div class="text-center mt-24"><button class="btn btn-secondary" onclick="location.reload();"><svg class="icon"><use href="#i-refresh"/></svg>处理新视频</button></div>
   </div>
-</div><!-- /app-analysis -->
+</div><!-- /view_analysis -->
 
-<!-- ========== TEACHING MODE ========== -->
-<div class="app-teaching hidden" id="app_teaching">
-  <div class="teach-tab-bar">
-    <button class="teach-tab active" onclick="switchTeachTab('theory')"><svg class="icon"><use href="#i-book"/></svg> 理论知识</button>
-    <button class="teach-tab" onclick="switchTeachTab('guide')"><svg class="icon"><use href="#i-clipboard"/></svg> 实验指导</button>
-    <button class="teach-tab" onclick="switchTeachTab('sim')"><svg class="icon"><use href="#i-sliders"/></svg> 交互模拟</button>
-    <button class="teach-tab" onclick="switchTeachTab('ai')"><svg class="icon"><use href="#i-bot"/></svg> AI 问答</button>
-  </div>
-
-  <!-- Tab: Theory -->
-  <div class="teach-panel active" id="teach_theory">
+  <!-- ========== 视图：理论知识 ========== -->
+  <div class="view" id="view_theory">
     <div id="theory_content">
       <div class="skel t"></div><div class="skel w70"></div><div class="skel"></div><div class="skel"></div><div class="skel w40"></div>
       <div class="skel-box"></div>
@@ -755,19 +777,14 @@
     </div>
   </div>
 
-  <!-- Tab: Guide -->
-  <div class="teach-panel" id="teach_guide">
-    <div id="guide_content"><div class="text-center" style="padding:40px;color:var(--t3);">点击下方实验类型查看指导</div></div>
-    <div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;">
-      <button class="btn btn-primary" onclick="loadGuide('danbai')">单摆指导</button>
-      <button class="btn btn-primary" onclick="loadGuide('cizuni')">磁阻尼摆指导</button>
-      <button class="btn btn-primary" onclick="loadGuide('niubai')">扭摆指导</button>
-      <button class="btn btn-primary" onclick="loadGuide('ciliniudun')">磁力牛顿摆指导</button>
-    </div>
+  <!-- ========== 视图：实验指导 ========== -->
+  <div class="view" id="view_guide">
+    <div id="guide_content"><div class="text-center" style="padding:40px;color:var(--t3);">在左侧选择一个实验查看指导</div></div>
+    <div id="guide_buttons" style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;"></div>
   </div>
 
-  <!-- Tab: Simulation -->
-  <div class="teach-panel" id="teach_sim">
+  <!-- ========== 视图：交互模拟 ========== -->
+  <div class="view" id="view_sim">
     <div class="sim-container">
       <div class="sim-canvas-wrap">
         <canvas id="sim_canvas"></canvas>
@@ -797,29 +814,38 @@
     </div>
   </div>
 
-  <!-- Tab: AI Chat -->
-  <div class="teach-panel" id="teach_ai">
+  <!-- ========== 视图：实验报告 ========== -->
+  <div class="view" id="view_reports">
+    <div id="reports_root"><div class="text-center" style="padding:40px;color:var(--t3);">加载中…</div></div>
+  </div>
+    </main><!-- /center -->
+  </div><!-- /main-col -->
+
+  <!-- ========== 右侧 AI 辅助区 ========== -->
+  <aside class="ai-panel" id="ai_panel">
+    <div class="ai-panel-head">
+      <svg class="icon"><use href="#i-bot"/></svg> AI 实验助手
+      <div class="spacer"></div>
+      <button class="icon-btn" title="折叠面板" onclick="toggleAIPanel()"><svg class="icon"><use href="#i-x"/></svg></button>
+    </div>
     <div class="chat-container">
       <div class="chat-messages" id="chat_messages">
-        <div class="chat-msg bot">你好！我是阻尼振动实验教学助手。可以问我关于阻尼振动、实验操作、数据分析等方面的问题。</div>
+        <div class="chat-msg bot">你好！我是物理实验 AI 助手。选择左侧的实验后，我会结合当前实验与你对话——操作指导、数据分析、报告写作都可以问。</div>
       </div>
       <div class="preset-questions">
-        <button class="preset-q" onclick="askPreset('什么是阻尼比？它有什么物理意义？')">什么是阻尼比？</button>
-        <button class="preset-q" onclick="askPreset('欠阻尼和过阻尼有什么区别？')">欠阻尼 vs 过阻尼</button>
-        <button class="preset-q" onclick="askPreset('如何用 YOLOv8 分析摆的运动视频？')">YOLOv8 视频分析</button>
-        <button class="preset-q" onclick="askPreset('磁阻尼摆的涡流阻尼原理是什么？')">涡流阻尼原理</button>
-        <button class="preset-q" onclick="askPreset('如何判断实验数据拟合结果是否可靠？')">拟合结果判断</button>
+        <button class="preset-q" onclick="askPreset('这个实验的原理是什么？')">实验原理</button>
+        <button class="preset-q" onclick="askPreset('指导我完成当前实验步骤')">指导操作</button>
+        <button class="preset-q" onclick="askPreset('帮我分析实验数据')">分析数据</button>
+        <button class="preset-q" onclick="askPreset('实验报告应该怎么写？')">报告写作</button>
+        <button class="preset-q" onclick="askPreset('帮我分析误差来源')">误差分析</button>
       </div>
       <div class="chat-input-area">
         <input type="text" id="chat_input" placeholder="输入你的问题..." onkeydown="if(event.key==='Enter')sendChat()">
         <button id="chat_send_btn" onclick="sendChat()">发送</button>
       </div>
     </div>
-  </div>
-</div>
-
-  <div class="text-center" style="padding:8px;color:var(--t3);font-size:0.65rem;opacity:0.5;">v3.2 &mdash; Full Physics Experience + Teaching Module</div>
-</div>
+  </aside>
+</div><!-- /shell -->
 
 <!-- Image Lightbox -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()"><img id="lightbox_img" alt="结果大图"></div>
@@ -1696,38 +1722,79 @@ async function startProcessing(){
   }finally{btnProcess.disabled=false;btnProcess.innerHTML='<svg class="icon"><use href="#i-play"/></svg>开始处理';}
 }
 
-// ==================== Mode Switching ====================
-function switchMode(mode){
-  const analysis=document.getElementById('app_analysis');
-  const teaching=document.getElementById('app_teaching');
-  document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active'));
-  if(mode==='analysis'){
-    analysis.classList.remove('hidden');
-    teaching.classList.add('hidden');
-    document.getElementById('mode_analysis').classList.add('active');
+// ==================== 视图切换（三栏布局） ====================
+const EXPERIMENTS = {{ experiments | tojson }};
+const VIEW_TITLES = {analysis:'数据分析', theory:'理论知识', guide:'实验指导', sim:'交互模拟', reports:'实验报告'};
+
+function switchView(view){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  const el=document.getElementById('view_'+view);
+  if(el)el.classList.add('active');
+  document.getElementById('view_title').textContent=VIEW_TITLES[view]||view;
+  document.querySelectorAll('.sidenav .nav-item').forEach(b=>b.classList.remove('active'));
+  const nav=document.getElementById('nav_'+view);
+  if(nav)nav.classList.add('active');
+  if(view==='theory'&&!window._theoryLoaded){window._theoryLoaded=true;loadTheory();}
+  if(view==='sim'&&!window._simStarted){window._simStarted=true;initSimulation();}
+  if(view==='reports'){renderReports();}
+}
+
+function toggleAIPanel(){
+  document.getElementById('ai_panel').classList.toggle('collapsed');
+}
+
+// ---------- 左导航渲染（来自实验注册表） ----------
+function renderNav(){
+  const videoBox=document.getElementById('nav_video_exps');
+  const guideBox=document.getElementById('nav_guide_exps');
+  const gb=document.getElementById('guide_buttons');
+  EXPERIMENTS.forEach(e=>{
+    const btn=document.createElement('button');
+    btn.className='nav-item';
+    btn.id='nav_exp_'+e.id;
+    btn.title=e.brief;
+    btn.innerHTML=`<svg class="icon"><use href="#${e.mode==='video'?'i-flask':'i-book-open'}"/></svg><span class="txt">${e.name}</span><span class="nav-badge">${e.mode==='video'?'视频':'指导'}</span>`;
+    btn.onclick=()=>{
+      setActiveExpNav(e.id);
+      if(e.mode==='video'){switchView('analysis');selectType(e.id);}
+      else{switchView('guide');loadGuide(e.id);}
+    };
+    (e.mode==='video'?videoBox:guideBox).appendChild(btn);
+    const b=document.createElement('button');
+    b.className='btn btn-primary';
+    b.textContent=e.name+'指导';
+    b.onclick=()=>{setActiveExpNav(e.id);loadGuide(e.id);};
+    gb.appendChild(b);
+  });
+}
+
+function setActiveExpNav(id){
+  document.querySelectorAll('.sidenav .nav-item').forEach(b=>b.classList.remove('active'));
+  const n=document.getElementById('nav_exp_'+id);
+  if(n)n.classList.add('active');
+}
+
+// ---------- 登录状态 ----------
+let CURRENT_USER=null;
+async function refreshAuth(){
+  try{
+    const r=await fetch('/api/auth/me');
+    const d=await r.json();
+    CURRENT_USER=d.user;
+  }catch(e){CURRENT_USER=null;}
+  const nameEl=document.getElementById('nav_user_name');
+  const roleEl=document.getElementById('nav_user_role');
+  const avatar=document.querySelector('#nav_user_area .avatar');
+  if(CURRENT_USER){
+    nameEl.textContent=CURRENT_USER.display_name||CURRENT_USER.username;
+    roleEl.textContent=CURRENT_USER.role==='teacher'?'教师':'学生';
+    avatar.textContent=(CURRENT_USER.display_name||CURRENT_USER.username||'?')[0].toUpperCase();
   }else{
-    analysis.classList.add('hidden');
-    teaching.classList.remove('hidden');
-    document.getElementById('mode_teaching').classList.add('active');
-    if(!teaching.dataset.loaded){teaching.dataset.loaded='1';initTeaching();}
+    nameEl.textContent='未登录';
+    roleEl.textContent='—';
+    avatar.textContent='?';
   }
 }
-
-// ==================== Teaching Tabs ====================
-function switchTeachTab(tab){
-  document.querySelectorAll('.teach-tab').forEach(t=>t.classList.remove('active'));
-  document.querySelectorAll('.teach-panel').forEach(p=>p.classList.remove('active'));
-  const map={theory:'teach_theory',guide:'teach_guide',sim:'teach_sim',ai:'teach_ai'};
-  document.getElementById(map[tab]).classList.add('active');
-  const tabs=document.querySelectorAll('.teach-tab');
-  const idx={theory:0,guide:1,sim:2,ai:3}[tab];
-  if(tabs[idx])tabs[idx].classList.add('active');
-  if(tab==='sim'&&!window._simStarted){window._simStarted=true;initSimulation();}
-}
-
-// ==================== Theory Content ====================
-let _theoryLoaded=false;
-function initTeaching(){loadTheory();}
 
 // ===== Shared: Unicode → LaTeX conversion =====
 function unicodeToLatex(text){
@@ -1890,6 +1957,7 @@ function drawDampingPreview(canvas,type){
 // ==================== Guide Content ====================
 async function loadGuide(type){
   const c=document.getElementById('guide_content');
+  window._currentGuideExp=type;
   c.innerHTML='<div class="skel t"></div><div class="skel w70"></div><div class="skel"></div><div class="skel w40"></div><div class="skel"></div><div class="skel-box" style="height:90px;"></div><div class="skel w70"></div><div class="skel"></div>';
   try{
     const resp=await fetch('/api/teaching_content/guide_'+type);
@@ -2065,7 +2133,7 @@ async function sendChat(){
   document.getElementById('chat_send_btn').disabled=true;
   const botDiv=appendChat('bot','<div class="typing-dots"><span></span><span></span><span></span></div>');
   try{
-    const resp=await fetch('/api/ai_chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:chatHistory})});
+    const resp=await fetch('/api/ai_chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:chatHistory,context:aiContext()})});
     if(!resp.ok){const err=await resp.json();throw new Error(err.error||'Request failed');}
     const reader=resp.body.getReader();const decoder=new TextDecoder();let buf='';let fullText='';
     const msgBox=document.getElementById('chat_messages');
@@ -2080,7 +2148,7 @@ async function sendChat(){
         if(!line.startsWith('data: '))continue;
         const d=line.slice(6);
         if(d==='[DONE]')continue;
-        try{const j=JSON.parse(d);if(j.error)throw new Error(j.error);if(j.content){fullText+=j.content;botDiv.setAttribute('data-raw',fullText);const now=performance.now();if(now-lastPaint>150){lastPaint=now;renderBotMsg(botDiv);msgBox.scrollTop=msgBox.scrollHeight;}}}catch(e){}
+        try{const j=JSON.parse(d);if(j.error)throw new Error(j.error);if(j.tool){botDiv.innerHTML='<em style="color:var(--t3);">'+j.tool+'</em>';const mb=document.getElementById('chat_messages');mb.scrollTop=mb.scrollHeight;}else if(j.content){fullText+=j.content;botDiv.setAttribute('data-raw',fullText);const now=performance.now();if(now-lastPaint>150){lastPaint=now;renderBotMsg(botDiv);msgBox.scrollTop=msgBox.scrollHeight;}}}catch(e){}
       }
     }
     if(!fullText)botDiv.innerHTML='<em style="color:var(--t3);">（无回复）</em>';
@@ -2094,6 +2162,19 @@ async function sendChat(){
 
 function askPreset(q){
   document.getElementById('chat_input').value=q;sendChat();
+}
+
+// 当前实验上下文：随消息发给后端，注入 AI 系统提示词
+function aiContext(){
+  const exp=S.motionType||window._currentGuideExp||'';
+  const meta=EXPERIMENTS.find(e=>e.id===exp);
+  return {
+    exp_id:exp,
+    exp_name:meta?meta.name:'',
+    exp_mode:meta?meta.mode:'',
+    view:document.querySelector('.view.active')?document.querySelector('.view.active').id.replace('view_',''):'',
+    user:CURRENT_USER?{role:CURRENT_USER.role,name:CURRENT_USER.display_name||CURRENT_USER.username}:null
+  };
 }
 
 // 模型常违规用反引号包公式（如 `T_d = t_{i+1}`），被 marked 渲染成代码框。
@@ -2132,6 +2213,216 @@ function renderBotMsg(div){
   if(!text)return;
   div.innerHTML=renderChatMarkdown(text);
 }
+
+// ==================== 报告中心（师生交互） ====================
+const _EXP_NAME = {};EXPERIMENTS.forEach(e=>{_EXP_NAME[e.id]=e.name;});
+let _reportEditor = null; // {id, exp_id, content}
+
+async function renderReports(){
+  await refreshAuth();
+  const root=document.getElementById('reports_root');
+  if(!CURRENT_USER){
+    root.innerHTML=`<div class="card" style="text-align:center;padding:48px;">
+      <div style="font-weight:700;margin-bottom:8px;">请先登录</div>
+      <div style="color:var(--t2);font-size:0.86rem;margin-bottom:18px;">登录后可以提交实验报告、查看教师批改反馈。</div>
+      <button class="btn btn-primary btn-lg" onclick="location.href='/login'">前往登录</button></div>`;
+    return;
+  }
+  if(CURRENT_USER.role==='teacher')return renderGradingConsole(root);
+  return renderStudentReports(root);
+}
+
+function _statusBadge(st,score){
+  if(st==='graded')return `<span style="color:var(--green);font-weight:600;">已批改 · ${score} 分</span>`;
+  if(st==='submitted')return `<span style="color:var(--a1);font-weight:600;">待批改</span>`;
+  return `<span style="color:var(--t3);">草稿</span>`;
+}
+
+// ---------- 学生视图 ----------
+async function renderStudentReports(root){
+  const list=await (await fetch('/api/reports')).json();
+  let rows=list.map(r=>`
+    <div class="calib-point" style="cursor:pointer;" onclick="openReportEditor(${r.id})">
+      <div class="cp-id" style="background:var(--a1);">${(_EXP_NAME[r.exp_id]||'?')[0]}</div>
+      <div style="flex:1;"><div class="cp-label">${_EXP_NAME[r.exp_id]||r.exp_id}</div>
+      <div class="cp-desc">更新于 ${r.updated_at.replace('T',' ')}</div></div>
+      <div>${_statusBadge(r.status,r.score)}</div>
+    </div>`).join('');
+  if(!list.length)rows='<div class="text-center" style="padding:24px;color:var(--t3);">还没有报告，选择一个实验开始撰写。</div>';
+  root.innerHTML=`
+    <div class="card">
+      <div class="card-header"><h2>我的实验报告</h2><div class="tag">My Reports</div></div>
+      <div style="margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <select id="new_report_exp" style="width:auto;min-width:200px;">
+          ${EXPERIMENTS.map(e=>`<option value="${e.id}">${e.name}</option>`).join('')}
+        </select>
+        <button class="btn btn-primary" onclick="newReport()"><svg class="icon"><use href="#i-edit"/></svg> 新建报告</button>
+      </div>
+      <div class="calib-point-list">${rows}</div>
+    </div>
+    <div id="report_editor_area"></div>`;
+}
+
+async function newReport(){
+  const exp=document.getElementById('new_report_exp').value;
+  openReportEditor(null,exp);
+}
+
+async function openReportEditor(rid,fixedExp){
+  const area=document.getElementById('report_editor_area');
+  area.innerHTML='<div class="skel t"></div><div class="skel"></div>';
+  let sub={id:rid,exp_id:fixedExp,content:{}};
+  if(rid){sub=await (await fetch('/api/reports/'+rid)).json();}
+  const tpl=await (await fetch('/api/report_template/'+sub.exp_id)).json();
+  if(tpl.error){area.innerHTML=`<div class="status error" style="display:block;">${tpl.error}</div>`;return;}
+  _reportEditor={id:sub.id||null,exp_id:sub.exp_id,content:sub.content||{}};
+  area.innerHTML=`
+    <div class="card">
+      <div class="card-header"><h2>${tpl.title}</h2><div class="tag">${_reportEditor.id?'编辑中':'新建'}</div></div>
+      ${tpl.sections.map(s=>`
+        <div class="field-label"><span class="zh">${s.title}</span></div>
+        <textarea id="sec_${s.id}" style="width:100%;min-height:110px;padding:12px 14px;border-radius:10px;border:1px solid var(--border);background:var(--inp);color:var(--text);font-size:0.88rem;font-family:inherit;line-height:1.7;resize:vertical;" placeholder="${s.placeholder.replace(/"/g,'&quot;')}">${(_reportEditor.content[s.id]||s.prefill||'')}</textarea>
+      `).join('')}
+      <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
+        <button class="btn btn-outline" id="btn_save_draft" onclick="saveReport('draft')"><svg class="icon"><use href="#i-check"/></svg> 保存草稿</button>
+        <button class="btn btn-primary" onclick="saveReport('submit')"><svg class="icon"><use href="#i-play"/></svg> 提交报告</button>
+      </div>
+      <div class="status" id="report_status"></div>
+    </div>`;
+  area.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+async function saveReport(mode){
+  const st=document.getElementById('report_status');
+  const btns=document.querySelectorAll('#report_editor_area button');
+  btns.forEach(b=>b.disabled=true);
+  const content={};
+  document.querySelectorAll('#report_editor_area textarea').forEach(t=>{
+    content[t.id.replace('sec_','')]=t.value;
+  });
+  try{
+    const r=await fetch('/api/reports',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({id:_reportEditor.id,exp_id:_reportEditor.exp_id,content})});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||'保存失败');
+    _reportEditor.id=d.id;
+    if(mode==='submit'){
+      const r2=await fetch(`/api/reports/${d.id}/submit`,{method:'POST'});
+      const d2=await r2.json();
+      if(!r2.ok)throw new Error(d2.error||'提交失败');
+      st.className='status success';st.textContent='报告已提交，等待教师批改。';
+      showToast('报告已提交','info');
+    }else{
+      st.className='status success';st.textContent='草稿已保存。';
+      showToast('草稿已保存','info');
+    }
+    setTimeout(renderReports,900);
+  }catch(e){
+    st.className='status error';st.textContent=e.message;
+  }finally{btns.forEach(b=>b.disabled=false);}
+}
+
+// ---------- 教师视图：批改台 ----------
+async function renderGradingConsole(root){
+  const list=await (await fetch('/api/reports')).json();
+  const submitted=list.filter(r=>r.status!=='draft');
+  let rows=submitted.map(r=>`
+    <div class="calib-point" style="cursor:pointer;" onclick="openGrading(${r.id})">
+      <div class="cp-id" style="background:var(--a1);">${(r.display_name||r.username||'?')[0]}</div>
+      <div style="flex:1;"><div class="cp-label">${r.display_name||r.username} · ${_EXP_NAME[r.exp_id]||r.exp_id}</div>
+      <div class="cp-desc">提交于 ${r.updated_at.replace('T',' ')}</div></div>
+      <div>${_statusBadge(r.status,r.score)}</div>
+    </div>`).join('');
+  if(!submitted.length)rows='<div class="text-center" style="padding:24px;color:var(--t3);">暂无学生提交的报告。</div>';
+  root.innerHTML=`
+    <div class="card">
+      <div class="card-header"><h2>批改台</h2><div class="tag">Grading Console</div></div>
+      <div style="font-size:0.8rem;color:var(--t3);margin-bottom:12px;">
+        学生名单管理：
+        <button class="btn btn-outline" style="padding:4px 10px;margin-left:6px;" onclick="showUserAdmin()">查看 / 导入学生</button>
+      </div>
+      <div id="user_admin_area"></div>
+      <div class="calib-point-list">${rows}</div>
+    </div>
+    <div id="grading_area"></div>`;
+}
+
+async function openGrading(rid){
+  const area=document.getElementById('grading_area');
+  area.innerHTML='<div class="skel t"></div><div class="skel"></div>';
+  const r=await (await fetch('/api/reports/'+rid)).json();
+  const tpl=await (await fetch('/api/report_template/'+r.exp_id)).json();
+  const sections=(tpl.sections||[]).map(s=>{
+    const v=(r.content&&r.content[s.id])||'';
+    return `<div class="field-label"><span class="zh">${s.title}</span></div>
+      <div class="theory-note">${v?renderChatMarkdown(v):'<em style="color:var(--t3);">（未填写）</em>'}</div>`;
+  }).join('');
+  area.innerHTML=`
+    <div class="card">
+      <div class="card-header"><h2>${r.display_name||r.username} · ${_EXP_NAME[r.exp_id]||r.exp_id}</h2><div class="tag">${_statusBadge(r.status,r.score)}</div></div>
+      ${sections}
+      <div style="display:flex;gap:14px;align-items:center;margin-top:16px;flex-wrap:wrap;">
+        <label style="font-size:0.85rem;font-weight:600;">分数 <input id="grade_score" type="number" min="0" max="100" value="${r.score??''}" style="width:90px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--inp);"></label>
+        <span style="flex:1;"></span>
+        ${r.status==='submitted'?`<button class="btn btn-outline" onclick="gradeReport(${r.id},'return')"><svg class="icon"><use href="#i-undo"/></svg> 退回修改</button>`:''}
+        <button class="btn btn-primary" onclick="gradeReport(${r.id},'grade')"><svg class="icon"><use href="#i-check"/></svg> 提交批改</button>
+      </div>
+      <div class="field-label" style="margin-top:12px;"><span class="zh">评语</span></div>
+      <textarea id="grade_feedback" style="width:100%;min-height:80px;padding:12px 14px;border-radius:10px;border:1px solid var(--border);background:var(--inp);font-size:0.88rem;font-family:inherit;resize:vertical;">${(r.feedback||'').replace(/</g,'&lt;')}</textarea>
+      <div class="status" id="grade_status"></div>
+    </div>`;
+  area.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+async function gradeReport(rid,action){
+  const st=document.getElementById('grade_status');
+  const url=action==='grade'?`/api/reports/${rid}/grade`:`/api/reports/${rid}/return`;
+  const body=action==='grade'
+    ?{score:parseFloat(document.getElementById('grade_score').value),feedback:document.getElementById('grade_feedback').value}
+    :{feedback:document.getElementById('grade_feedback').value};
+  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const d=await r.json();
+  if(!r.ok){st.className='status error';st.textContent=d.error||'操作失败';return;}
+  st.className='status success';st.textContent=action==='grade'?'批改完成，学生可见分数与评语。':'已退回学生修改。';
+  showToast(action==='grade'?'批改完成':'已退回','info');
+  setTimeout(renderReports,900);
+}
+
+async function showUserAdmin(){
+  const area=document.getElementById('user_admin_area');
+  if(area.innerHTML){area.innerHTML='';return;}
+  const users=await (await fetch('/api/admin/users')).json();
+  const stu=users.filter(x=>x.role==='student').map(x=>`<span style="display:inline-block;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:2px 8px;margin:2px;font-size:0.75rem;">${x.username}（${x.display_name}）</span>`).join('');
+  area.innerHTML=`
+    <div class="param-card" style="margin-bottom:12px;">
+      <div class="p-label">学生名单（初始密码 123456）</div>
+      <div style="margin:6px 0;">${stu||'<em style="color:var(--t3);">暂无学生</em>'}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <input id="bulk_users" placeholder="批量导入：每行一个，格式 学号,姓名" style="flex:1;min-width:220px;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--inp);"></input>
+        <button class="btn btn-primary" onclick="importUsers()">导入</button>
+      </div>
+      <div class="status" id="user_admin_status"></div>
+    </div>`;
+}
+
+async function importUsers(){
+  const st=document.getElementById('user_admin_status');
+  const raw=document.getElementById('bulk_users').value.trim();
+  const users=raw.split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{
+    const[username,name]=l.split(/[,，]/).map(x=>x.trim());
+    return {username,display_name:name||username};
+  }).filter(x=>x.username);
+  const r=await fetch('/api/admin/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({users})});
+  const d=await r.json();
+  if(!r.ok){st.className='status error';st.textContent=d.error||'导入失败';return;}
+  st.className='status success';st.textContent=`导入 ${d.added.length} 个账号${d.skipped.length?'，跳过已存在：'+d.skipped.join('、'):''}。`;
+  showToast('学生名单已更新','info');
+  setTimeout(showUserAdmin,100);
+}
+
+// ==================== 启动初始化 ====================
+renderNav();
+refreshAuth();
 
 // ==================== Heartbeat (server auto-shutdown when page closed) ====================
 // Web Worker 定时器不受浏览器后台标签页限流；页面卸载时 sendBeacon 发告别，

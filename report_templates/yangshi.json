@@ -1,0 +1,42 @@
+{
+  "experiment": "yangshi",
+  "title": "杨氏模量测量实验报告",
+  "sections": [
+    {
+      "id": "purpose",
+      "title": "一、实验目的",
+      "placeholder": "列出本实验的目的（3~4 条）：要测什么物理量、用什么方法、训练哪些技能。可参考实验指导中的'实验目的'一节。",
+      "prefill": "用光杠杆放大法测钢丝杨氏模量 $E$，掌握逐差法与光杠杆原理。"
+    },
+    {
+      "id": "principle",
+      "title": "二、实验原理",
+      "placeholder": "简述实验原理，写出主要公式并说明各量含义。\n支持 LaTeX：行内 $E=mc^2$，独立 $$\\eta = \\frac{d^2(\\rho-\\rho_0)g}{18v}$$",
+      "prefill": "$$E = \\frac{8FLD}{\\pi d^2 b\\,\\Delta n}$$ 说明光杠杆放大原理 $\\Delta L = b\\Delta n/(2D)$。"
+    },
+    {
+      "id": "apparatus",
+      "title": "三、实验仪器",
+      "placeholder": "列出所用仪器及其规格/精度（量程、分度值），这是不确定度评定的依据。",
+      "prefill": ""
+    },
+    {
+      "id": "data",
+      "title": "四、数据记录与处理",
+      "placeholder": "钢丝直径 $d$ 多次测量表；加/卸砝码标尺读数表 $n_1...n_8$；$L$、$D$、$b$ 一次测量量；逐差法计算过程。",
+      "prefill": ""
+    },
+    {
+      "id": "analysis",
+      "title": "五、误差分析与不确定度",
+      "placeholder": "$d$ 以平方进入公式（传递系数 2），是最大不确定度来源；弹性滞后与视差。",
+      "prefill": ""
+    },
+    {
+      "id": "conclusion",
+      "title": "六、结论与讨论",
+      "placeholder": "总结实验结果，与理论/参考值比较给出相对误差，回答思考题，提出改进建议。",
+      "prefill": ""
+    }
+  ]
+}

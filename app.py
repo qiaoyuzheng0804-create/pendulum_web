@@ -37,6 +37,20 @@ from processors.symbolic_regression import (
     run_sr_ci_overdamped, run_sr_niubai
 )
 from processors.openmv_manager import openmv_manager, OPENMV_USB_VID, rgb_to_jpeg_bytes
+import experiments as experiment_registry
+
+
+def _load_or_create_secret():
+    """Flask session 密钥：持久化到 .secret_key（重启后登录态不失效）。"""
+    path = Path(os.path.dirname(os.path.abspath(__file__))) / ".secret_key"
+    try:
+        if path.exists():
+            return path.read_text(encoding="utf-8").strip()
+        key = os.urandom(32).hex()
+        path.write_text(key, encoding="utf-8")
+        return key
+    except Exception:
+        return os.urandom(32).hex()
 
 
 # ---------- Load .env (dependency-free) ----------
@@ -63,6 +77,12 @@ _load_env_file(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024 * 1024  # 1 GB
+app.secret_key = _load_or_create_secret()
+
+# ---------- 师生交互平台（登录 + 实验报告） ----------
+# 注意：模块名不能用 platform（会遮蔽标准库 platform，cv2/torch 都依赖它）
+from platform_hub import init_platform
+init_platform(app, Path(os.path.dirname(os.path.abspath(__file__))) / "platform.db")
 
 # ---------- Paths ----------
 BASE_DIR = Path(os.path.dirname(os.path.abspath(__file__)))
@@ -336,7 +356,11 @@ def index():
     # 信标在刷新时也会发出，不能据此关服务器）
     _exit_mark = None
     _last_page_request = _time.time()
-    resp = app.make_response(render_template("index.html", calib_specs=CALIB_SPECS))
+    resp = app.make_response(render_template(
+        "index.html",
+        calib_specs=CALIB_SPECS,
+        experiments=experiment_registry.public_list(),
+    ))
     resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
     resp.headers["Expires"] = "0"
@@ -1225,7 +1249,7 @@ def _watchdog_loop():
 @app.route("/api/teaching_content/<topic>")
 def get_teaching_content(topic):
     """Return teaching content JSON from the teaching/ directory."""
-    allowed = {"theory", "guide_danbai", "guide_cizuni", "guide_niubai", "guide_ciliniudun"}
+    allowed = experiment_registry.guide_topics()
     if topic not in allowed:
         return jsonify({"error": f"Unknown topic: {topic}"}), 400
     json_path = TEACHING_DIR / f"{topic}.json"
@@ -1236,9 +1260,15 @@ def get_teaching_content(topic):
     return jsonify(data)
 
 
+@app.route("/api/experiments")
+def get_experiments():
+    """实验注册表（左导航/实验选择数据源）。"""
+    return jsonify(experiment_registry.public_list())
+
+
 @app.route("/api/ai_chat", methods=["POST"])
 def ai_chat():
-    """AI knowledge Q&A — SSE stream from the configured LLM (OpenAI-compatible API)."""
+    """AI 实验助手 — 轻量 agent（工具调用循环）+ SSE 流式输出。"""
     if not LLM_API_KEY:
         return jsonify({"error": "AI 服务未配置。请在 .env 中设置 LLM_API_KEY。"}), 503
 
@@ -1250,27 +1280,19 @@ def ai_chat():
     if not messages:
         return jsonify({"error": "No messages provided."}), 400
 
-    # Inject system prompt
-    full_messages = [{"role": "system", "content": LLM_SYSTEM_PROMPT}] + messages
+    context = data.get("context") or {}
 
     try:
         from openai import OpenAI
+        from ai_agent import run_agent_chat
         client = OpenAI(api_key=LLM_API_KEY, base_url=LLM_BASE_URL)
 
         def generate():
             try:
-                stream = client.chat.completions.create(
-                    model=LLM_MODEL,
-                    messages=full_messages,
-                    stream=True,
-                    max_tokens=2048,
-                    temperature=0.7,
-                )
-                for chunk in stream:
-                    if chunk.choices and chunk.choices[0].delta.content:
-                        yield f"data: {json.dumps({'content': chunk.choices[0].delta.content})}\n\n"
+                for payload in run_agent_chat(client, LLM_MODEL, messages, context, LLM_SYSTEM_PROMPT):
+                    yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
             except Exception as e:
-                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
 
         return Response(stream_with_context(generate()), mimetype="text/event-stream",
