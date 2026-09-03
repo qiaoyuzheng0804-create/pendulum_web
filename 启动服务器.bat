@@ -24,9 +24,12 @@ if not defined PYTHON set "PYTHON=python"
 :: configured later on the web page: AI panel gear button, teacher login required)
 :: 注意：提示文字里不能出现未转义的半角括号，括号块内会被当成块结束符导致脚本闪退
 if not "%LLM_API_KEY%"=="" goto :key_ok
-echo [INFO] LLM_API_KEY not set in .env.
-echo        You can configure the AI model on the web page instead:
-echo        open AI panel, click the gear button "Model Config" - teacher only.
+echo.
+echo  [HINT - NOT AN ERROR] LLM_API_KEY not found. The server is starting normally.
+echo  Everything works except the AI assistant. To enable AI later you do NOT need
+echo  to edit any file: login as teacher, click the gear "Model Config" on the AI
+echo  panel, paste your API key and save - it takes effect immediately.
+echo.
 :key_ok
 
 start "" /min "%PYTHON%" app.py
@@ -38,7 +41,8 @@ powershell -NoProfile -Command "try{$c=New-Object Net.Sockets.TcpClient;$c.Conne
 if %errorlevel%==0 goto :open
 set /a tries+=1
 if %tries% geq 60 goto :open
-timeout /t 1 /nobreak >nul
+:: ping 延时 1 秒（timeout 在无控制台 stdin 的环境下会报“不支持输入重定向”）
+ping -n 2 127.0.0.1 >nul
 goto :waitloop
 :open
 start "" http://127.0.0.1:5000
