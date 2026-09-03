@@ -29,6 +29,7 @@ from flask import Blueprint, render_template, request, jsonify, session, send_fr
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from experiments import get_experiment, EXPERIMENTS
+from demo_reports import build_demo_content, is_old_demo_content
 
 BASE_DIR_MARKER = "platform"
 _db_path = None  # 由 init_platform(app) 注入
@@ -100,13 +101,9 @@ def _seed_demo_if_empty():
                     "INSERT INTO users(username,pw_hash,role,display_name,class_name)"
                     " VALUES(?,?,?,?,?)",
                     (username, generate_password_hash("123456"), "student", dname, cls_name))
-        # 演示报告
+        # 演示报告（完整内容：6 分节 + 数据表格，见 demo_reports.py）
         for username, exp_id, status, score in _DEMO_SUBS:
-            content = json.dumps({
-                "purpose": f"（演示数据）{username} 的 {exp_id} 实验报告",
-                "principle": "演示内容，真实教学时由学生填写。",
-                "data": "演示数据行。",
-            }, ensure_ascii=False)
+            content = json.dumps(build_demo_content(exp_id) or {}, ensure_ascii=False)
             graded_at = None
             if status == "graded":
                 graded_at = now
@@ -153,6 +150,17 @@ def _seed_demo_if_empty():
                 for author, text in replies:
                     c.execute("INSERT INTO replies(qid,username,body,created_at)"
                               " VALUES(?,?,?,?)", (qid, author, text, now))
+
+
+def _upgrade_demo_reports(c):
+    """把旧版占位演示报告升级为完整内容（按旧标记识别，幂等：升级后不再含标记）。"""
+    rows = c.execute("SELECT id, exp_id, content FROM submissions").fetchall()
+    for r in rows:
+        if is_old_demo_content(r["content"]):
+            new = build_demo_content(r["exp_id"])
+            if new:
+                c.execute("UPDATE submissions SET content=? WHERE id=?",
+                          (json.dumps(new, ensure_ascii=False), r["id"]))
 
 
 def init_platform(app, db_path):
@@ -244,6 +252,8 @@ def init_platform(app, db_path):
                 "INSERT INTO users(username,pw_hash,role,display_name) VALUES(?,?,?,?)",
                 ("student", generate_password_hash("123456"), "student", "演示学生"),
             )
+        # 旧版占位演示报告 → 完整内容（幂等迁移，随本事务提交）
+        _upgrade_demo_reports(c)
     _seed_demo_if_empty()
     app.register_blueprint(platform_bp)
 
@@ -475,6 +485,21 @@ def report_submit(u, rid):
         c.execute("UPDATE submissions SET status='submitted', updated_at=?, graded_at=NULL,"
                   " score=NULL, feedback='' WHERE id=?", (_now(), rid))
     return jsonify({"ok": True, "status": "submitted"})
+
+
+@platform_bp.route("/api/reports/<int:rid>/withdraw", methods=["POST"])
+@login_required
+def report_withdraw(u, rid):
+    """学生撤销提交：已提交、尚未批改的报告回到草稿状态，可继续修改。"""
+    with _conn() as c:
+        row = c.execute("SELECT * FROM submissions WHERE id=?", (rid,)).fetchone()
+        if row is None or row["username"] != u["username"]:
+            return jsonify({"error": "报告不存在。"}), 404
+        if row["status"] != "submitted":
+            return jsonify({"error": "仅已提交、尚未批改的报告可以撤销。"}), 400
+        c.execute("UPDATE submissions SET status='draft', updated_at=? WHERE id=?",
+                  (_now(), rid))
+    return jsonify({"ok": True, "status": "draft"})
 
 
 @platform_bp.route("/api/reports/<int:rid>/grade", methods=["POST"])
@@ -747,6 +772,53 @@ def qa_reply(u, qid):
     return jsonify({"ok": True, "id": rid})
 
 
+def _delete_attachments(c, owner_kind, owner_id):
+    """删除某问答/回复名下的附件记录与文件（尽力而为），返回被删附件数。"""
+    rows = c.execute("SELECT id, filename FROM attachments WHERE owner_kind=? AND owner_id=?",
+                     (owner_kind, owner_id)).fetchall()
+    for r in rows:
+        c.execute("DELETE FROM attachments WHERE id=?", (r["id"],))
+        try:
+            (Path(_qa_dir) / r["filename"]).unlink(missing_ok=True)
+        except OSError:
+            pass
+    return len(rows)
+
+
+@platform_bp.route("/api/qas/<int:qid>", methods=["DELETE"])
+@login_required
+def qa_delete(u, qid):
+    """撤回提问：仅提问者本人可撤，连同全部回复与附件一并删除。"""
+    with _conn() as c:
+        q = c.execute("SELECT * FROM questions WHERE id=?", (qid,)).fetchone()
+        if q is None:
+            return jsonify({"error": "问题不存在。"}), 404
+        if q["username"] != u["username"]:
+            return jsonify({"error": "只能撤回自己的提问。"}), 403
+        for r in c.execute("SELECT id FROM replies WHERE qid=?", (qid,)).fetchall():
+            _delete_attachments(c, "reply", r["id"])
+        _delete_attachments(c, "question", qid)
+        c.execute("DELETE FROM replies WHERE qid=?", (qid,))
+        c.execute("DELETE FROM questions WHERE id=?", (qid,))
+    return jsonify({"ok": True})
+
+
+@platform_bp.route("/api/qas/reply/<int:rid>", methods=["DELETE"])
+@login_required
+def qa_reply_delete(u, rid):
+    """撤回回复：仅回复者本人（教师或学生）可撤。"""
+    with _conn() as c:
+        row = c.execute("SELECT r.*, q.id AS qid FROM replies r JOIN questions q ON q.id=r.qid"
+                        " WHERE r.id=?", (rid,)).fetchone()
+        if row is None:
+            return jsonify({"error": "回复不存在。"}), 404
+        if row["username"] != u["username"]:
+            return jsonify({"error": "只能撤回自己的回复。"}), 403
+        _delete_attachments(c, "reply", rid)
+        c.execute("DELETE FROM replies WHERE id=?", (rid,))
+    return jsonify({"ok": True})
+
+
 # ---------- 附件上传与访问 ----------
 @platform_bp.route("/api/qas/attachment", methods=["POST"])
 @login_required
@@ -883,6 +955,11 @@ def dashboard_summary():
     if u["role"] == "teacher":
         # 班级维度成绩统计（含整体）
         class_stats = []
+        # 同一学生×同一实验只按最新一份报告计入班级统计（重复提交不灌水分母），
+        # 批改率在服务端算好下发：已批改报告 / 已提交报告
+        dedup_sub = ("SELECT s.* FROM submissions s JOIN"
+                     " (SELECT username, exp_id, MAX(id) AS mx FROM submissions"
+                     "  GROUP BY username, exp_id) m ON s.id=m.mx")
         with _conn() as c:
             for cr in cls_rows:
                 name = cr["name"]
@@ -893,13 +970,16 @@ def dashboard_summary():
                     " SUM(CASE WHEN s.status!='draft' THEN 1 ELSE 0 END) AS sub,"
                     " SUM(CASE WHEN s.status='graded' THEN 1 ELSE 0 END) AS graded,"
                     " AVG(CASE WHEN s.status='graded' THEN s.score END) AS avg"
-                    " FROM users us LEFT JOIN submissions s ON s.username=us.username"
+                    f" FROM users us LEFT JOIN ({dedup_sub}) s ON s.username=us.username"
                     " WHERE us.role='student' AND us.class_name=?", (name,)).fetchone()
+                sub = agg["sub"] or 0
+                graded = agg["graded"] or 0
                 class_stats.append({
                     "name": name, "students": agg["stu"],
                     "sub_students": agg["sub_stu"] or 0,
                     "reports": agg["reports"] or 0,
-                    "submitted": agg["sub"] or 0, "graded": agg["graded"] or 0,
+                    "submitted": sub, "graded": graded,
+                    "grade_rate": (round(graded / sub * 100) if sub else 0),
                     "avg_score": round(float(agg["avg"]), 1) if agg["avg"] is not None else None,
                 })
         recent = []

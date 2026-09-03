@@ -730,7 +730,7 @@
   <div class="wz-body">  <!-- 向导页 1：选择实验类型 -->
   <div class="wz-page active" id="wzp1">
   <div class="card" id="card-setup">
-    <div class="card-header"><h2>选择实验类型</h2><div class="tag">Experiment Type</div></div>
+    <div class="card-header"><h2>选择实验类型</h2><div class="tag">Experiment Type</div><span style="flex:1;"></span><button class="btn btn-outline" style="padding:5px 12px;font-size:0.78rem;" onclick="openCurrentGuide()"><svg class="icon"><use href="#i-book-open"/></svg> 实验指导</button></div>
     <div class="field-label"><span class="zh">运动类型</span><span class="en">Experiment Type</span></div>
     <div class="type-cards" id="type_cards">
       <div class="type-card" data-type="danbai" onclick="selectType('danbai')">
@@ -1945,6 +1945,8 @@ async function startProcessing(){
           clearInterval(progTimer);progFill.style.width='100%';progText.textContent='100%';
           setTimeout(()=>{progBar.classList.add('hidden');progText.classList.add('hidden');},1000);
           statusDiv.className='status success';statusDiv.textContent='处理完成！';goToPage(5);
+          // 课中完成标准：视频分析实验以"最终得到实验数据"为准，出结果即自动标记课中完成
+          if(CURRENT_USER&&CURRENT_USER.role==='student'&&S.motionType){markLab(S.motionType);}
           const r=msg.result,data={output_dir:msg.output_dir};
           if(r.plot_preview){plotImg.src='data:image/png;base64,'+r.plot_preview;plotArea.classList.remove('hidden');}
           let h='';
@@ -2267,6 +2269,11 @@ function initDocPager(c){
       if(sec&&!sec.classList.contains('hidden'))drawDampingPreview(cv,cv.dataset.type);
     });
     document.getElementById('center').scrollTop=0;
+    // 读完最后一页 → 触发流程回调（loadGuide 设置，学生看完指导自动完成课前预习）
+    if(i===secs.length-1&&window._guideLastPageCb){
+      const cb=window._guideLastPageCb;window._guideLastPageCb=null;
+      try{cb();}catch(e){}
+    }
   }
   if(prev)prev.onclick=()=>show(i-1);
   if(next)next.onclick=()=>show(i+1);
@@ -2302,6 +2309,10 @@ function drawDampingPreview(canvas,type){
 async function loadGuide(type){
   const c=document.getElementById('guide_content');
   window._currentGuideExp=type;
+  // 学生通读到最后一页 → 自动完成课前预习（未完成时由回调触发 markPre）
+  window._guideLastPageCb=(CURRENT_USER&&CURRENT_USER.role==='student')?(async()=>{
+    try{const st=await flowStatus(type);if(st&&!st.pre_done)markPre(type);}catch(e){}
+  }):null;
   updateAICtx();
   c.innerHTML='<div class="skel t"></div><div class="skel w70"></div><div class="skel"></div><div class="skel w40"></div><div class="skel"></div><div class="skel-box" style="height:90px;"></div><div class="skel w70"></div><div class="skel"></div>';
   try{
@@ -2609,7 +2620,10 @@ async function renderStudentReports(root){
       <div class="cp-id" style="background:var(--a1);">${(_EXP_NAME[r.exp_id]||'?')[0]}</div>
       <div style="flex:1;"><div class="cp-label">${_EXP_NAME[r.exp_id]||r.exp_id}</div>
       <div class="cp-desc">更新于 ${r.updated_at.replace('T',' ')}</div></div>
-      <div>${_statusBadge(r.status,r.score)}</div>
+      <div style="min-width:110px;display:flex;align-items:center;justify-content:flex-end;gap:6px;">
+        ${r.status==='submitted'?`<button class="icon-btn-line" title="撤销提交（回到草稿）" onclick="event.stopPropagation();withdrawReport(${r.id})"><svg class="icon"><use href="#i-undo"/></svg></button>`:''}
+        ${_statusBadge(r.status,r.score)}
+      </div>
     </div>`).join('');
   if(!list.length)rows='<div class="text-center" style="padding:24px;color:var(--t3);">还没有报告，选择一个实验开始撰写。</div>';
   root.innerHTML=`
@@ -2634,26 +2648,51 @@ async function newReport(){
 async function openReportEditor(rid,fixedExp){
   const area=document.getElementById('report_editor_area');
   area.innerHTML='<div class="skel t"></div><div class="skel"></div>';
-  let sub={id:rid,exp_id:fixedExp,content:{}};
+  let sub={id:rid,exp_id:fixedExp,content:{},status:'draft'};
   if(rid){sub=await (await fetch('/api/reports/'+rid)).json();}
   const tpl=await (await fetch('/api/report_template/'+sub.exp_id)).json();
   if(tpl.error){area.innerHTML=`<div class="status error" style="display:block;">${tpl.error}</div>`;return;}
-  _reportEditor={id:sub.id||null,exp_id:sub.exp_id,content:sub.content||{}};
+  _reportEditor={id:sub.id||null,exp_id:sub.exp_id,content:sub.content||{},status:sub.status||'draft'};
+  const ro=_reportEditor.status!=='draft'; // 已提交/已批改：只读渲染（公式排版显示，不再出现源码）
+  const secHtml=tpl.sections.map(s=>{
+    const tables=(s.tables||[]).map(t=>repTableHtml(t,_reportEditor.content,!ro)).join('');
+    const v=_reportEditor.content[s.id]||s.prefill||'';
+    if(ro){
+      return `<div class="field-label"><span class="zh">${s.title}</span></div>${tables}
+        <div class="theory-note">${v?renderChatMarkdown(v):'<em style="color:var(--t3);">（未填写）</em>'}</div>`;
+    }
+    return `<div class="field-label"><span class="zh">${s.title}</span></div>${tables}
+      <textarea id="sec_${s.id}" style="width:100%;min-height:110px;padding:12px 14px;border-radius:10px;border:1px solid var(--border);background:var(--inp);color:var(--text);font-size:0.88rem;font-family:inherit;line-height:1.7;resize:vertical;" placeholder="${s.placeholder.replace(/"/g,'&quot;')}">${(_reportEditor.content[s.id]||s.prefill||'')}</textarea>`;
+  }).join('');
+  const statusNote=ro?(_reportEditor.status==='graded'
+    ?`<div class="status success" style="display:block;">已批改：${sub.score!=null?sub.score:'—'} 分${sub.feedback?' · 教师评语：'+esc(sub.feedback):''}</div>`
+    :`<div class="status info" style="display:block;">已提交，等待教师批改。如需修改，可先「撤销提交」回到草稿。</div>`):'';
+  const btns=ro
+    ?(_reportEditor.status==='submitted'
+      ?`<button class="btn btn-outline" onclick="withdrawReport(${_reportEditor.id})"><svg class="icon"><use href="#i-undo"/></svg> 撤销提交</button>`
+      :'')
+    :`<button class="btn btn-outline" id="btn_save_draft" onclick="saveReport('draft')"><svg class="icon"><use href="#i-check"/></svg> 保存草稿</button>
+      <button class="btn btn-primary" onclick="saveReport('submit')"><svg class="icon"><use href="#i-play"/></svg> 提交报告</button>`;
   area.innerHTML=`
     <div class="card">
-      <div class="card-header"><h2>${tpl.title}</h2><div class="tag">${_reportEditor.id?'编辑中':'新建'}</div></div>
-      ${tpl.sections.map(s=>`
-        <div class="field-label"><span class="zh">${s.title}</span></div>
-        ${(s.tables||[]).map(t=>repTableHtml(t,_reportEditor.content,true)).join('')}
-        <textarea id="sec_${s.id}" style="width:100%;min-height:110px;padding:12px 14px;border-radius:10px;border:1px solid var(--border);background:var(--inp);color:var(--text);font-size:0.88rem;font-family:inherit;line-height:1.7;resize:vertical;" placeholder="${s.placeholder.replace(/"/g,'&quot;')}">${(_reportEditor.content[s.id]||s.prefill||'')}</textarea>
-      `).join('')}
-      <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
-        <button class="btn btn-outline" id="btn_save_draft" onclick="saveReport('draft')"><svg class="icon"><use href="#i-check"/></svg> 保存草稿</button>
-        <button class="btn btn-primary" onclick="saveReport('submit')"><svg class="icon"><use href="#i-play"/></svg> 提交报告</button>
-      </div>
+      <div class="card-header"><h2>${tpl.title}</h2><div class="tag">${ro?_statusBadge(_reportEditor.status,sub.score):(_reportEditor.id?'编辑中':'新建')}</div></div>
+      ${secHtml}
+      ${statusNote}
+      <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">${btns}</div>
       <div class="status" id="report_status"></div>
     </div>`;
+  // KaTeX 库未就绪时公式会短暂显示为源码：就绪后对只读分节补渲染一次
+  whenKatex(()=>{area.querySelectorAll('.theory-note').forEach(el=>{try{el.innerHTML=renderKaTeXinHTML(el.innerHTML);}catch(e){}});});
   area.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+async function withdrawReport(rid){
+  if(!confirm('撤销提交后，报告将回到草稿状态，可继续修改后重新提交。确定撤销吗？'))return;
+  const r=await fetch('/api/reports/'+rid+'/withdraw',{method:'POST'});
+  const d=await r.json();
+  if(!r.ok){showToast(d.error||'撤销失败','error');return;}
+  showToast('已撤销提交，报告回到草稿','info');
+  renderReports();
 }
 
 async function saveReport(mode){
@@ -2759,6 +2798,8 @@ async function openGrading(rid){
       <textarea id="grade_feedback" style="width:100%;min-height:80px;padding:12px 14px;border-radius:10px;border:1px solid var(--border);background:var(--inp);font-size:0.88rem;font-family:inherit;resize:vertical;">${(r.feedback||'').replace(/</g,'&lt;')}</textarea>
       <div class="status" id="grade_status"></div>
     </div>`;
+  // KaTeX 未就绪时公式短暂显示为源码：就绪后对批改视图补渲染一次
+  whenKatex(()=>{area.querySelectorAll('.theory-note').forEach(el=>{try{el.innerHTML=renderKaTeXinHTML(el.innerHTML);}catch(e){}});});
   area.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
@@ -2933,13 +2974,14 @@ function teacherDash(sum){
     +`<div class="legend-line">${distLegend}</div>`:'<div class="empty-tip">暂无批改数据</div>';
   const clsRows=sum.class_stats||[];
   const classHtml=clsRows.length?`<div class="cls-grid">${clsRows.map(c=>{
-    // 批改率 = 已批改报告 / 已提交报告（分母不能是学生数：一人可交多份，会算出 >100%）
+    // 批改率由服务端计算：已批改报告 / 已提交报告（同一学生×同一实验只计最新一份，重复提交不灌水）
     const pend=Math.max(c.submitted-c.graded,0);
-    const rate=c.submitted?Math.min(Math.round(c.graded/c.submitted*100),100):0;
+    const rate=(c.grade_rate!=null?c.grade_rate:(c.submitted?Math.min(Math.round(c.graded/c.submitted*100),100):0));
     return `<div class="cls-card">
       <div class="cc-name" title="${esc(c.name)}">${esc(c.name)}</div>
       ${donutCard(76,[{v:c.graded,color:'#c2410c'},{v:pend,color:'#ece5d8'}],rate+'%','批改率')}
-      <div class="cc-sub">已提交 <b>${c.sub_students!=null?c.sub_students:c.submitted}</b>/${c.students} 人 · 待批 <b>${pend}</b></div>
+      <div class="cc-sub">已批 <b>${c.graded}</b> / 已交 <b>${c.submitted}</b> 份 · 提交 <b>${c.sub_students!=null?c.sub_students:0}</b>/${c.students} 人</div>
+      <div class="cc-sub">待批 <b>${pend}</b> 份</div>
       <div class="cc-avg">平均 <b>${c.avg_score!=null?c.avg_score:'—'}</b> 分</div>
     </div>`;}).join('')}</div>`
     :'<div class="empty-tip">暂无教学班（可在「报告中心 → 查看/导入学生」按 学号,姓名,班级 添加）</div>';
@@ -2966,7 +3008,7 @@ function teacherDash(sum){
   <div class="dash-cols">
     <div>
       <div class="panel">
-        <div class="panel-sec"><h3><svg class="icon"><use href="#i-users"/></svg>班级掌握情况</h3><span class="en">Class Mastery · 环=批改完成率</span>
+        <div class="panel-sec"><h3><svg class="icon"><use href="#i-users"/></svg>班级掌握情况</h3><span class="en">Class Mastery · 环=批改率（已批改/已提交）</span>
           <span class="x">${sum.qa_open>0?`<button class="btn btn-primary" style="padding:3px 12px;font-size:0.72rem;" onclick="switchView('qas')">${sum.qa_open} 个提问待回复 →</button>`:''}</span></div>
         ${classHtml}
       </div>
@@ -3049,12 +3091,15 @@ async function fillMyFlow(boxId){
     }
     const tip=`预习${f.pre_done?'✓':'未'} · 课中${f.lab_done?'✓':'未'} · 报告${rep==='graded'?'✓批改':rep==='submitted'?'待批改':rep==='draft'?'草稿':'未'} · 批改${rep==='graded'?'✓':'未'}`;
     let act='';
-    if(!f.pre_done)act=`<button class="btn btn-primary" style="padding:4px 12px;font-size:0.72rem;" onclick="event.stopPropagation();markPre('${f.exp_id}')">完成预习</button>`;
-    else if(!f.lab_done)act=`<button class="btn btn-primary" style="padding:4px 12px;font-size:0.72rem;" onclick="event.stopPropagation();markLab('${f.exp_id}')">完成课中</button>`;
+    if(!f.pre_done)act=`<button class="btn btn-primary" style="padding:4px 12px;font-size:0.72rem;" onclick="event.stopPropagation();goPre('${f.exp_id}')">去预习</button>`;
+    else if(!f.lab_done)act=f.mode==='video'
+      ?`<button class="btn btn-primary" style="padding:4px 12px;font-size:0.72rem;" onclick="event.stopPropagation();goExpLearn('${f.exp_id}')">去做实验</button>`
+      :`<button class="btn btn-primary" style="padding:4px 12px;font-size:0.72rem;" onclick="event.stopPropagation();markLab('${f.exp_id}')">完成课中</button>`;
     else if(rep==='none'||rep==='draft')act=`<button class="btn btn-primary" style="padding:4px 12px;font-size:0.72rem;" onclick="event.stopPropagation();goReportFor('${f.exp_id}')">写报告</button>`;
     else if(rep==='submitted')act=`<span class="badge-sub">待批改</span>`;
     else act=`<span class="badge-sub" style="background:var(--i4b);color:var(--green);">已批改</span>`;
-    return `<div class="mf-row" title="${tip} · 点击查看实验" onclick="goExpLearn('${f.exp_id}')">
+    const rowClick=f.pre_done?'goExpLearn':'goPre';
+    return `<div class="mf-row" title="${tip} · 点击查看实验" onclick="${rowClick}('${f.exp_id}')">
       <div class="mf-name">${f.exp_name}<small>${f.mode==='video'?'视频分析':'指导实验'}</small></div>
       <div class="stepper">${stepper}</div>
       <div class="mf-score ${f.score==null?'off':''}">${f.score!=null?f.score+' 分':'—'}</div>
@@ -3068,6 +3113,18 @@ function goExpLearn(expId){
   if(!meta)return;
   if(meta.mode==='video'){switchView('analysis');selectType(expId,{nav:true});}
   else{switchView('guide');loadGuide(expId);}
+}
+// 预习入口：所有实验（含视频分析实验）都跳到对应实验指导页
+function goPre(expId){
+  const meta=EXPERIMENTS.find(e=>e.id===expId);
+  if(!meta)return;
+  switchView('guide');loadGuide(expId);
+}
+// 视频分析实验的实验指导入口（分析向导第 1 步）
+function openCurrentGuide(){
+  const t=S.motionType;
+  if(!t){showToast('请先在下方选择实验类型','info');return;}
+  switchView('guide');loadGuide(t);
 }
 
 // ---------- 实验课流程标记（预习 / 课中） ----------
@@ -3105,6 +3162,10 @@ async function updateFlowbar(exp){
   const pre=st&&st.pre_done,lab=st&&st.lab_done;
   const rep=st?st.report_status:'none';
   const repTxt=rep==='graded'?'报告已批改':(rep==='submitted'?'报告待批改':(rep==='draft'?'报告草稿中':'尚未撰写报告'));
+  const isVideo=meta.mode==='video';
+  const hint=!pre?'课前预习：通读下方各节至最后一页，将自动完成预习标记'
+    :(isVideo&&!lab?'课中实验：在「数据分析」完成视频分析并得到实验数据后，自动标记完成'
+    :repTxt);
   bar.innerHTML=`
     <span class="fb-name">${meta.name}</span>
     <div class="flow-stage">
@@ -3113,10 +3174,10 @@ async function updateFlowbar(exp){
       <span class="fstep ${(rep==='submitted'||rep==='graded')?'done':''}">报告${(rep==='submitted'||rep==='graded')?' ✓':''}</span>
       <span class="fstep ${rep==='graded'?'done':''}">批改${rep==='graded'?' ✓':''}</span>
     </div>
-    <span class="fb-hint">${!pre?'课前预习：通读下方「目的 / 原理 / 步骤」各节后，点击「完成课前预习」→':repTxt}</span>
+    <span class="fb-hint">${hint}</span>
     <span style="flex:1;"></span>
-    ${!pre?`<button class="btn btn-outline" style="padding:5px 12px;font-size:0.74rem;" onclick="markPre('${exp}')">完成课前预习</button>`:''}
-    ${!lab?`<button class="btn btn-outline" style="padding:5px 12px;font-size:0.74rem;" onclick="markLab('${exp}')">完成课中实验</button>`:''}
+    ${!lab&&isVideo?`<button class="btn btn-outline" style="padding:5px 12px;font-size:0.74rem;" onclick="switchView('analysis');selectType('${exp}',{nav:true});">打开视频分析</button>`:''}
+    ${!lab&&!isVideo?`<button class="btn btn-outline" style="padding:5px 12px;font-size:0.74rem;" onclick="markLab('${exp}')">完成课中实验</button>`:''}
     <button class="btn btn-primary" style="padding:5px 14px;font-size:0.74rem;" onclick="goReportFor('${exp}')">撰写 / 查看报告</button>`;
 }
 async function goReportFor(exp){
@@ -3268,7 +3329,8 @@ async function showQaDetail(qid){
   const replies=(d.replies||[]).map(r=>`
     <div class="qa-reply">
       <div class="qa-who">${qaAvatar(r.user)}<b style="font-size:0.82rem;">${esc(r.user.display_name||r.user.username)}</b>
-        <span style="color:var(--t3);font-size:0.72rem;">${r.user.role==='teacher'?'教师':'学生'} · ${qaTime(r.created_at)}</span></div>
+        <span style="color:var(--t3);font-size:0.72rem;">${r.user.role==='teacher'?'教师':'学生'} · ${qaTime(r.created_at)}</span>
+        ${CURRENT_USER&&r.username===CURRENT_USER.username?`<button class="icon-btn-line" style="margin-left:auto;padding:2px 8px;font-size:0.68rem;" title="撤回这条回复" onclick="deleteReply(${r.id},${qid})"><svg class="icon" style="width:12px;height:12px;"><use href="#i-trash"/></svg>撤回</button>`:''}</div>
       ${r.body?`<div class="qa-msg">${esc(r.body)}</div>`:''}
       ${r.attachments&&r.attachments.length?`<div class="att-line">${r.attachments.map(attHtml).join('')}</div>`:''}
     </div>`).join('')||'<div class="empty-tip" style="padding:16px;">还没有回复</div>';
@@ -3278,7 +3340,8 @@ async function showQaDetail(qid){
         <div class="qa-who">${qaAvatar(d.q_user)}<b style="font-size:0.9rem;">${esc(d.q_user.display_name||d.username)}</b>
           <span style="color:var(--t3);font-size:0.72rem;">${d.q_user.role==='teacher'?'教师':'学生'} · ${d.q_user.class_name||''} · ${qaTime(d.created_at)}</span>
           ${CURRENT_USER&&d.username===CURRENT_USER.username?'<span class="qa-tag">我的提问</span>':''}
-          ${d.exp_name?`<span class="qa-tag">${esc(d.exp_name)}</span>`:''}</div>
+          ${d.exp_name?`<span class="qa-tag">${esc(d.exp_name)}</span>`:''}
+          ${CURRENT_USER&&d.username===CURRENT_USER.username?`<button class="icon-btn-line" style="margin-left:auto;padding:2px 8px;font-size:0.68rem;" title="撤回提问（连同全部回复删除）" onclick="deleteQa(${d.id})"><svg class="icon" style="width:12px;height:12px;"><use href="#i-trash"/></svg>撤回提问</button>`:''}</div>
         ${d.title?`<div style="font-weight:700;font-size:0.92rem;margin-top:6px;">${esc(d.title)}</div>`:''}
         ${d.body?`<div class="qa-msg">${esc(d.body)}</div>`:''}
         ${atts?`<div class="att-line">${atts}</div>`:''}
@@ -3328,6 +3391,27 @@ async function sendReply(qid){
   if(!r.ok){showToast(d.error||'发送失败','error');return;}
   showToast('回复已发送','info');
   _repAtts=[];showQaDetail(qid);loadQaList();
+}
+
+// 撤回自己的提问 / 回复（公共讨论区提交的撤销）
+async function deleteQa(qid){
+  if(!confirm('撤回后该提问及其全部回复、附件将被删除且不可恢复。确定撤回吗？'))return;
+  const r=await fetch('/api/qas/'+qid,{method:'DELETE'});
+  const d=await r.json();
+  if(!r.ok){showToast(d.error||'撤回失败','error');return;}
+  showToast('提问已撤回','info');
+  _qaSelId=null;
+  const box=document.getElementById('qa_detail');
+  if(box)box.innerHTML='<div class="empty-tip" style="border:1px dashed var(--border);border-radius:14px;">该提问已撤回</div>';
+  loadQaList();
+}
+async function deleteReply(rid,qid){
+  if(!confirm('确定撤回这条回复吗？'))return;
+  const r=await fetch('/api/qas/reply/'+rid,{method:'DELETE'});
+  const d=await r.json();
+  if(!r.ok){showToast(d.error||'撤回失败','error');return;}
+  showToast('回复已撤回','info');
+  showQaDetail(qid);loadQaList();
 }
 
 // ---------- 附件：上传 / 选择 / 语音 ----------
