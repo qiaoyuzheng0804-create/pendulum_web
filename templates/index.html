@@ -2389,7 +2389,22 @@ async function sendChat(){
   const botDiv=appendChat('bot','<div class="typing-dots"><span></span><span></span><span></span></div>');
   try{
     const resp=await fetch('/api/ai_chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:chatHistory,context:aiContext()})});
-    if(!resp.ok){const err=await resp.json();throw new Error(err.error||'Request failed');}
+    if(!resp.ok){
+      const err=await resp.json().catch(()=>({}));
+      if(resp.status===503){
+        // AI 尚未配置：给出可操作引导卡片（其余功能不受影响），而不是红字报错
+        const isT=CURRENT_USER&&CURRENT_USER.role==='teacher';
+        botDiv.innerHTML='<div style="font-size:0.82rem;line-height:1.8;">'
+          +'AI 助手还没有配置模型，暂时无法对话。'
+          +(isT?'点击右上角齿轮「模型配置」填入 API Key 即可，保存后即时生效、无需重启，<b>不用修改任何文件</b>。'
+               :'请让教师登录后配置（AI 面板右上角齿轮），配置完成后即可使用。')
+          +'<br><span style="color:var(--t3);">平台的实验指导、报告、问答讨论、数据看板均不受影响。</span>'
+          +(isT?'<div style="margin-top:8px;"><button class="btn btn-primary" style="padding:4px 14px;font-size:0.75rem;" onclick="openLLMConfig()">打开模型配置</button></div>':'')
+          +'</div>';
+        return; // 引导卡片替代红字报错；流式状态由 finally 复位
+      }
+      throw new Error(err.error||'Request failed');
+    }
     const reader=resp.body.getReader();const decoder=new TextDecoder();let buf='';let fullText='';
     const msgBox=document.getElementById('chat_messages');
     // 流式期间 ~150ms 节流做 Markdown+KaTeX 渲染，边生成边呈现排版并跟随滚动；
@@ -3392,6 +3407,13 @@ initGutters();
   await refreshAuth();
   switchView('dashboard');
   refreshQaBadge();
+  // 教师登录且 AI 未配置时提示一次：网页即可完成配置，无需改文件
+  if(CURRENT_USER&&CURRENT_USER.role==='teacher'){
+    try{
+      const c=await (await fetch('/api/llm_config')).json();
+      if(!c.configured)setTimeout(()=>showToast('AI 助手尚未配置模型：点击右侧 AI 面板顶部齿轮，在网页上即可完成配置（无需修改任何文件）','info'),900);
+    }catch(e){}
+  }
 })();
 
 // ==================== Heartbeat (server auto-shutdown when page closed) ====================

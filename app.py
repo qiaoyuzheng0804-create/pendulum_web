@@ -163,11 +163,17 @@ def _write_llm_web_config(cfg):
         os.replace(tmp, _LLM_CONFIG_PATH)
 
 
+# 占位符密钥视为未配置（防止照抄 .env.example 后带着假 key 去请求，报出难懂的上游 401）
+_PLACEHOLDER_KEYS = {"your_api_key_here", "your_key_here", "changeme", "placeholder", "xxx"}
+
+
 def get_llm_config():
     """合并出当前生效的 LLM 配置（网页字段优先，留空的字段逐项回退 .env）。"""
     web = _read_llm_web_config()
     api_key = (str(web.get("api_key") or "").strip()
                or os.environ.get("LLM_API_KEY") or os.environ.get("MIMO_API_KEY", ""))
+    if api_key.strip().lower() in _PLACEHOLDER_KEYS:
+        api_key = ""
     base_url = (str(web.get("base_url") or "").strip()
                 or os.environ.get("LLM_BASE_URL") or os.environ.get("MIMO_BASE_URL")
                 or "https://api.openai.com/v1")
