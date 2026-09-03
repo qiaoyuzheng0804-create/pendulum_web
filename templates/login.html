@@ -56,6 +56,20 @@ async function doLogin(ev){
   finally{btn.disabled=false;btn.textContent='登 录';}
   return false;
 }
+
+// 登录页保活：停留/输入时不被服务端看门狗误判为"页面全部关闭"而自动停机；
+// 只有真正叉掉本标签页/关闭浏览器（pagehide）时才向服务器注销该客户端。
+(function(){
+  const HB_ID=Math.random().toString(36).slice(2)+Date.now().toString(36);
+  const beat=()=>fetch('/api/heartbeat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:HB_ID})}).catch(()=>{});
+  const src='const ID='+JSON.stringify(HB_ID)+';setInterval(()=>{fetch("/api/heartbeat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:ID})}).catch(()=>{});},2000);';
+  try{new Worker(URL.createObjectURL(new Blob([src],{type:'application/javascript'})));}catch(e){}
+  setInterval(beat,2000);
+  window.addEventListener('pagehide',function(){
+    try{navigator.sendBeacon('/api/client_exit',new Blob([JSON.stringify({id:HB_ID})],{type:'application/json'}));}catch(e){}
+  });
+})();
+
 </script>
 </body>
 </html>
