@@ -2918,12 +2918,13 @@ function teacherDash(sum){
     +`<div class="legend-line">${distLegend}</div>`:'<div class="empty-tip">暂无批改数据</div>';
   const clsRows=sum.class_stats||[];
   const classHtml=clsRows.length?`<div class="cls-grid">${clsRows.map(c=>{
+    // 批改率 = 已批改报告 / 已提交报告（分母不能是学生数：一人可交多份，会算出 >100%）
     const pend=Math.max(c.submitted-c.graded,0);
-    const rate=c.students?Math.round(c.graded/c.students*100):0;
+    const rate=c.submitted?Math.min(Math.round(c.graded/c.submitted*100),100):0;
     return `<div class="cls-card">
       <div class="cc-name" title="${esc(c.name)}">${esc(c.name)}</div>
-      ${donutCard(76,[{v:c.graded,color:'#c2410c'},{v:Math.max(c.students-c.graded,0),color:'#ece5d8'}],rate+'%','批改率')}
-      <div class="cc-sub">已提交 <b>${c.submitted}</b>/${c.students} 人 · 待批 <b>${pend}</b></div>
+      ${donutCard(76,[{v:c.graded,color:'#c2410c'},{v:pend,color:'#ece5d8'}],rate+'%','批改率')}
+      <div class="cc-sub">已提交 <b>${c.sub_students!=null?c.sub_students:c.submitted}</b>/${c.students} 人 · 待批 <b>${pend}</b></div>
       <div class="cc-avg">平均 <b>${c.avg_score!=null?c.avg_score:'—'}</b> 分</div>
     </div>`;}).join('')}</div>`
     :'<div class="empty-tip">暂无教学班（可在「报告中心 → 查看/导入学生」按 学号,姓名,班级 添加）</div>';

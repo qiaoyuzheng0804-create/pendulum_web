@@ -888,14 +888,17 @@ def dashboard_summary():
                 name = cr["name"]
                 agg = c.execute(
                     "SELECT COUNT(DISTINCT us.username) AS stu,"
+                    " COUNT(DISTINCT CASE WHEN s.status!='draft' THEN us.username END) AS sub_stu,"
                     " COUNT(s.id) AS reports,"
-                    " SUM(CASE WHEN s.status='submitted' THEN 1 ELSE 0 END) AS sub,"
+                    " SUM(CASE WHEN s.status!='draft' THEN 1 ELSE 0 END) AS sub,"
                     " SUM(CASE WHEN s.status='graded' THEN 1 ELSE 0 END) AS graded,"
                     " AVG(CASE WHEN s.status='graded' THEN s.score END) AS avg"
                     " FROM users us LEFT JOIN submissions s ON s.username=us.username"
                     " WHERE us.role='student' AND us.class_name=?", (name,)).fetchone()
                 class_stats.append({
-                    "name": name, "students": agg["stu"], "reports": agg["reports"] or 0,
+                    "name": name, "students": agg["stu"],
+                    "sub_students": agg["sub_stu"] or 0,
+                    "reports": agg["reports"] or 0,
                     "submitted": agg["sub"] or 0, "graded": agg["graded"] or 0,
                     "avg_score": round(float(agg["avg"]), 1) if agg["avg"] is not None else None,
                 })
