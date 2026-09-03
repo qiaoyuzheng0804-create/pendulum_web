@@ -12,7 +12,7 @@
       "id": "principle",
       "title": "二、实验原理",
       "placeholder": "简述实验原理，写出主要公式并说明各量含义。\n支持 LaTeX：行内 $E=mc^2$，独立 $$\\eta = \\frac{d^2(\\rho-\\rho_0)g}{18v}$$",
-      "prefill": "$U_{pp}$ = 格数 × V/div；$f = 1/T$；李萨如图 $f_g/f_y = N_y/N_x$，画出示意图形说明切点计数。"
+      "prefill": "$U_{pp}$ = 格数 × V/div；$f = 1/T$；李萨如图 $f_y/f_x = N_x/N_y$（$N_x$、$N_y$ 为水平/垂直切点数），画出示意图形说明切点计数。"
     },
     {
       "id": "apparatus",
@@ -23,8 +23,22 @@
     {
       "id": "data",
       "title": "四、数据记录与处理",
-      "placeholder": "各信号 Vpp 与周期测量表；李萨如图形记录表（1:1、1:2、2:3 时的标准频率与 Nx、Ny）。",
-      "prefill": ""
+      "placeholder": "先填写下方两张表格（正弦信号电压/周期测量 + 李萨如图形测频），再在文本框中给出信号源标称频率与测量频率的比较分析。",
+      "prefill": "",
+      "tables": [
+        {
+          "id": "sbq_wave",
+          "title": "表 1　正弦信号电压与周期测量",
+          "columns": ["信号频率 f /kHz", "峰-峰格数 mV", "VOLTS/DIV /(V/div)", "V_P-P /V", "周期格数 mT", "TIME/DIV /(ms/div)", "T /ms"],
+          "initial": [["0.5", "", "", "", "", "", ""], ["1.0", "", "", "", "", "", ""], ["5.0", "", "", "", "", "", ""]]
+        },
+        {
+          "id": "sbq_lissa",
+          "title": "表 2　李萨如图形测频（已知 fₓ 求待测 f_y）",
+          "columns": ["图形切点比 Nₓ:N_y", "已知 fₓ /kHz", "f_y 计算值 = (Nₓ/N_y)fₓ /kHz"],
+          "initial": [["1:1", "", ""], ["1:2", "", ""], ["2:3", "", ""]]
+        }
+      ]
     },
     {
       "id": "analysis",

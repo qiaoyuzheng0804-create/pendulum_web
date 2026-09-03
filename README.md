@@ -1,11 +1,12 @@
 # Pendulum Motion Analysis Web App
 
 > **平台已升级为「大学物理实验平台」**：在三栏 IDE 布局中整合了 4 种摆视频分析 + 6 类指导型实验、
-> 实验课全流程闭环（课前预习 → 课中实验 → 课后报告 → 教师批改反馈）、师生多模态问答
-> （文字 / 图片 / 语音）、工作台教学数据看板（班级维度 / 在线人数 / 成绩分布）与 AI 实验助手。
-> **权威架构说明以根目录 `CLAUDE.md` 为准**，本文档以下章节描述历史功能为主。
+> 实验课全流程闭环（课前预习 → 课中实验 → 课后报告 → 教师批改反馈）、师生公共问答讨论区
+> （全员可见、师生均可回复，文字 / 图片 / 语音）、每实验专属的报告数据表格模板、
+> 工作台教学数据看板（班级维度 / 在线人数 / 成绩分布）与 AI 实验助手。
+> **权威架构说明以根目录 `AGENTS.md` 为准**，本文档以下章节描述历史功能为主。
 
-Flask + YOLOv8 实验视频分析平台。上传摆的实验视频，自动追踪摆球轨迹、拟合运动方程、输出阻尼参数和周期。内含阻尼实验教学模块（理论、实验指导、交互模拟、AI 问答）。
+Flask + YOLOv8 实验视频分析平台。上传摆的实验视频，自动追踪摆球轨迹、拟合运动方程、输出阻尼参数和周期。内含阻尼实验教学模块（实验指导、AI 问答）与师生交互平台（报告/批改/问答/看板）。
 
 ## 功能特性
 
@@ -15,11 +16,15 @@ Flask + YOLOv8 实验视频分析平台。上传摆的实验视频，自动追�
   - 扭摆 (niubai)：卡尔曼滤波（RTS 平滑）+ 角度提取
   - 磁力牛顿摆 (ciliniudun)：YOLOv8 + ByteTrack 多目标跟踪，2~5 个摆球同时提取角度-时间序列，轨迹绑定 + 水平几何约束修正，输出各摆 CSV / 汇总 CSV / 标注视频 / 时空数据图
 - **阻尼实验教学模块**
-  - 理论知识：阻尼分类、微分方程、参数物理意义
-  - 实验指导：器材清单、拍摄要点、标定说明、FAQ
-  - 交互模拟：Canvas 实时绘制阻尼振荡波形
+  - 实验指导：器材清单、拍摄要点、标定说明、数据处理与 FAQ（LaTeX 公式渲染）
   - AI 问答：LLM 接入，Markdown + LaTeX 公式渲染
-- **前端**：单页 HTML，单一浅色主题（靛蓝→紫主色系，成功态青 teal、错误红、警告 amber），SSE 流式进度，KaTeX 公式渲染；首页背景公式水印（KaTeX 排版）+ 动态波纹粒子画布、渐变流光大标题、动画步骤条、SVG 描边图标体系、滚动渐入动效、骨架屏加载、结果图灯箱、上传首帧预览，支持 `prefers-reduced-motion`
+- **师生交互平台**（`platform_hub.py`，SQLite 零外部依赖）
+  - 登录认证：教师 / 学生两种角色；演示账号 `teacher/123456`（教师）、`student/123456`（学生），另预置 3 个教学班 12 名学生（如 `s240101/123456`）
+  - 实验报告：**每个实验专属模板**，数据记录节内置结构化测量表格（如牛顿环暗环读数表、杨氏模量加/卸载读数表），学生填写提交、教师批改打分 / 退回
+  - 全流程闭环：课前预习 → 课中实验 → 报告提交 → 批改反馈，学生端与教师端数据实时一致
+  - 师生问答：**公共讨论区**，所有提问与回复全员可见，教师和全体学生均可回复，支持图片 / 语音附件
+  - 工作台看板：教师看班级掌握情况 / 待批改 / 成绩分布；学生看个人流程进度
+- **前端**：单页 HTML，「实验手册」暖纸墨色主题（暖白纸底 + 近黑墨 + 焦橙单一强调色），SSE 流式进度，KaTeX 公式渲染；动画步骤条、SVG 描边图标体系、滚动渐入动效、骨架屏加载、结果图灯箱、上传首帧预览，支持 `prefers-reduced-motion`
 - **实验获取**：视频获取方式双卡片（上传现成视频 / STM32+OpenMV 实验获取）；释放装置按实验类型自动切换（单摆→电磁铁吸合/释放，磁阻尼摆·扭摆→二维云台＋夹爪方向/开合，磁力牛顿摆→手动释放）；OpenMV 实时预览 + 录制 + 云台
 
 ## 技术栈
@@ -57,7 +62,11 @@ pip install -r requirements.txt
 
 ### 3. 配置 AI 问答（可选）
 
-AI 问答支持**任意 OpenAI 兼容大模型服务**（OpenAI / DeepSeek / Moonshot / 智谱 / mimo 等）。复制 `.env.example` 为 `.env`，填入你所用服务商的配置：
+AI 问答支持**任意 OpenAI 兼容大模型服务**（OpenAI / DeepSeek / Moonshot / 智谱 / mimo 等）。有两种配置方式：
+
+**方式一：网页配置（推荐）** —— 用教师账号登录（演示账号 `teacher/123456`），点击右侧 AI 面板顶部的齿轮按钮「模型配置」，填入 API Key / Base URL / 模型名称后保存，**即时生效、无需重启**；可用「测试连接」验证。配置保存在 `llm_config.json`（已被 `.gitignore` 排除，密钥不会上传）。
+
+**方式二：.env 文件** —— 复制 `.env.example` 为 `.env`，填入你所用服务商的配置：
 
 ```env
 LLM_API_KEY=your_api_key_here
@@ -74,7 +83,7 @@ LLM_MODEL=gpt-4o-mini
 | Moonshot | `https://api.moonshot.cn/v1` | `moonshot-v1-8k` |
 | 智谱 | `https://open.bigmodel.cn/api/paas/v4` | `glm-4` |
 
-> **安全提示**：`.env` 文件已在 `.gitignore` 中排除，不会被上传到 GitHub。跨设备迁移时 `.env` 需手工复制，其余内容 `git clone` 即可。
+> **安全提示**：`.env` 与网页配置 `llm_config.json`（含 API Key）均已在 `.gitignore` 中排除，不会被上传到 GitHub。跨设备迁移时二者需手工复制（网页配置也可迁移后在页面上重新填写），其余内容 `git clone` 即可。两种配置同时存在时**网页配置优先**；API Key 留空保存表示沿用 `.env` 中的密钥。
 
 ### 4. 启动
 
@@ -83,7 +92,8 @@ python app.py
 # 或 Windows 双击 启动服务器.bat
 ```
 
-服务运行在 `http://127.0.0.1:5000`，支持局域网访问。
+服务运行在 `http://127.0.0.1:5000`，支持局域网访问。打开网页后用演示账号登录即可体验完整平台：
+`teacher / 123456`（教师）、`student / 123456`（学生）、`s240101 / 123456` 等 12 名预置班级学生（首次启动自动建库预置，删除 `platform.db` 可重置）。
 
 ## 实验获取（STM32 释放装置 + OpenMV 拍摄，可选）
 
@@ -113,38 +123,33 @@ python app.py
 
 ```
 pendulum_web/
-├── app.py                  # Flask 主入口：路由 + SSE 流式处理 + AI 问答
+├── app.py                  # Flask 主入口：路由 + SSE 流式处理 + AI 问答（LLM 配置合并）
+├── experiments.py          # 实验注册表（单一数据源：导航/指导/报告模板都从这取）
+├── platform_hub.py         # 师生交互平台 Blueprint：登录/报告批改/进度/问答/看板（SQLite platform.db）
+├── ai_agent.py             # AI 助手工具调用循环
 ├── .env                    # API 配置文件（不会上传到 GitHub）
 ├── requirements.txt        # Python 依赖清单
 ├── 启动服务器.bat           # Windows 启动脚本（自动读取 .env）
 ├── 停止服务器.bat           # 停止服务
 ├── models/                 # YOLOv8 权重（四种摆各一个 .pt）
 ├── processors/
-│   ├── __init__.py
 │   ├── danbai_processor.py     # 单摆处理
 │   ├── cizuni_processor.py     # 磁阻尼摆处理
 │   ├── niubai_processor.py     # 扭摆处理
 │   ├── ciliniudun_processor.py # 磁力牛顿摆处理（YOLOv8 + ByteTrack 多目标跟踪）
 │   ├── symbolic_regression.py  # 符号回归拟合
 │   └── openmv_manager.py       # OpenMV 摄像头管理器（USBDBG V1 + 录制 + 云台）
-├── teaching/
-│   ├── theory.json             # 阻尼振动理论
-│   ├── guide_danbai.json       # 单摆实验指导
-│   ├── guide_cizuni.json       # 磁阻尼摆实验指导
-│   ├── guide_niubai.json       # 扭摆实验指导
-│   └── guide_ciliniudun.json   # 磁力牛顿摆实验指导
-├── firmware/                   # 外设硬件资料总览（详见 firmware/README.md）
-│   ├── stm32标准库/             # 电磁铁 Keil 固件工程（与原始工程结构一致）
-│   │   ├── project.uvprojx     # Keil 工程（打开→编译→ST-Link 烧录）
-│   │   ├── User/               # main.c + stm32f10x_it.c（串口中断释放逻辑）
-│   │   ├── System/             # 延时模块
-│   │   ├── start/              # 启动文件 + 寄存器定义 + 时钟配置
-│   │   └── library/            # ST 标准外设库
+├── teaching/               # 教学内容 JSON（10 个实验的 guide_<id>.json，API 下发）
+├── report_templates/       # 每实验专属报告模板（分节 + 结构化数据表格）
+├── static/                 # 本地静态资源（KaTeX / marked.js，无需外网 CDN）
+├── firmware/               # 外设硬件资料总览（详见 firmware/README.md）
+│   ├── stm32标准库/             # 电磁铁 Keil 固件工程
 │   ├── 电脑端代码/             # 电磁铁 controller.py 命令行测试工具 + 接线说明
 │   ├── openmv/                 # OpenMV：相机端脚本 + USBDBG 电脑端工具 + USB 驱动
 │   └── 云台夹爪/               # 二维云台＋夹爪：Keil 工程 + 预编译 HEX + 接线/烧录文档 + PC 工具
 ├── templates/
-│   └── index.html              # 单页前端
+│   ├── index.html              # 单页前端（含全部 CSS/JS，无构建步骤）
+│   └── login.html              # 登录页
 └── uploads/                    # 上传视频临时存储（运行时创建，git 忽略）
 ```
 
@@ -161,6 +166,15 @@ pendulum_web/
 | POST | `/api/cleanup` | 清理 session 文件 |
 | GET | `/api/teaching_content/<topic>` | 获取教学内容 JSON |
 | POST | `/api/ai_chat` | AI 知识问答（SSE 流式） |
+| POST | `/api/auth/login` / `/api/auth/logout` | 师生平台登录 / 登出（session cookie） |
+| GET | `/api/reports` | 实验报告列表（教师支持 `?exp=&status=&class=` 筛选） |
+| POST | `/api/reports` / `POST /api/reports/<id>/submit` | 保存报告草稿 / 提交报告 |
+| POST | `/api/reports/<id>/grade` / `.../return` | 教师批改打分 / 退回修改 |
+| GET | `/api/report_template/<exp_id>` | 获取实验专属报告模板（含数据表格定义） |
+| POST | `/api/progress/pre` / `/api/progress/lab` | 标记课前预习 / 课中实验完成 |
+| GET | `/api/qas` | 公共问答讨论区（`scope=all` 全员可见 / `scope=mine` 我的提问） |
+| POST | `/api/qas` / `POST /api/qas/<id>/reply` | 提问（可带图片/语音附件）/ 回复（师生均可） |
+| GET | `/api/dashboard/summary` | 工作台看板统计（未登录 / 教师 / 学生三种视图） |
 | GET | `/api/serial/ports` | 列出可用串口 |
 | POST | `/api/serial/connect` | 连接串口（115200 8N1），连接后先发送 `0` 建立断电状态 |
 | POST | `/api/serial/command` | 发送命令 `0`(释放) / `1`(吸合)，返回发送时刻时间戳 |

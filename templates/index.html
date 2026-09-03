@@ -261,6 +261,15 @@
   .modal-body canvas{max-width:100%;max-height:70vh;border-radius:0;cursor:crosshair;}
   .modal-footer{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-top:1px solid var(--border);gap:12px;flex-wrap:wrap;}
   .modal-footer .hint{color:var(--t2);font-size:0.85rem;flex:1;}
+  /* AI 模型配置弹窗（教师） */
+  .llm-cfg-modal{width:440px;max-width:92vw;}
+  .llm-cfg-body{padding:16px 20px;display:flex;flex-direction:column;gap:14px;overflow:auto;}
+  .llm-cfg-field label{display:block;font-size:0.76rem;font-weight:600;color:var(--t2);letter-spacing:0.02em;margin-bottom:5px;}
+  .llm-cfg-field input{width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--inp);font:inherit;font-size:0.9rem;color:var(--text);outline:none;transition:border-color .15s;}
+  .llm-cfg-field input:focus{border-color:var(--a1);}
+  .llm-cfg-hint{font-size:0.76rem;color:var(--t3);line-height:1.55;}
+  .llm-cfg-status{display:flex;align-items:flex-start;gap:8px;font-size:0.8rem;color:var(--t2);background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;line-height:1.5;}
+  .llm-cfg-status .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:5px;}
 
   /* Status */
   .status{padding:14px 18px;border-radius:10px;margin-top:16px;display:none;font-size:0.88rem;font-weight:500;}
@@ -309,21 +318,15 @@
     .shell{grid-template-columns:minmax(0,1fr) auto;}
   }
 
-  /* Theory */
-  .theory-section{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:16px;transition:border-color 0.3s;}
-  .theory-section:hover{border-color:var(--ba);}
-  .theory-section h3{font-size:1rem;font-weight:700;margin-bottom:10px;color:var(--a1);}
-  .theory-section .en{font-size:0.72rem;color:var(--t3);font-weight:500;text-transform:uppercase;letter-spacing:0.05em;margin-left:8px;}
-  .theory-content{color:var(--t2);font-size:0.88rem;line-height:1.8;}
-  .theory-content strong{color:var(--text);}
-  .katex-display{margin:12px 0;}
+  /* Theory（理论知识视图已删除；.theory-note 仍被报告批改视图使用） */
+  .katex-display{margin:12px 0;max-width:100%;overflow-x:auto;overflow-y:hidden;}
   /* 细主题滚动条：保留滚动位置感知，同时不破坏视觉（替代原先完全隐藏） */
   ::-webkit-scrollbar{width:8px;height:8px;}
   ::-webkit-scrollbar-track{background:transparent;}
   ::-webkit-scrollbar-thumb{background:var(--ba);border-radius:6px;}
   ::-webkit-scrollbar-thumb:hover{background:var(--t3);}
   html{scrollbar-width:thin;scrollbar-color:var(--ba) transparent;}
-  .theory-note{margin-top:12px;padding:10px 14px;background:var(--g1);border-left:3px solid var(--a1);border-radius:08px8px0;font-size:0.82rem;color:var(--t2);line-height:1.7;white-space:pre-line;}
+  .theory-note{margin-top:12px;padding:10px 14px;background:var(--g1);border-left:3px solid var(--a1);border-radius:0 8px 8px 0;font-size:0.82rem;color:var(--t2);line-height:1.7;white-space:pre-line;}
   .param-cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-top:14px;}
   .param-card-teach{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;transition:border-color 0.3s;display:flex;flex-direction:column;align-items:center;text-align:center;}
   .param-card-teach:hover{border-color:var(--ba);}
@@ -347,9 +350,9 @@
   .accordion-header:hover{border-color:var(--ba);}
   .accordion-header h3{font-size:0.92rem;font-weight:600;}
   .accordion-header .arrow{transition:transform 0.3s;color:var(--t3);}
-  .accordion-header.open{border-radius:14px14px00;border-color:var(--a1);}
+  .accordion-header.open{border-radius:14px 14px 0 0;border-color:var(--a1);}
   .accordion-header.open .arrow{transform:rotate(180deg);}
-  .accordion-body{display:none;padding:18px;background:var(--card);border:1px solid var(--border);border-top:none;border-radius:0014px14px;}
+  .accordion-body{display:none;padding:18px;background:var(--card);border:1px solid var(--border);border-top:none;border-radius:0 0 14px 14px;}
   .accordion-body.open{display:block;animation:fadeUp 0.3s ease-out;}
   .guide-section{margin-bottom:16px;}
   .guide-section h4{font-size:0.85rem;font-weight:700;color:var(--a1);margin-bottom:8px;padding-bottom:4px;border-bottom:1px dashed var(--border);}
@@ -358,8 +361,24 @@
   .guide-section li{margin-bottom:4px;}
   .tip-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-top:8px;}
   .tip-item{display:flex;gap:10px;padding:10px 12px;background:var(--bg2);border-radius:10px;border:1px solid var(--border);}
-  .tip-item .tip-label{font-size:0.78rem;font-weight:600;color:var(--a1);white-space:nowrap;min-width:70px;}
+  .tip-item .tip-label{font-size:0.78rem;font-weight:600;color:var(--a1);white-space:nowrap;min-width:70px;flex-shrink:0;}
   .tip-item .tip-detail{font-size:0.78rem;color:var(--t2);}
+  /* Markdown 表格（marked 已解析出 table/th/td，此前无样式导致空单元格塌缩、文字挤成一行） */
+  .guide-section table,.theory-content table{display:block;max-width:100%;overflow-x:auto;margin:10px 0;border-collapse:collapse;font-size:0.8rem;}
+  .guide-section th,.guide-section td,.theory-content th,.theory-content td{border:1px solid var(--border);padding:5px 10px;text-align:center;white-space:nowrap;}
+  .guide-section th,.theory-content th{background:var(--bg2);font-weight:600;color:var(--text);}
+  .guide-section td:empty,.theory-content td:empty{min-width:44px;}
+  /* 报告模板的结构化数据表格（学生编辑态为输入格，教师批改态只读） */
+  .rep-tbl-wrap{margin:10px 0 14px;}
+  .rep-tbl-title{font-size:0.8rem;font-weight:600;color:var(--t2);margin-bottom:6px;}
+  .rep-tbl{display:block;max-width:100%;overflow-x:auto;border-collapse:collapse;font-size:0.8rem;}
+  .rep-tbl th,.rep-tbl td{border:1px solid var(--border);padding:4px 8px;text-align:center;white-space:nowrap;}
+  .rep-tbl th{background:var(--bg2);font-weight:600;color:var(--text);}
+  .rep-tbl td input{width:90px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;background:var(--inp);color:var(--text);font-size:0.78rem;text-align:center;font-family:inherit;}
+  .rep-tbl td input:focus{border-color:var(--a1);outline:none;}
+  .rep-tbl td.rh{background:var(--bg2);font-weight:600;color:var(--t2);}
+  .rep-tbl-tools{display:flex;gap:8px;align-items:center;margin-top:6px;}
+  .rep-tbl-hint{font-size:0.74rem;color:var(--t3);margin-top:4px;}
   .calib-point-list{margin-top:8px;}
   .calib-point{display:flex;align-items:center;gap:10px;padding:8px 12px;margin-bottom:6px;background:var(--bg2);border-radius:10px;border:1px solid var(--border);}
   .calib-point .cp-id{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:700;color:var(--bt);}
@@ -399,7 +418,7 @@
   .chat-msg.bot code{font-family:'Consolas',monospace;font-size:0.82rem;background:var(--bg);padding:1px 5px;border-radius:6px;border:1px solid var(--border);color:var(--a1);}
   .chat-msg.bot pre{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;margin:8px 0;overflow-x:auto;}
   .chat-msg.bot pre code{background:none;border:none;padding:0;font-size:0.8rem;color:var(--text);}
-  .chat-msg.bot blockquote{border-left:3px solid var(--a2);padding:4px 12px;margin:8px 0;background:var(--g2);border-radius:06px6px0;color:var(--t2);}
+  .chat-msg.bot blockquote{border-left:3px solid var(--a2);padding:4px 12px;margin:8px 0;background:var(--g2);border-radius:0 6px 6px 0;color:var(--t2);}
   .chat-msg.bot table{border-collapse:collapse;margin:8px 0;width:100%;}
   .chat-msg.bot th,.chat-msg.bot td{border:1px solid var(--border);padding:6px 10px;font-size:0.8rem;text-align:left;}
   .chat-msg.bot th{background:var(--bg2);font-weight:600;color:var(--text);}
@@ -653,6 +672,7 @@
   <symbol id="i-activity" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
   <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
 </svg>
 
 <div id="toast-container"></div>
@@ -672,12 +692,6 @@
     <div class="nav-group" data-g="guide">
       <button class="nav-group-label" onclick="toggleNavGroup('guide')">指导型实验<svg class="icon chev"><use href="#i-chev-d"/></svg></button>
       <div class="nav-group-body" id="navg_guide"><div id="nav_guide_exps"></div></div>
-    </div>
-    <div class="nav-group" data-g="learn">
-      <button class="nav-group-label" onclick="toggleNavGroup('learn')">学习中心<svg class="icon chev"><use href="#i-chev-d"/></svg></button>
-      <div class="nav-group-body">
-        <button class="nav-item" id="nav_theory" onclick="switchView('theory')"><svg class="icon"><use href="#i-book"/></svg><span class="txt">理论知识</span></button>
-      </div>
     </div>
     <div class="nav-group" data-g="qa">
       <button class="nav-group-label" onclick="toggleNavGroup('qa')">师生互动<svg class="icon chev"><use href="#i-chev-d"/></svg></button>
@@ -985,15 +999,6 @@
 </div><!-- /wizard -->
 </div><!-- /view_analysis -->
 
-  <!-- ========== 视图：理论知识 ========== -->
-  <div class="view" id="view_theory">
-    <div id="theory_content">
-      <div class="skel t"></div><div class="skel w70"></div><div class="skel"></div><div class="skel"></div><div class="skel w40"></div>
-      <div class="skel-box"></div>
-      <div class="skel t"></div><div class="skel w70"></div><div class="skel"></div><div class="skel-box" style="height:90px;"></div>
-    </div>
-  </div>
-
   <!-- ========== 视图：实验指导 ========== -->
   <div class="view" id="view_guide">
     <div id="guide_flowbar" class="flow-bar" style="display:none;"></div>
@@ -1023,6 +1028,7 @@
       <svg class="icon"><use href="#i-bot"/></svg> AI 实验助手
       <span class="ai-ctx-chip" id="ai_ctx_chip" style="display:none;"></span>
       <div class="spacer"></div>
+      <button class="icon-btn" id="ai_cfg_btn" title="模型配置（教师）" onclick="openLLMConfig()" style="display:none;"><svg class="icon"><use href="#i-settings"/></svg></button>
       <button class="icon-btn" title="折叠面板" onclick="toggleAIPanel()"><svg class="icon"><use href="#i-x"/></svg></button>
     </div>
     <div class="chat-container">
@@ -1059,6 +1065,37 @@
         <button class="btn btn-outline" onclick="undoPoint()"><svg class="icon"><use href="#i-undo"/></svg> 撤销</button>
         <button class="btn btn-outline" onclick="resetCalib()"><svg class="icon"><use href="#i-refresh"/></svg>重置</button>
         <button class="btn btn-primary" id="calib_done_btn" onclick="closeCalibModal()">确认完成</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- LLM Config Modal（教师专用，代替 .env 配置大模型） -->
+<div class="modal-overlay" id="llm_cfg_overlay">
+  <div class="modal llm-cfg-modal">
+    <div class="modal-header"><h3>AI 模型配置</h3><button class="btn btn-outline" onclick="closeLLMConfig()" style="padding:6px 12px;"><svg class="icon"><use href="#i-x"/></svg></button></div>
+    <div class="llm-cfg-body">
+      <div class="llm-cfg-status" id="llm_cfg_status"><span class="dot" style="background:var(--t3);"></span><span>读取中…</span></div>
+      <div class="llm-cfg-field">
+        <label>API KEY</label>
+        <input type="password" id="llm_cfg_key" placeholder="sk-..." autocomplete="new-password">
+      </div>
+      <div class="llm-cfg-field">
+        <label>BASE URL</label>
+        <input type="text" id="llm_cfg_url" placeholder="https://api.openai.com/v1">
+      </div>
+      <div class="llm-cfg-field">
+        <label>模型名称</label>
+        <input type="text" id="llm_cfg_model" placeholder="gpt-4o-mini">
+      </div>
+      <div class="llm-cfg-hint">任意 OpenAI 兼容服务均可（OpenAI / DeepSeek / Moonshot / 智谱等）。保存后即时生效，优先于 .env；API Key 留空表示不修改已保存的密钥。</div>
+    </div>
+    <div class="modal-footer">
+      <div class="hint" id="llm_cfg_test_hint"></div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-outline" id="llm_cfg_test_btn" onclick="testLLMConfig()">测试连接</button>
+        <button class="btn btn-outline" onclick="closeLLMConfig()">取消</button>
+        <button class="btn btn-primary" id="llm_cfg_save_btn" onclick="saveLLMConfig()">保存</button>
       </div>
     </div>
   </div>
@@ -1964,7 +2001,7 @@ async function startProcessing(){
 
 // ==================== 视图切换（三栏布局） ====================
 const EXPERIMENTS = {{ experiments | tojson }};
-const VIEW_TITLES = {dashboard:'工作台', analysis:'数据分析', theory:'理论知识', guide:'实验指导', reports:'实验报告', qas:'师生问答'};
+const VIEW_TITLES = {dashboard:'工作台', analysis:'数据分析', guide:'实验指导', reports:'实验报告', qas:'师生问答'};
 
 function switchView(view){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
@@ -1974,7 +2011,6 @@ function switchView(view){
   document.querySelectorAll('.sidenav .nav-item').forEach(b=>b.classList.remove('active'));
   const nav=document.getElementById('nav_'+view);
   if(nav)nav.classList.add('active');
-  if(view==='theory'&&!window._theoryLoaded){loadTheory();}
   if(view==='reports'){renderReports();}
   if(view==='dashboard'){renderDashboard();}
   if(view==='qas'){renderQas();}
@@ -2114,6 +2150,9 @@ async function refreshAuth(){
     roleEl.textContent='—';
     avatar.textContent='?';
   }
+  // 「模型配置」按钮仅教师可见
+  const cfgBtn=document.getElementById('ai_cfg_btn');
+  if(cfgBtn)cfgBtn.style.display=(CURRENT_USER&&CURRENT_USER.role==='teacher')?'flex':'none';
 }
 
 // ===== Shared: Unicode → LaTeX conversion =====
@@ -2184,21 +2223,33 @@ function convertNoteToLatex(text){
 
 // 理论/指导 JSON 里混有 **粗体** 等 Markdown 语法，直接 innerHTML 会显示原始星号；
 // 复用聊天侧的 marked 把它们转成真排版（KaTeX 公式随后由 renderKaTeXinHTML 处理，$ 语法不受影响）
+
+// marked v12 会把 $...$ 内的 \, \; \{ \} 等当转义吃掉（如 0.087\,\mathrm{rad} 变 0.087,rad），
+// 成对 _ 也可能变斜体——先把公式整段摘出为占位符，marked 渲染完再放回，最后统一 KaTeX 渲染
+let _mathPhStore=[];
+function protectMathSpans(text){
+  _mathPhStore=[];
+  return text.replace(/\$\$[\s\S]+?\$\$|\$[^$\n]+?\$/g,function(m){
+    _mathPhStore.push(m);
+    return '\u0001MPH'+(_mathPhStore.length-1)+'\u0001';
+  });
+}
+function restoreMathSpans(html){
+  return html.replace(/\u0001MPH(\d+)\u0001/g,function(m,i){return _mathPhStore[+i]!==undefined?_mathPhStore[+i]:m;});
+}
 function renderTheoryMarkdown(text){
-  if(window.marked){try{marked.setOptions({breaks:true,gfm:true});return marked.parse(text);}catch(e){}}
+  if(window.marked){
+    try{
+      marked.setOptions({breaks:true,gfm:true});
+      // 教学内容里 "2~3"、"0.05~0.15" 等数字范围的单个 ~ 会被 marked 当成 GFM 删除线
+      // 配对解析，整段文字被 <del> 划线——转义掉（公式已先被占位符摘出，不受影响）
+      return restoreMathSpans(marked.parse(protectMathSpans(text).replace(/~/g,'\\~')));
+    }catch(e){}
+  }
   return text;
 }
 
-async function loadTheory(){
-  if(window._theoryLoaded)return;window._theoryLoaded=true;
-  try{
-    const resp=await fetch('/api/teaching_content/theory');
-    const data=await resp.json();
-    renderTheory(data);
-  }catch(e){document.title='THEORY_ERR: '+e.message;document.getElementById('theory_content').innerHTML='<div class="theory-section"><p style="color:var(--red);">加载理论内容失败: '+e.message+'</p></div>';showToast('加载理论内容失败: '+e.message,'error');}
-}
-
-// ==================== 文档分节翻页器（理论/指导共用） ====================
+// ==================== 文档分节翻页器（指导页共用） ====================
 // 长文档按 section 一页一节展示，"‹ 上一节 / 下一节 ›"翻页，不再整体下滑
 function initDocPager(c){
   const secs=c.querySelectorAll('.doc-sec');
@@ -2220,77 +2271,6 @@ function initDocPager(c){
   if(prev)prev.onclick=()=>show(i-1);
   if(next)next.onclick=()=>show(i+1);
   show(0);
-}
-
-function renderTheory(data){
-  const c=document.getElementById('theory_content');
-  const titleHtml='<h2 style="font-size:1.25rem;font-weight:700;margin-bottom:6px;color:var(--text);">'+data.title+'</h2>';
-  const secs=[];
-  for(const sec of data.sections){
-    h='<div class="theory-section" data-reveal>';
-    h+='<h3>'+sec.heading+'<span class="en">'+(sec.heading_en||'')+'</span></h3>';
-    if(sec.content)h+='<div class="theory-content">'+renderTheoryMarkdown(sec.content)+'</div>';
-    if(sec.formula_display)h+='<div class="katex-display" data-katex="'+esc(sec.formula_display)+'"></div>';
-    else if(sec.formula)h+='<div class="katex-display" data-katex="'+esc(sec.formula)+'"></div>';
-    if(sec.note)h+='<div class="theory-note">'+convertNoteToLatex(sec.note)+'</div>';
-    if(sec.parameters){
-      h+='<div class="param-cards-grid">';
-      for(const p of sec.parameters){
-        h+='<div class="param-card-teach">';
-        h+='<div class="sym" data-katex="'+esc(p.symbol)+'"></div>';
-        h+='<div class="pname">'+p.name+' <span style="color:var(--t3);font-weight:400;font-size:0.72rem;">'+(p.name_en||'')+'</span></div>';
-        h+='<div class="punit">'+p.unit+'</div>';
-        h+='<div class="pdesc">'+p.meaning+'</div>';
-        if(p.formula)h+='<div class="katex-display" data-katex="'+esc(p.formula)+'" style="margin-top:8px;"></div>';
-        h+='</div>';
-      }
-      h+='</div>';
-    }
-    if(sec.subsections){
-      if(sec.subsections[0]&&sec.subsections[0].zeta_range){
-        // damping type comparison cards
-        h+='<div class="damping-compare">';
-        for(const sub of sec.subsections){
-          h+='<div class="damping-card">';
-          h+='<h4>'+sub.title+'</h4>';
-          h+='<div class="zeta">'+sub.zeta_range+'</div>';
-          h+='<canvas class="damping-preview" data-type="'+(sub.title.includes('欠')?'under':sub.title.includes('临')?'critical':'over')+'"></canvas>';
-          h+='<p>'+(sub.description||sub.content||'')+'</p>';
-          var sol=sub.solution||sub.formula||'';
-          if(sol){sol=sol.replace(/^\$+|\$+$/g,'');h+='<div class="katex-display" data-katex="'+esc(sol)+'" style="margin-top:8px;"></div>';}
-          if(sub.note)h+='<p style="font-size:0.75rem;color:var(--t3);margin-top:6px;">'+sub.note+'</p>';
-          h+='</div>';
-        }
-        h+='</div>';
-      }else{
-        for(const sub of sec.subsections){
-          h+='<div style="margin-top:14px;padding:14px;background:var(--bg2);border-radius:10px;border:1px solid var(--border);">';
-          h+='<h4 style="font-size:0.88rem;font-weight:700;color:var(--a1);margin-bottom:6px;">'+sub.title+'</h4>';
-          h+='<p style="font-size:0.84rem;color:var(--t2);line-height:1.7;">'+renderTheoryMarkdown(sub.content||sub.description||'')+'</p>';
-          if(sub.typical_zeta)h+='<p style="font-size:0.78rem;color:var(--t3);margin-top:4px;">典型 ζ 范围: <code style="color:var(--a1);">'+sub.typical_zeta+'</code></p>';
-          var fml=sub.formula||sub.solution||'';
-          if(fml){fml=fml.replace(/^\$+|\$+$/g,'');h+='<div class="katex-display" data-katex="'+esc(fml)+'" style="margin-top:8px;"></div>';}
-          h+='</div>';
-        }
-      }
-    }
-    h+='</div>';
-    secs.push(h);
-  }
-  c.innerHTML=titleHtml
-    +'<div class="doc-pager"><button class="btn btn-outline doc-prev">‹ 上一节</button><span class="doc-count"></span><button class="btn btn-outline doc-next">下一节 ›</button></div>'
-    +secs.map((x,k)=>'<div class="doc-sec'+(k?' hidden':'')+'">'+x+'</div>').join('');
-  bindReveal(c);
-  initDocPager(c);
-  // Render KaTeX（库未就绪时挂起，就绪后自动补渲染）
-  whenKatex(()=>{
-    document.querySelectorAll('#theory_content [data-katex]').forEach(el=>{
-      try{katex.render(el.getAttribute('data-katex'),el,{displayMode:true,throwOnError:false});}catch(e){}
-    });
-    document.querySelectorAll('#theory_content .theory-note,#theory_content .theory-content').forEach(el=>{
-      try{el.innerHTML=renderKaTeXinHTML(el.innerHTML);}catch(e){}
-    });
-  });
 }
 
 function drawDampingPreview(canvas,type){
@@ -2339,7 +2319,7 @@ function renderGuide(data){
   for(const sec of data.sections){
     h='<div class="guide-section" data-reveal>';
     h+='<h4>'+sec.heading+'</h4>';
-    if(sec.content)h+='<p>'+renderTheoryMarkdown(sec.content)+'</p>';
+    if(sec.content)h+='<div class="guide-content-md">'+renderTheoryMarkdown(sec.content)+'</div>';
     if(sec.items){h+='<ul>';for(const item of sec.items)h+='<li>'+item+'</li>';h+='</ul>';}
     if(sec.tips&&Array.isArray(sec.tips)){
       h+='<div class="tip-grid">';
@@ -2383,10 +2363,10 @@ function renderGuide(data){
     +secs.map((x,k)=>'<div class="doc-sec'+(k?' hidden':'')+'">'+x+'</div>').join('');
   bindReveal(c);
   initDocPager(c);
-  // 指导内容里嵌的 $...$ / $$...$$ LaTeX 公式渲染为 KaTeX（content 走 marked，此处处理全部文本节点；
-  // 库未就绪时挂起，就绪后自动补渲染）
+  // 指导内容里嵌的 $...$ / $$...$$ LaTeX 公式渲染为 KaTeX（content 走 marked，此处处理全部文本节点，
+  // 含 Markdown 表格单元格；库未就绪时挂起，就绪后自动补渲染）
   whenKatex(()=>{
-    c.querySelectorAll('.guide-section p,.guide-section li,.faq-item,.tip-item').forEach(el=>{
+    c.querySelectorAll('.guide-section p,.guide-section li,.guide-section td,.guide-section th,.faq-item,.tip-item').forEach(el=>{
       try{el.innerHTML=renderKaTeXinHTML(el.innerHTML);}catch(e){}
     });
   });
@@ -2439,6 +2419,63 @@ function askPreset(q){
   document.getElementById('chat_input').value=q;sendChat();
 }
 
+// ==================== AI 模型配置（教师，代替 .env） ====================
+async function openLLMConfig(){
+  const ov=document.getElementById('llm_cfg_overlay');
+  ov.classList.add('active');
+  document.getElementById('llm_cfg_test_hint').textContent='';
+  document.getElementById('llm_cfg_key').value='';
+  try{
+    const r=await fetch('/api/llm_config');
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+    fillLLMConfig(d);
+  }catch(e){showToast('读取模型配置失败: '+e.message,'error');closeLLMConfig();}
+}
+function fillLLMConfig(d){
+  const st=document.getElementById('llm_cfg_status');
+  const srcName=d.key_from==='web'?'网页保存':(d.key_from==='env'?'.env':'—');
+  st.innerHTML='<span class="dot" style="background:'+(d.configured?'var(--green)':'var(--amber)')+';"></span><span>'
+    +(d.configured
+      ?('已配置 · 密钥来源 '+srcName+' · '+esc(d.api_key_masked||'')+' · 模型 '+esc(d.model||'—'))
+      :'尚未配置 · AI 助手暂不可用，请在下方填入参数')+'</span>';
+  const keyInput=document.getElementById('llm_cfg_key');
+  keyInput.placeholder=d.has_key?('已保存 '+d.api_key_masked+'（留空则不修改）'):'sk-...';
+  document.getElementById('llm_cfg_url').value=d.base_url||'';
+  document.getElementById('llm_cfg_model').value=d.model||'';
+}
+function closeLLMConfig(){document.getElementById('llm_cfg_overlay').classList.remove('active');}
+function llmCfgFormValues(){
+  return {
+    api_key:document.getElementById('llm_cfg_key').value.trim(),
+    base_url:document.getElementById('llm_cfg_url').value.trim(),
+    model:document.getElementById('llm_cfg_model').value.trim()
+  };
+}
+async function saveLLMConfig(){
+  const btn=document.getElementById('llm_cfg_save_btn');btn.disabled=true;
+  try{
+    const r=await fetch('/api/llm_config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(llmCfgFormValues())});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+    fillLLMConfig(d);
+    document.getElementById('llm_cfg_key').value='';
+    showToast('模型配置已保存，即时生效','info');
+  }catch(e){showToast('保存失败: '+e.message,'error');}
+  finally{btn.disabled=false;}
+}
+async function testLLMConfig(){
+  const hint=document.getElementById('llm_cfg_test_hint'),btn=document.getElementById('llm_cfg_test_btn');
+  hint.textContent='测试中…';hint.style.color='var(--t3)';btn.disabled=true;
+  try{
+    const r=await fetch('/api/llm_config/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(llmCfgFormValues())});
+    const d=await r.json();
+    if(d.ok){hint.textContent='连通正常 · '+d.model+' · '+d.elapsed+'s';hint.style.color='var(--green)';}
+    else{hint.textContent='连接失败: '+(d.error||'未知错误');hint.style.color='var(--red)';}
+  }catch(e){hint.textContent='连接失败: '+e.message;hint.style.color='var(--red)';}
+  finally{btn.disabled=false;}
+}
+
 // 当前实验上下文：随消息发给后端，注入 AI 系统提示词
 function aiContext(){
   const exp=S.motionType||window._currentGuideExp||'';
@@ -2470,7 +2507,7 @@ function renderChatMarkdown(text){
   text=convertBacktickMath(text);
   if(window.marked){
     marked.setOptions({breaks:true,gfm:true});
-    var html=marked.parse(text);
+    var html=restoreMathSpans(marked.parse(protectMathSpans(text).replace(/~/g,'\\~')));
     var tmp=document.createElement('div');tmp.innerHTML=html;
     tmp.querySelectorAll('p').forEach(function(p){if(!p.textContent.trim())p.remove();});
     html=tmp.innerHTML;
@@ -2520,6 +2557,35 @@ function _statusBadge(st,score){
   return `<span style="color:var(--t3);">草稿</span>`;
 }
 
+// ---------- 报告数据表格（模板 tables 字段） ----------
+// editable=true  → 学生编辑态：单元格为输入框，可加行
+// editable=false → 教师批改态：只读展示，未填格显示 —
+function repTableHtml(t,content,editable){
+  const tid='tbl_'+t.id;
+  let data=content[tid];
+  if(!Array.isArray(data)||!data.length){
+    data=(t.initial&&t.initial.length)?t.initial.map(r=>r.slice())
+        :Array.from({length:(t.rows||3)},()=>Array(t.columns.length).fill(''));
+  }
+  const thead='<thead><tr>'+t.columns.map(c=>'<th>'+esc(c)+'</th>').join('')+'</tr></thead>';
+  const tbody='<tbody>'+data.map((r,ri)=>'<tr>'+t.columns.map((c,ci)=>{
+    const v=(r&&r[ci]!=null)?String(r[ci]):'';
+    if(!editable)return '<td>'+(v?esc(v):'<span style="color:var(--t3);">—</span>')+'</td>';
+    return `<td><input value="${v.replace(/&/g,'&amp;').replace(/"/g,'&quot;')}"></td>`;
+  }).join('')+'</tr>').join('')+'</tbody>';
+  const tools=editable?`<div class="rep-tbl-tools"><button class="btn btn-outline" style="padding:3px 10px;font-size:0.72rem;" onclick="repAddRow('rep_tbl_${t.id}',${t.columns.length})">＋ 加一行</button></div>`:'';
+  return `<div class="rep-tbl-wrap"><div class="rep-tbl-title">${esc(t.title)}</div>
+    <table class="rep-tbl" id="rep_tbl_${t.id}">${thead}${tbody}</table>${tools}
+    ${t.hint?`<div class="rep-tbl-hint">${esc(t.hint)}</div>`:''}</div>`;
+}
+function repAddRow(tid,ncol){
+  const tb=document.querySelector('#'+tid+' tbody');
+  if(!tb)return;
+  const tr=document.createElement('tr');
+  for(let c=0;c<ncol;c++)tr.insertCell().innerHTML='<input>';
+  tb.appendChild(tr);
+}
+
 // ---------- 学生视图 ----------
 async function renderStudentReports(root){
   const list=await (await fetch('/api/reports')).json();
@@ -2563,6 +2629,7 @@ async function openReportEditor(rid,fixedExp){
       <div class="card-header"><h2>${tpl.title}</h2><div class="tag">${_reportEditor.id?'编辑中':'新建'}</div></div>
       ${tpl.sections.map(s=>`
         <div class="field-label"><span class="zh">${s.title}</span></div>
+        ${(s.tables||[]).map(t=>repTableHtml(t,_reportEditor.content,true)).join('')}
         <textarea id="sec_${s.id}" style="width:100%;min-height:110px;padding:12px 14px;border-radius:10px;border:1px solid var(--border);background:var(--inp);color:var(--text);font-size:0.88rem;font-family:inherit;line-height:1.7;resize:vertical;" placeholder="${s.placeholder.replace(/"/g,'&quot;')}">${(_reportEditor.content[s.id]||s.prefill||'')}</textarea>
       `).join('')}
       <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
@@ -2581,6 +2648,11 @@ async function saveReport(mode){
   const content={};
   document.querySelectorAll('#report_editor_area textarea').forEach(t=>{
     content[t.id.replace('sec_','')]=t.value;
+  });
+  // 数据表格：从 DOM 读回（含“加一行”新增的行）；键名 tbl_<tid> 须与 repTableHtml 读取时一致
+  document.querySelectorAll('#report_editor_area table.rep-tbl').forEach(tb=>{
+    content['tbl_'+tb.id.replace('rep_tbl_','')]=Array.from(tb.querySelectorAll('tbody tr')).map(tr=>
+      Array.from(tr.querySelectorAll('input')).map(i=>i.value.trim()));
   });
   try{
     const r=await fetch('/api/reports',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -2654,7 +2726,8 @@ async function openGrading(rid){
   const tpl=await (await fetch('/api/report_template/'+r.exp_id)).json();
   const sections=(tpl.sections||[]).map(s=>{
     const v=(r.content&&r.content[s.id])||'';
-    return `<div class="field-label"><span class="zh">${s.title}</span></div>
+    const tables=(s.tables||[]).map(t=>repTableHtml(t,r.content||{},false)).join('');
+    return `<div class="field-label"><span class="zh">${s.title}</span></div>${tables}
       <div class="theory-note">${v?renderChatMarkdown(v):'<em style="color:var(--t3);">（未填写）</em>'}</div>`;
   }).join('');
   area.innerHTML=`
@@ -3051,7 +3124,7 @@ async function goReportFor(exp){
 }
 
 // ==================== 师生问答（文字 / 图片 / 语音） ====================
-let _qaItems=[],_qaSelId=null,_qaScope={pending:false},_qaEditorAtts=[],_repAtts=[];
+let _qaItems=[],_qaSelId=null,_qaScope={mode:'all'},_qaEditorAtts=[],_repAtts=[];
 let _recState=null,_recStart=0;
 
 function qaAvatar(u){
@@ -3082,7 +3155,7 @@ async function renderQas(){
   if(!CURRENT_USER){
     root.innerHTML=`<div class="card" style="text-align:center;padding:48px;">
       <div style="font-weight:700;margin-bottom:8px;">请先登录</div>
-      <div style="color:var(--t2);font-size:0.86rem;margin-bottom:18px;">登录后可以留言提问（支持文字 / 图片 / 语音），教师会在批改台回复。</div>
+      <div style="color:var(--t2);font-size:0.86rem;margin-bottom:18px;">登录后可以提问并参与公共问答讨论（支持文字 / 图片 / 语音），所有师生可见。</div>
       <button class="btn btn-primary btn-lg" onclick="location.href='/login'">前往登录</button></div>`;
     return;
   }
@@ -3092,12 +3165,12 @@ async function renderQas(){
       <div>
         ${isTeacher?`
           <div class="qa-tabs">
-            <button class="qa-tab ${!_qaScope.pending?'active':''}" onclick="setQaScope('all')">全部问题</button>
-            <button class="qa-tab ${_qaScope.pending?'active':''}" onclick="setQaScope('pending')">待回复</button>
+            <button class="qa-tab ${_qaScope.mode!=='pending'?'active':''}" data-mode="all" onclick="setQaScope('all')">全部问题</button>
+            <button class="qa-tab ${_qaScope.mode==='pending'?'active':''}" data-mode="pending" onclick="setQaScope('pending')">待回复</button>
           </div>
-          <div class="empty-tip" style="padding:6px 0 12px;text-align:left;">学生留言支持文字、图片与语音，点击问题查看并回复。</div>`:`
+          <div class="empty-tip" style="padding:6px 0 12px;text-align:left;">公共讨论区：所有提问与回复全员可见，学生之间也可互相解答。</div>`:`
           <div class="qa-editor">
-            <div class="qe-title"><svg class="icon"><use href="#i-message"/></svg>向老师留言提问</div>
+            <div class="qe-title"><svg class="icon"><use href="#i-message"/></svg>提问 / 发起讨论</div>
             <input type="text" id="ask_title" placeholder="问题标题（一句话概括，可留空）">
             <textarea id="ask_body" placeholder="详细描述你的疑问…也可以只发图片或语音提问"></textarea>
             <div class="qe-row">
@@ -3110,27 +3183,33 @@ async function renderQas(){
               <button class="btn btn-primary" onclick="askQ()"><svg class="icon"><use href="#i-send"/></svg>发送提问</button>
             </div>
             <div id="ask_chips" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;"></div>
+          </div>
+          <div class="qa-tabs" style="margin-top:12px;">
+            <button class="qa-tab ${_qaScope.mode!=='mine'?'active':''}" data-mode="all" onclick="setQaScope('all')">讨论区全部</button>
+            <button class="qa-tab ${_qaScope.mode==='mine'?'active':''}" data-mode="mine" onclick="setQaScope('mine')">我的提问</button>
           </div>`}
         <div id="qa_list" class="qa-list"><div class="skel t"></div><div class="skel"></div><div class="skel w70"></div></div>
       </div>
       <div class="qa-detail" id="qa_detail">
-        <div class="empty-tip" style="border:1px dashed var(--border);border-radius:14px;">点击左侧问题查看对话详情</div>
+        <div class="empty-tip" style="border:1px dashed var(--border);border-radius:14px;">点击左侧问题查看讨论详情</div>
       </div>
     </div>`;
   loadQaList();
 }
 
 function setQaScope(mode){
-  _qaScope.pending=(mode==='pending');
-  const tabs=document.querySelectorAll('#qas_root .qa-tab');
-  tabs.forEach(t=>t.classList.toggle('active',(mode==='pending')===t.textContent.includes('待回复')));
+  _qaScope.mode=mode;
+  document.querySelectorAll('#qas_root .qa-tab').forEach(t=>t.classList.toggle('active',t.dataset.mode===mode));
   loadQaList();
 }
 
 async function loadQaList(){
-  const q=(CURRENT_USER&&CURRENT_USER.role==='teacher')
-    ?(_qaScope.pending?'pending=1&scope=all':'scope=all')
-    :'scope=mine';
+  let q='scope=all';
+  if(CURRENT_USER&&CURRENT_USER.role==='teacher'){
+    if(_qaScope.mode==='pending')q='pending=1&scope=all';
+  }else if(CURRENT_USER&&_qaScope.mode==='mine'){
+    q='scope=mine';
+  }
   try{_qaItems=await (await fetch('/api/qas?'+q)).json();}catch(e){_qaItems=[];}
   renderQaList();
   if(_qaItems.length&&!_qaSelId)showQaDetail(_qaItems[0].id);
@@ -3141,19 +3220,19 @@ function renderQaList(){
   const box=document.getElementById('qa_list');
   if(!box)return;
   if(!_qaItems.length){box.innerHTML='<div class="empty-tip" style="border:1px dashed var(--border);border-radius:14px;">'
-    +(CURRENT_USER&&CURRENT_USER.role==='teacher'?'暂无学生提问。':'你还没有提问，写一条留言吧（支持文字 / 图片 / 语音）。')+'</div>';return;}
+    +(CURRENT_USER&&CURRENT_USER.role==='teacher'?'暂无学生提问。':(_qaScope.mode==='mine'?'你还没有提问，写一条留言吧（支持文字 / 图片 / 语音）。':'讨论区还没有提问，来发第一条留言吧（支持文字 / 图片 / 语音）。'))+'</div>';return;}
   box.innerHTML=_qaItems.map(q=>{
     const u={display_name:q.q_name,username:q.username,role:'student',class_name:q.q_class};
     const replied=q.reply_count>0;
-    const last=q.last_reply_by==='teacher'?'老师':(q.last_reply_by?q.last_reply_by:'');
+    const mine=(CURRENT_USER&&q.username===CURRENT_USER.username)?'（我）':'';
     return `<div class="qa-card ${q.id===_qaSelId?'sel':''}" onclick="showQaDetail(${q.id})">
       <div class="qc-title">${qaAvatar(u)}<span style="flex:1;">${esc(q.title||'(无标题)')}</span>
         ${q.exp_name?`<span class="qa-tag">${esc(q.exp_name)}</span>`:''}</div>
       <div class="qc-preview">${esc(q.body||'')}${q.attachments&&q.attachments.length?` [${q.attachments.map(a=>a.kind==='image'?'图片':a.kind==='audio'?'语音':'附件').join('、')}]`:''}</div>
       <div class="qc-meta">
-        <span>${esc(q.q_name||q.username)}${q.q_class?' · '+esc(q.q_class):''}</span>
+        <span>${esc(q.q_name||q.username)}${mine}${q.q_class?' · '+esc(q.q_class):''}</span>
         <span>${qaTime(q.created_at)}</span>
-        ${replied?`<span style="color:var(--green);">老师已回复${q.reply_count>1?' ×'+q.reply_count:''}</span>`:'<span style="color:var(--a1);font-weight:600;">待回复</span>'}
+        ${replied?`<span style="color:var(--green);">${q.reply_count} 条回复${q.last_reply_by==='teacher'?' · 老师已答复':''}</span>`:'<span style="color:var(--a1);font-weight:600;">待回复</span>'}
       </div>
     </div>`;
   }).join('');
@@ -3167,8 +3246,9 @@ async function showQaDetail(qid){
   box.innerHTML='<div class="skel t"></div><div class="skel"></div><div class="skel"></div>';
   let d=null;try{d=await (await fetch('/api/qas/'+qid)).json();}catch(e){box.innerHTML='<div class="empty-tip">加载失败</div>';return;}
   if(d.error){box.innerHTML='<div class="empty-tip">'+esc(d.error)+'</div>';return;}
-  const canReply=(CURRENT_USER&&(CURRENT_USER.role==='teacher'||CURRENT_USER.username===d.username));
+  const canReply=!!CURRENT_USER; // 公共讨论区：所有登录用户（教师+全体学生）均可回复
   const atts=(d.attachments||[]).map(attHtml).join('');
+  const isTeacher=CURRENT_USER&&CURRENT_USER.role==='teacher';
   const replies=(d.replies||[]).map(r=>`
     <div class="qa-reply">
       <div class="qa-who">${qaAvatar(r.user)}<b style="font-size:0.82rem;">${esc(r.user.display_name||r.user.username)}</b>
@@ -3180,7 +3260,8 @@ async function showQaDetail(qid){
     <div class="qa-thread">
       <div class="q-main">
         <div class="qa-who">${qaAvatar(d.q_user)}<b style="font-size:0.9rem;">${esc(d.q_user.display_name||d.username)}</b>
-          <span style="color:var(--t3);font-size:0.72rem;">学生 · ${d.q_user.class_name||''} · ${qaTime(d.created_at)}</span>
+          <span style="color:var(--t3);font-size:0.72rem;">${d.q_user.role==='teacher'?'教师':'学生'} · ${d.q_user.class_name||''} · ${qaTime(d.created_at)}</span>
+          ${CURRENT_USER&&d.username===CURRENT_USER.username?'<span class="qa-tag">我的提问</span>':''}
           ${d.exp_name?`<span class="qa-tag">${esc(d.exp_name)}</span>`:''}</div>
         ${d.title?`<div style="font-weight:700;font-size:0.92rem;margin-top:6px;">${esc(d.title)}</div>`:''}
         ${d.body?`<div class="qa-msg">${esc(d.body)}</div>`:''}
@@ -3190,13 +3271,13 @@ async function showQaDetail(qid){
     </div>
     ${canReply?`
     <div class="qa-editor" style="margin-top:12px;">
-      <div class="qe-title"><svg class="icon"><use href="#i-send"/></svg>${CURRENT_USER.role==='teacher'?'回复学生':'补充说明'}</div>
-      <textarea id="rep_body" placeholder="${CURRENT_USER.role==='teacher'?'输入回复…（可附图片）':'继续补充你的问题…（可附图片）'}"></textarea>
+      <div class="qe-title"><svg class="icon"><use href="#i-send"/></svg>${isTeacher?'回复学生':'参与讨论'}</div>
+      <textarea id="rep_body" placeholder="${isTeacher?'输入回复…（可附图片与语音）':'输入你的回复或补充…（全员可见，可附图片与语音）'}"></textarea>
       <div class="qe-row">
         <input type="file" id="rep_img" accept="image/*" style="display:none;" onchange="pickAtt(this,'rep')">
         <button class="icon-btn-line" onclick="document.getElementById('rep_img').click()"><svg class="icon"><use href="#i-image"/></svg>图片</button>
-        ${CURRENT_USER.role==='teacher'?`<button class="icon-btn-line" id="rep_rec_btn" onclick="startRec(this,'rep')"><svg class="icon"><use href="#i-mic"/></svg>语音回复</button>`:''}
-        <span class="micro-tip">${CURRENT_USER.role==='teacher'?'语音回复将保存为音频，学生可点击播放':'图片、语音均可用于描述问题'}</span>
+        <button class="icon-btn-line" id="rep_rec_btn" onclick="startRec(this,'rep')"><svg class="icon"><use href="#i-mic"/></svg>语音回复</button>
+        <span class="micro-tip">${isTeacher?'语音回复将保存为音频，学生可点击播放':'回复讨论区全员可见，支持图片与语音'}</span>
         <span style="flex:1;"></span>
         <button class="btn btn-primary" onclick="sendReply(${qid})"><svg class="icon"><use href="#i-send"/></svg>发送</button>
       </div>
@@ -3218,7 +3299,7 @@ async function askQ(){
   document.getElementById('ask_title').value='';
   document.getElementById('ask_body').value='';
   _qaEditorAtts=[];renderChips('ask_chips',_qaEditorAtts);
-  showToast('提问已发送，等待老师回复','info');
+  showToast('提问已发布到公共讨论区','info');
   _qaSelId=d.id;loadQaList();
 }
 

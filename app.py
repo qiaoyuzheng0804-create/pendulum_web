@@ -81,7 +81,7 @@ app.secret_key = _load_or_create_secret()
 
 # ---------- 师生交互平台（登录 + 实验报告） ----------
 # 注意：模块名不能用 platform（会遮蔽标准库 platform，cv2/torch 都依赖它）
-from platform_hub import init_platform
+from platform_hub import init_platform, teacher_required
 init_platform(app, Path(os.path.dirname(os.path.abspath(__file__))) / "platform.db")
 
 # ---------- Paths ----------
@@ -135,12 +135,55 @@ if _missing:
         print(f"    {k}: {MODEL_PATHS[k]}", flush=True)
 
 # ---------- LLM (OpenAI-compatible API) configuration ----------
-# 任意 OpenAI 兼容大模型服务均可（OpenAI / DeepSeek / Moonshot / 智谱 / mimo 等），
-# 通过 .env 的 LLM_API_KEY / LLM_BASE_URL / LLM_MODEL 随心配置；
-# 旧版 MIMO_* 变量名仍被识别（向后兼容）。
-LLM_API_KEY = os.environ.get("LLM_API_KEY") or os.environ.get("MIMO_API_KEY", "")
-LLM_BASE_URL = os.environ.get("LLM_BASE_URL") or os.environ.get("MIMO_BASE_URL") or "https://api.openai.com/v1"
-LLM_MODEL = os.environ.get("LLM_MODEL") or os.environ.get("MIMO_MODEL", "gpt-4o-mini")
+# 任意 OpenAI 兼容大模型服务均可（OpenAI / DeepSeek / Moonshot / 智谱 / mimo 等）。
+# 配置来源优先级：网页「模型配置」（llm_config.json，教师保存，即时生效、无需重启）
+#               > .env 的 LLM_API_KEY / LLM_BASE_URL / LLM_MODEL（向后兼容，仍可用）
+#               > 内置默认。旧版 MIMO_* 变量名仍被识别。
+_LLM_CONFIG_PATH = BASE_DIR / "llm_config.json"
+# RLock：POST 保存时在持锁状态下调用 _write_llm_web_config（内部也加锁），需可重入
+_llm_cfg_lock = threading.RLock()
+
+
+def _read_llm_web_config():
+    """读取网页保存的 LLM 配置（缺失/损坏时返回空 dict，自动逐项回退 .env）。"""
+    try:
+        with open(_LLM_CONFIG_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _write_llm_web_config(cfg):
+    """原子写入网页配置（临时文件 + os.replace，避免写一半损坏）。"""
+    with _llm_cfg_lock:
+        tmp = str(_LLM_CONFIG_PATH) + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, _LLM_CONFIG_PATH)
+
+
+def get_llm_config():
+    """合并出当前生效的 LLM 配置（网页字段优先，留空的字段逐项回退 .env）。"""
+    web = _read_llm_web_config()
+    api_key = (str(web.get("api_key") or "").strip()
+               or os.environ.get("LLM_API_KEY") or os.environ.get("MIMO_API_KEY", ""))
+    base_url = (str(web.get("base_url") or "").strip()
+                or os.environ.get("LLM_BASE_URL") or os.environ.get("MIMO_BASE_URL")
+                or "https://api.openai.com/v1")
+    model = (str(web.get("model") or "").strip()
+             or os.environ.get("LLM_MODEL") or os.environ.get("MIMO_MODEL", "gpt-4o-mini"))
+    source = "web" if any(str(web.get(k) or "").strip() for k in ("api_key", "base_url", "model")) else "env"
+    return {"api_key": api_key, "base_url": base_url, "model": model, "source": source}
+
+
+def _mask_key(key):
+    """密钥脱敏展示：只露首 4 / 尾 4。"""
+    if not key:
+        return ""
+    if len(key) <= 8:
+        return "••••"
+    return key[:4] + "••••" + key[-4:]
 
 LLM_SYSTEM_PROMPT = r"""你是一位物理实验教学助手，专注于阻尼振动实验教学。你的知识范围包括：
 1. 阻尼振动的物理原理和数学推导（微分方程、解析解、参数物理意义）
@@ -1278,8 +1321,9 @@ def get_experiments():
 @app.route("/api/ai_chat", methods=["POST"])
 def ai_chat():
     """AI 实验助手 — 轻量 agent（工具调用循环）+ SSE 流式输出。"""
-    if not LLM_API_KEY:
-        return jsonify({"error": "AI 服务未配置。请在 .env 中设置 LLM_API_KEY。"}), 503
+    cfg = get_llm_config()
+    if not cfg["api_key"]:
+        return jsonify({"error": "AI 服务未配置。教师请登录后点击右侧 AI 面板顶部的「模型配置」按钮进行设置（也可继续使用 .env）。"}), 503
 
     data = request.get_json()
     if not data:
@@ -1294,11 +1338,11 @@ def ai_chat():
     try:
         from openai import OpenAI
         from ai_agent import run_agent_chat
-        client = OpenAI(api_key=LLM_API_KEY, base_url=LLM_BASE_URL)
+        client = OpenAI(api_key=cfg["api_key"], base_url=cfg["base_url"])
 
         def generate():
             try:
-                for payload in run_agent_chat(client, LLM_MODEL, messages, context, LLM_SYSTEM_PROMPT):
+                for payload in run_agent_chat(client, cfg["model"], messages, context, LLM_SYSTEM_PROMPT):
                     yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
             except Exception as e:
                 yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
@@ -1308,6 +1352,87 @@ def ai_chat():
                         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
     except ImportError:
         return jsonify({"error": "请安装 openai 包: pip install openai"}), 503
+
+
+# ---------- LLM 模型配置（网页端，教师专用） ----------
+
+def _llm_config_payload():
+    """配置状态响应体（密钥只回脱敏形式，绝不回原文）。"""
+    cfg = get_llm_config()
+    web = _read_llm_web_config()
+    key_from = "web" if str(web.get("api_key") or "").strip() else ("env" if cfg["api_key"] else "")
+    return {
+        "configured": bool(cfg["api_key"]),
+        "source": cfg["source"],
+        "base_url": cfg["base_url"],
+        "model": cfg["model"],
+        "has_key": bool(cfg["api_key"]),
+        "api_key_masked": _mask_key(cfg["api_key"]),
+        "key_from": key_from,
+    }
+
+
+@app.route("/api/llm_config")
+@teacher_required
+def api_llm_config_get(u):
+    """读取当前生效的 LLM 配置（含来源与脱敏密钥）。"""
+    return jsonify(_llm_config_payload())
+
+
+@app.route("/api/llm_config", methods=["POST"])
+@teacher_required
+def api_llm_config_set(u):
+    """保存网页端 LLM 配置（api_key 留空 = 不修改已保存的密钥），保存后即时生效。"""
+    data = request.get_json(silent=True) or {}
+    base_url = str(data.get("base_url") or "").strip()
+    model = str(data.get("model") or "").strip()
+    api_key = str(data.get("api_key") or "").strip()
+    if base_url and not base_url.startswith(("http://", "https://")):
+        return jsonify({"error": "Base URL 需以 http:// 或 https:// 开头。"}), 400
+    with _llm_cfg_lock:
+        cfg = _read_llm_web_config()
+        if api_key:
+            cfg["api_key"] = api_key
+        cfg["base_url"] = base_url
+        cfg["model"] = model
+        _write_llm_web_config(cfg)
+    return jsonify(_llm_config_payload())
+
+
+@app.route("/api/llm_config/test", methods=["POST"])
+@teacher_required
+def api_llm_config_test(u):
+    """用表单当前值（含未保存字段）发一次最小对话请求，验证配置连通性。"""
+    data = request.get_json(silent=True) or {}
+    cur = get_llm_config()
+    api_key = str(data.get("api_key") or "").strip() or cur["api_key"]
+    base_url = str(data.get("base_url") or "").strip() or cur["base_url"]
+    model = str(data.get("model") or "").strip() or cur["model"]
+    if not api_key:
+        return jsonify({"ok": False, "error": "尚未配置 API Key。"})
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=api_key, base_url=base_url, timeout=20, max_retries=0)
+        kwargs = {"model": model,
+                  "messages": [{"role": "user", "content": "请只回复两个字：连通"}],
+                  "max_tokens": 16}
+        t0 = _time.time()
+        try:
+            resp = client.chat.completions.create(**kwargs)
+        except Exception as e:
+            # 部分新模型（o 系 / gpt-5 系等）不接受 max_tokens，去掉后重试一次
+            if "max_tokens" in str(e) or "max_completion_tokens" in str(e):
+                kwargs.pop("max_tokens", None)
+                resp = client.chat.completions.create(**kwargs)
+            else:
+                raise
+        elapsed = round(_time.time() - t0, 1)
+        reply = ""
+        if getattr(resp, "choices", None):
+            reply = (resp.choices[0].message.content or "").strip()
+        return jsonify({"ok": True, "elapsed": elapsed, "model": model, "reply": reply[:60]})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)[:400]})
 
 
 # ---------- Main ----------

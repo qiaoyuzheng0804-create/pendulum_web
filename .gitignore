@@ -28,3 +28,5 @@ firmware/**/ExtDll.iex
 # 平台运行时数据
 platform.db
 .secret_key
+
+llm_config.json

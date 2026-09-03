@@ -3,15 +3,16 @@
 师生交互平台（Blueprint）
 ========================
 登录认证（Flask session cookie）+ 实验报告提交批改 + 实验课全流程闭环
-（课前预习 → 课中实验 → 课后报告 → 教师批改反馈）+ 师生多模态问答
-（文字 / 图片 / 语音附件）+ 教学数据看板统计。SQLite，零外部依赖。
+（课前预习 → 课中实验 → 课后报告 → 教师批改反馈）+ 师生公共问答讨论区
+（全员可见、师生均可回复；文字 / 图片 / 语音附件）+ 教学数据看板统计。
+SQLite，零外部依赖。
 
 表：
   users        —— 用户名 / 口令哈希 / 角色(student|teacher) / 姓名 / 班级(class_name)
   submissions  —— 报告：学生、实验、分节 Markdown 内容(JSON)、状态、分数、评语
   progress     —— 学习流程：每学生×每实验的 课前预习 / 课中实验 完成标记
   questions    —— 学生提问（可关联某实验；标题 + 正文）
-  replies      —— 问答线程回复（教师或提问学生本人，支持多轮）
+  replies      —— 问答线程回复（公共讨论区：教师和全体学生均可回复，支持多轮）
   attachments  —— 消息附件（image / audio / file），归属 question 或 reply
 首次运行自动建库并预置演示账号：teacher / 123456（教师）、student / 123456（学生）；
 若不存在任何"带班级的学生"，还会预置 3 个演示班级及学生（便于看板演示）。
@@ -641,14 +642,15 @@ def flow_overview(u):
     return jsonify(out)
 
 
-# ---------- 师生问答（多模态：文字 / 图片 / 语音附件） ----------
+# ---------- 师生问答（公共讨论区：全员可见，师生均可回复） ----------
 @platform_bp.route("/api/qas")
 @login_required
 def qa_list(u):
-    scope = request.args.get("scope", "mine" if u["role"] == "student" else "all")
+    """公共问答区：所有登录用户可见全部问题；scope=mine 只看自己的提问。"""
+    scope = request.args.get("scope", "all")
     pending_only = request.args.get("pending") == "1"
     with _conn() as c:
-        if u["role"] == "teacher" or scope == "all":
+        if scope == "all":
             sql = ("SELECT q.*, us.display_name AS q_name, us.class_name AS q_class,"
                    " (SELECT COUNT(*) FROM replies r WHERE r.qid=q.id) AS reply_count,"
                    " (SELECT MAX(r.created_at) FROM replies r WHERE r.qid=q.id) AS last_reply_at,"
@@ -706,12 +708,11 @@ def qa_create(u):
 @platform_bp.route("/api/qas/<int:qid>")
 @login_required
 def qa_get(u, qid):
+    """问题详情 + 回复线程（公共讨论区：所有登录用户可见）。"""
     with _conn() as c:
         q = c.execute("SELECT * FROM questions WHERE id=?", (qid,)).fetchone()
         if q is None:
             return jsonify({"error": "问题不存在。"}), 404
-        if u["role"] != "teacher" and q["username"] != u["username"]:
-            return jsonify({"error": "无权查看他人提问。"}), 403
         repl = c.execute("SELECT * FROM replies WHERE qid=? ORDER BY id", (qid,)).fetchall()
     d = dict(q)
     exp = get_experiment(d["exp_id"]) if d["exp_id"] else None
@@ -730,6 +731,7 @@ def qa_get(u, qid):
 @platform_bp.route("/api/qas/<int:qid>/reply", methods=["POST"])
 @login_required
 def qa_reply(u, qid):
+    """回复提问（公共讨论区：教师和所有学生均可回复）。"""
     data = request.get_json(silent=True) or {}
     body = (data.get("body") or "").strip()
     if not body and not data.get("attachments"):
@@ -738,8 +740,6 @@ def qa_reply(u, qid):
         q = c.execute("SELECT * FROM questions WHERE id=?", (qid,)).fetchone()
         if q is None:
             return jsonify({"error": "问题不存在。"}), 404
-        if u["role"] != "teacher" and q["username"] != u["username"]:
-            return jsonify({"error": "只有提问学生本人或教师可以回复。"}), 403
         cur = c.execute("INSERT INTO replies(qid,username,body,created_at)"
                         " VALUES(?,?,?,?)", (qid, u["username"], body, _now()))
         rid = cur.lastrowid
@@ -782,9 +782,10 @@ def qa_attachment_upload(u):
 
 
 def _can_access_attachment(username, role, att_row):
-    """附件可见性：temp（未绑定）仅上传者本人可见；绑定后所属线程参与者或教师可见。"""
+    """附件可见性：temp（未绑定）仅存在于上传请求的生命周期内；绑定到问答
+    线程后属于公共讨论内容，登录用户均可见。"""
     if att_row["owner_kind"] == "temp":
-        return True  # 未绑定附件只存在于一次请求的生命周期内，前端会话内使用
+        return True
     with _conn() as c:
         if att_row["owner_kind"] == "question":
             q = c.execute("SELECT username FROM questions WHERE id=?",
@@ -793,9 +794,7 @@ def _can_access_attachment(username, role, att_row):
             q = c.execute(
                 "SELECT q.username FROM replies r JOIN questions q ON q.id=r.qid"
                 " WHERE r.id=?", (att_row["owner_id"],)).fetchone()
-    if q is None:
-        return False
-    return role == "teacher" or q["username"] == username
+    return q is not None
 
 
 @platform_bp.route("/api/qas/attachment/<int:aid>/file")
