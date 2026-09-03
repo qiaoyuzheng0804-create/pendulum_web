@@ -610,6 +610,9 @@
   .mf-score.off{color:var(--t3);font-weight:500;font-size:0.74rem;}
   .mf-actions{flex-shrink:0;min-width:92px;text-align:right;}
   .badge-sub{display:inline-block;font-size:0.68rem;font-weight:700;color:var(--a1);background:var(--i3b);border-radius:999px;padding:3px 10px;white-space:nowrap;}
+  /* 报告草稿编辑器的实时预览框 */
+  .rep-preview{margin-top:8px;border:1px dashed var(--border);border-radius:10px;padding:10px 14px;background:var(--bg2);}
+  .rep-preview-label{font-size:0.68rem;color:var(--t3);letter-spacing:.06em;margin-bottom:4px;}
 
   /* ============ 看板图表形态 2：班级环形卡 / 竖向柱状图 / 流程圆点 ============ */
   .cls-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;}
@@ -2622,6 +2625,7 @@ async function renderStudentReports(root){
       <div class="cp-desc">更新于 ${r.updated_at.replace('T',' ')}</div></div>
       <div style="min-width:110px;display:flex;align-items:center;justify-content:flex-end;gap:6px;">
         ${r.status==='submitted'?`<button class="icon-btn-line" title="撤销提交（回到草稿）" onclick="event.stopPropagation();withdrawReport(${r.id})"><svg class="icon"><use href="#i-undo"/></svg></button>`:''}
+        ${r.status==='draft'&&r.id?`<button class="icon-btn-line" title="删除草稿" onclick="event.stopPropagation();deleteReport(${r.id})"><svg class="icon"><use href="#i-trash"/></svg></button>`:''}
         ${_statusBadge(r.status,r.score)}
       </div>
     </div>`).join('');
@@ -2661,8 +2665,10 @@ async function openReportEditor(rid,fixedExp){
       return `<div class="field-label"><span class="zh">${s.title}</span></div>${tables}
         <div class="theory-note">${v?renderChatMarkdown(v):'<em style="color:var(--t3);">（未填写）</em>'}</div>`;
     }
+    // 草稿编辑态：源码 textarea + 下方实时预览（公式/排版即刻渲染，不出现裸 TeX）
     return `<div class="field-label"><span class="zh">${s.title}</span></div>${tables}
-      <textarea id="sec_${s.id}" style="width:100%;min-height:110px;padding:12px 14px;border-radius:10px;border:1px solid var(--border);background:var(--inp);color:var(--text);font-size:0.88rem;font-family:inherit;line-height:1.7;resize:vertical;" placeholder="${s.placeholder.replace(/"/g,'&quot;')}">${(_reportEditor.content[s.id]||s.prefill||'')}</textarea>`;
+      <textarea id="sec_${s.id}" style="width:100%;min-height:110px;padding:12px 14px;border-radius:10px;border:1px solid var(--border);background:var(--inp);color:var(--text);font-size:0.88rem;font-family:inherit;line-height:1.7;resize:vertical;" placeholder="${s.placeholder.replace(/"/g,'&quot;')}" oninput="repPreview(this)">${v}</textarea>
+      <div class="rep-preview"><div class="rep-preview-label">预览</div><div class="theory-note">${v.trim()?renderChatMarkdown(v):'<em style="color:var(--t3);">（暂无内容）</em>'}</div></div>`;
   }).join('');
   const statusNote=ro?(_reportEditor.status==='graded'
     ?`<div class="status success" style="display:block;">已批改：${sub.score!=null?sub.score:'—'} 分${sub.feedback?' · 教师评语：'+esc(sub.feedback):''}</div>`
@@ -2672,7 +2678,8 @@ async function openReportEditor(rid,fixedExp){
       ?`<button class="btn btn-outline" onclick="withdrawReport(${_reportEditor.id})"><svg class="icon"><use href="#i-undo"/></svg> 撤销提交</button>`
       :'')
     :`<button class="btn btn-outline" id="btn_save_draft" onclick="saveReport('draft')"><svg class="icon"><use href="#i-check"/></svg> 保存草稿</button>
-      <button class="btn btn-primary" onclick="saveReport('submit')"><svg class="icon"><use href="#i-play"/></svg> 提交报告</button>`;
+      <button class="btn btn-primary" onclick="saveReport('submit')"><svg class="icon"><use href="#i-play"/></svg> 提交报告</button>
+      ${_reportEditor.id?`<span style="flex:1;"></span><button class="btn btn-outline" style="color:var(--red);" onclick="deleteReport(${_reportEditor.id})"><svg class="icon"><use href="#i-trash"/></svg> 删除草稿</button>`:''}`;
   area.innerHTML=`
     <div class="card">
       <div class="card-header"><h2>${tpl.title}</h2><div class="tag">${ro?_statusBadge(_reportEditor.status,sub.score):(_reportEditor.id?'编辑中':'新建')}</div></div>
@@ -2692,6 +2699,28 @@ async function withdrawReport(rid){
   const d=await r.json();
   if(!r.ok){showToast(d.error||'撤销失败','error');return;}
   showToast('已撤销提交，报告回到草稿','info');
+  renderReports();
+}
+
+// 草稿编辑器实时预览：textarea 输入 → 下方预览框渲染 Markdown+KaTeX（200ms 防抖）
+let _repPreviewTimer=null;
+function repPreview(ta){
+  clearTimeout(_repPreviewTimer);
+  _repPreviewTimer=setTimeout(()=>{
+    const box=ta.nextElementSibling&&ta.nextElementSibling.querySelector('.theory-note');
+    if(!box)return;
+    box.innerHTML=ta.value.trim()?renderChatMarkdown(ta.value):'<em style="color:var(--t3);">（暂无内容）</em>';
+  },200);
+}
+
+async function deleteReport(rid){
+  if(!confirm('删除后草稿内容不可恢复。确定删除这份草稿吗？'))return;
+  const r=await fetch('/api/reports/'+rid,{method:'DELETE'});
+  const d=await r.json();
+  if(!r.ok){showToast(d.error||'删除失败','error');return;}
+  showToast('草稿已删除','info');
+  const area=document.getElementById('report_editor_area');
+  if(area)area.innerHTML='';
   renderReports();
 }
 

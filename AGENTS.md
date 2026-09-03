@@ -43,7 +43,7 @@
 ## 平台 API 速查（platform_hub.py / app.py）
 
 - 认证：`POST /api/auth/login|logout`、`GET /api/auth/me`（含 class_name）
-- 报告：`GET|POST /api/reports`（教师支持 `?exp=&status=&class=` 筛选）、`GET /api/reports/<id>`、`POST .../submit`、`POST .../<id>/withdraw`（学生撤销提交：submitted→draft）、`POST .../<id>/grade|return`、`GET /api/report_template/<exp>`
+- 报告：`GET|POST /api/reports`（教师支持 `?exp=&status=&class=` 筛选）、`GET /api/reports/<id>`、`POST .../submit`、`POST .../<id>/withdraw`（学生撤销提交：submitted→draft）、`DELETE /api/reports/<id>`（学生删除草稿；已提交需先撤销，已批改不可删）、`POST .../<id>/grade|return`、`GET /api/report_template/<exp>`
 - 全流程：`POST /api/progress/pre|lab`（学生标记预习/课中）、`GET /api/flow`（学生=10 实验状态；教师=`?class=` 全班聚合）
 - 问答：`GET /api/qas`（公共讨论区：默认 scope=all 全员可见；scope=mine 只看自己的；教师可加 `&pending=1` 筛待回复）、`POST /api/qas`（学生提问，attachments=[附件id]）、`GET /api/qas/<id>`（全员可看）、`DELETE /api/qas/<id>`（撤回提问，仅本人，连回复附件一起删）、`POST /api/qas/<id>/reply`（教师和全体学生均可回复）、`DELETE /api/qas/reply/<rid>`（撤回回复，仅本人）
 - 附件：`POST /api/qas/attachment`（multipart file，图片/音频/文档白名单）、`GET /api/qas/attachment/<id>/file`（绑定到问答线程后登录用户均可见）
@@ -78,7 +78,7 @@
 6. **marked v12 会吃掉 `$...$` 内的 `\,` `\;` `\{` `\}`**（如 `0.087\,\mathrm{rad}` 变 `0.087,rad`）。`renderTheoryMarkdown`/`renderChatMarkdown` 已用 `protectMathSpans/restoreMathSpans` 占位符把公式摘出再过 marked，**勿删这套保护**，也别绕过它直接 `marked.parse`。
 7. **teaching/*.json 里反斜杠必须双写**：JSON 中单写 `\frac`、`\right` 会被解码成换页符/回车符 + 残字（三线摆指导踩过，公式变成 `rac{...}` 乱码）。写完用 `json.load` + 扫控制字符自检。公式统一 `$`/`$$` 包裹，KaTeX 不认的字符（≪、∝、℃、全角逗号）在公式内要写成 `\ll`、`\propto`、`^{\circ}` 等；行文里的 Unicode 记号（θ²、T_d 等）是刻意的纯文本风格，别批量改写。
 8. **platform_hub.py 写库必须放在 `with _conn() as c:` 块内**：sqlite3 的 `with` 负责提交，块外执行的 UPDATE 既不提交、还会一直持有写锁，把后续所有写请求打成 `database is locked`（迁移 `_upgrade_demo_reports` 踩过）。
-9. **已提交/已批改的报告前端只读渲染**（`openReportEditor` 按 `status` 分支：draft 走 textarea 编辑器，其余走 `repTableHtml(...,false)` + `renderChatMarkdown` 只读视图 + 可选"撤销提交"按钮）；批改视图与学生只读视图的 `.theory-note` 都要在 `whenKatex` 里补渲染一次，否则 KaTeX 未就绪时公式闪现 `$...$` 源码。
+9. **已提交/已批改的报告前端只读渲染**（`openReportEditor` 按 `status` 分支：draft 走 textarea 编辑器 + `.rep-preview` 实时预览框（`repPreview()` 输入防抖渲染 Markdown+KaTeX，避免只见 TeX 源码），其余走 `repTableHtml(...,false)` + `renderChatMarkdown` 只读视图 + 可选"撤销提交"按钮）；批改视图、学生只读视图与草稿预览的 `.theory-note` 都要在 `whenKatex` 里补渲染一次，否则 KaTeX 未就绪时公式闪现 `$...$` 源码。
 
 ## 约定
 

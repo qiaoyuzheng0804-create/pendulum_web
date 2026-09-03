@@ -487,6 +487,20 @@ def report_submit(u, rid):
     return jsonify({"ok": True, "status": "submitted"})
 
 
+@platform_bp.route("/api/reports/<int:rid>", methods=["DELETE"])
+@login_required
+def report_delete(u, rid):
+    """学生删除自己的草稿报告；已提交的需先撤销，已批改的不可删。"""
+    with _conn() as c:
+        row = c.execute("SELECT * FROM submissions WHERE id=?", (rid,)).fetchone()
+        if row is None or row["username"] != u["username"]:
+            return jsonify({"error": "报告不存在。"}), 404
+        if row["status"] != "draft":
+            return jsonify({"error": "仅草稿可以删除；已提交的报告请先撤销提交。"}), 400
+        c.execute("DELETE FROM submissions WHERE id=?", (rid,))
+    return jsonify({"ok": True})
+
+
 @platform_bp.route("/api/reports/<int:rid>/withdraw", methods=["POST"])
 @login_required
 def report_withdraw(u, rid):
