@@ -398,6 +398,10 @@ def write_annotated_video(cap, frame_boxes, frame_assign, origins, v_unit, h_uni
 
     writer = cv2.VideoWriter(tmp_path, fourcc, fps, (w, h))
     if not writer.isOpened():
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
         raise RuntimeError("无法创建视频写入器（尝试 mp4v 编码失败）。")
 
     cap.set(cv2.CAP_PROP_POS_FRAMES, meta["start_frame"])
@@ -458,9 +462,17 @@ def write_annotated_video(cap, frame_boxes, frame_assign, origins, v_unit, h_uni
             progress_callback(progress_base + n + 1, progress_total)
 
     writer.release()
-    if os.path.exists(out_path):
-        os.remove(out_path)
-    os.replace(tmp_path, out_path)
+    try:
+        if os.path.exists(out_path):
+            os.remove(out_path)
+        os.replace(tmp_path, out_path)
+    except OSError:
+        # 写入中途失败时清理临时文件，避免 %TEMP% 遗留半成品 mp4
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
     return out_path
 
 
@@ -654,12 +666,14 @@ def process_ciliniudun(video_path, output_dir, model_path, calibration,
     out_video = None
     if gen_video and cfg["video_output_scale"] > 0:
         cap2 = cv2.VideoCapture(video_path)
-        if cap2.isOpened():
-            out_video = os.path.join(output_dir, f"{prefix}_tracked_video.mp4")
-            write_annotated_video(cap2, frame_boxes, frame_assign, origins, v_unit,
-                                  h_unit, out_video, meta, cfg,
-                                  progress_callback=_on_progress,
-                                  progress_base=n_track, progress_total=total_progress)
+        try:
+            if cap2.isOpened():
+                out_video = os.path.join(output_dir, f"{prefix}_tracked_video.mp4")
+                write_annotated_video(cap2, frame_boxes, frame_assign, origins, v_unit,
+                                      h_unit, out_video, meta, cfg,
+                                      progress_callback=_on_progress,
+                                      progress_base=n_track, progress_total=total_progress)
+        finally:
             cap2.release()
 
     _on_progress(total_progress, total_progress)

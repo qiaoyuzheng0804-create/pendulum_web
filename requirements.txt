@@ -6,6 +6,11 @@ opencv-python==4.13.0.92
 Pillow>=10,<13
 ultralytics==8.2.103
 torch  # YOLOv8 runtime (pulled in by ultralytics, declared explicitly)
+# 树莓派实时取流的录像封装（自带静态 ffmpeg，转 H.264 MP4，浏览器可直接内联播放）；
+# 不装也能跑：processor/pi_manager.py 会退回 cv2.VideoWriter(mp4v)，画质略降且浏览器播不了
+imageio-ffmpeg>=0.4.9
+# 注意：本组版本（numpy 1.24.4 等）仅提供 Python 3.8~3.11 的 wheel，
+# Python 3.12+ 请升级 numpy/scipy/pandas 到对应版本；torch 建议按 CUDA 环境固定大版本
 
 # Numerical & data processing
 numpy==1.24.4

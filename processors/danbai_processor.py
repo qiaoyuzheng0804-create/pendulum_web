@@ -398,9 +398,16 @@ def plot_angle_time(result_dict, save_path, cfg, title):
     plt.close()
 
 
+def draw_text(img, txt, org, scale=0.6, color=(0, 255, 255), thick=1):
+    """带黑色描边的 putText（标注视频用；cv2 画不了中文，文案一律 ASCII）。"""
+    cv2.putText(img, txt, org, cv2.FONT_HERSHEY_SIMPLEX, scale, (0, 0, 0), thick + 3, cv2.LINE_AA)
+    cv2.putText(img, txt, org, cv2.FONT_HERSHEY_SIMPLEX, scale, color, thick, cv2.LINE_AA)
+
+
 def process_danbai(video_path, output_dir, model_path, calibration,
                    skip_initial_seconds=3.0, slow_motion_factor=1.0,
-                   target_cycles=400, model=None, progress_callback=None):
+                   target_cycles=400, model=None, progress_callback=None,
+                   gen_video=True, output_video_max_side=1280):
     cfg = DanbaiConfig()
     cfg.skip_initial_seconds = skip_initial_seconds
     cfg.target_cycles = target_cycles
@@ -435,6 +442,23 @@ def process_danbai(video_path, output_dir, model_path, calibration,
 
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     basename = os.path.splitext(os.path.basename(video_path))[0]
+    vw = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    vh = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    # ---- 标注视频：与源视频同帧率、从第 0 帧起逐帧写 ----
+    # 跳过段原样写入（不画标注），提前停帧时视频也同步截断，这样视频的帧号/时间轴
+    # 与 CSV 里的 time_s 严格对齐；缺检测的帧画 NO DETECTION，不丢帧。
+    vid_path = os.path.join(output_dir, "annotated_video.mp4")
+    out_scale = min(1.0, float(output_video_max_side) / max(1, max(vw, vh)))
+    out_w = int(round(vw * out_scale))
+    out_h = int(round(vh * out_scale))
+    out_fps = max(1.0, min(240.0, fps))
+    writer = None
+    if gen_video and out_w > 0 and out_h > 0:
+        writer = cv2.VideoWriter(vid_path, cv2.VideoWriter_fourcc(*"mp4v"), out_fps, (out_w, out_h))
+        if not writer.isOpened():
+            print("[WARN] VideoWriter 打不开，标注视频将不会生成。", flush=True)
+            writer = None
 
     times, centers, confs = [], [], []
     prev_center = None
@@ -458,6 +482,9 @@ def process_danbai(video_path, output_dir, model_path, calibration,
         # 跳过段直接不跑推理：此前 predict 在跳过判断之前，白烧 GPU
         #（跳 3 秒 × 30fps ≈ 90 次无效推理/视频）
         if frame_idx < skip_frames:
+            if writer is not None:
+                writer.write(frame if out_scale >= 1.0
+                             else cv2.resize(frame, (out_w, out_h), interpolation=cv2.INTER_AREA))
             frame_idx += 1
             continue
 
@@ -465,7 +492,7 @@ def process_danbai(video_path, output_dir, model_path, calibration,
             source=frame, conf=cfg.conf_thres, iou=cfg.iou_thres,
             imgsz=cfg.imgsz, max_det=cfg.max_det, device=cfg.device, verbose=False)
 
-        det_centers, det_scores = [], []
+        det_centers, det_scores, det_boxes = [], [], []
         if len(results) > 0 and results[0].boxes is not None and len(results[0].boxes) > 0:
             boxes_xyxy = results[0].boxes.xyxy.cpu().numpy()
             scores = results[0].boxes.conf.cpu().numpy()
@@ -475,8 +502,11 @@ def process_danbai(video_path, output_dir, model_path, calibration,
                 cy = 0.5 * (y1 + y2)
                 det_centers.append(np.array([cx, cy], dtype=np.float64))
                 det_scores.append(float(sc))
+                det_boxes.append((float(x1), float(y1), float(x2), float(y2)))
 
         chosen_center = np.array([np.nan, np.nan], dtype=np.float64)
+        chosen_box = None
+        chosen_score = 0.0
         if len(det_centers) > 0:
             if cfg.use_tracking_like_selection and prev_center is not None and np.all(np.isfinite(prev_center)):
                 dists = [np.linalg.norm(c - prev_center) for c in det_centers]
@@ -484,6 +514,8 @@ def process_danbai(video_path, output_dir, model_path, calibration,
             else:
                 best_idx = int(np.argmax(det_scores))
             chosen_center = det_centers[best_idx]
+            chosen_box = det_boxes[best_idx]
+            chosen_score = det_scores[best_idx]
             prev_center = chosen_center.copy()
 
         times.append(t)
@@ -497,6 +529,34 @@ def process_danbai(video_path, output_dir, model_path, calibration,
         online_raw_angles.append(raw_ang)
         smooth_ang = moving_average_tail(online_raw_angles, cfg.online_smooth_window)
         online_smooth_angles.append(smooth_ang)
+
+        if writer is not None:
+            disp = frame if out_scale >= 1.0 else cv2.resize(frame, (out_w, out_h), interpolation=cv2.INTER_AREA)
+            s = out_scale
+
+            def P(p):
+                return (int(round(p[0] * s)), int(round(p[1] * s)))
+
+            o_px = P(center_origin)
+            e_up = P((center_origin[0] + 400 * vertical_unit[0], center_origin[1] + 400 * vertical_unit[1]))
+            e_dn = P((center_origin[0] - 400 * vertical_unit[0], center_origin[1] - 400 * vertical_unit[1]))
+            cv2.line(disp, e_up, e_dn, (80, 80, 255), 1, cv2.LINE_AA)
+            cv2.circle(disp, o_px, 6, (0, 255, 255), -1)
+            draw_text(disp, "origin", (o_px[0] + 8, o_px[1] - 8), 0.5, (0, 255, 255), 1)
+            if chosen_box is not None:
+                x1, y1, x2, y2 = chosen_box
+                cv2.rectangle(disp, P((x1, y1)), P((x2, y2)), (0, 215, 255), 2)
+                c_px = P(chosen_center)
+                cv2.circle(disp, c_px, 5, (0, 215, 255), -1)
+                cv2.line(disp, o_px, c_px, (0, 215, 255), 2, cv2.LINE_AA)
+                draw_text(disp, "%.2f deg" % raw_ang, (c_px[0] + 8, c_px[1] + 22), 0.62, (0, 215, 255), 2)
+            else:
+                draw_text(disp, "NO DETECTION", (10, 100), 0.7, (0, 0, 255), 2)
+            draw_text(disp, "frame %d / %d    t %.3f s    conf %s"
+                      % (frame_idx, max(0, total_frames - 1), t,
+                         "%.2f" % chosen_score if chosen_box is not None else "--"),
+                      (10, 26), 0.55, (230, 230, 230))
+            writer.write(disp)
 
         if cfg.enable_early_stop_by_cycles and len(online_smooth_angles) >= max(3, cfg.zero_cross_min_index + 2):
             a1 = online_smooth_angles[-2]
@@ -520,6 +580,8 @@ def process_danbai(video_path, output_dir, model_path, calibration,
             progress_callback(frame_idx, total_frames)
 
     cap.release()
+    if writer is not None:
+        writer.release()
     if progress_callback:
         progress_callback(total_frames, total_frames)
 
@@ -539,9 +601,12 @@ def process_danbai(video_path, output_dir, model_path, calibration,
     plot_angle_time(result_dict=result, save_path=plot_path, cfg=cfg,
                     title=f"{basename} Angle-Time Curve")
 
-    return {
+    out = {
         "csv_path": out_csv,
         "peaks_csv": peaks_csv,
         "plot_path": plot_path,
-        "num_points": len(result["df"])
+        "num_points": len(result["df"]),
     }
+    if writer is not None:
+        out["video_path"] = vid_path
+    return out

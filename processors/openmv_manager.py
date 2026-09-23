@@ -533,6 +533,13 @@ class OpenMVManager:
         return {"success": True}
 
     def _cleanup_camera(self) -> None:
+        # 必须先停 worker 再置 None：连接失败/超时分支也会走到这里，
+        # 不 set stop 事件的话线程会无限重连并永久占用串口（幽灵线程）
+        if self._camera_worker is not None:
+            self._camera_stop.set()
+            self._camera_worker.join(timeout=3.0)
+            if self._camera_worker.is_alive():
+                print("[OpenMV] 摄像头线程未在 3s 内退出，端口释放可能延迟", flush=True)
         self._camera_worker = None
         while not self._frame_queue.empty():
             try:
@@ -541,6 +548,11 @@ class OpenMVManager:
                 break
 
     def _cleanup_control(self) -> None:
+        if self._control_worker is not None:
+            self._control_stop.set()
+            self._control_worker.join(timeout=3.0)
+            if self._control_worker.is_alive():
+                print("[OpenMV] 云台线程未在 3s 内退出，端口释放可能延迟", flush=True)
         self._control_worker = None
         while not self._command_queue.empty():
             try:

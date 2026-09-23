@@ -4,3 +4,4 @@ from .niubai_processor import process_niubai
 from .ciliniudun_processor import process_ciliniudun
 from . import symbolic_regression
 from . import openmv_manager
+from . import pi_manager

@@ -242,6 +242,10 @@ def init_platform(app, db_path):
         cols = [r[1] for r in c.execute("PRAGMA table_info(users)")]
         if "class_name" not in cols:
             c.execute("ALTER TABLE users ADD COLUMN class_name TEXT NOT NULL DEFAULT ''")
+        # 幂等迁移：老库 attachments 无 owner 列 → ALTER 补列（附件归属校验用）
+        att_cols = [r[1] for r in c.execute("PRAGMA table_info(attachments)")]
+        if "owner" not in att_cols:
+            c.execute("ALTER TABLE attachments ADD COLUMN owner TEXT NOT NULL DEFAULT ''")
         # 预置演示账号（仅当用户表为空时）
         if c.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"] == 0:
             c.execute(
@@ -326,15 +330,20 @@ def _attachments_of(owner_kind, owner_id):
     return [dict(r) for r in rows]
 
 
-def _bind_attachments(att_ids, owner_kind, owner_id):
-    """把提问/回复请求中带上的附件 id 绑定到刚创建的消息上。"""
+def _bind_attachments(att_ids, owner_kind, owner_id, username):
+    """把提问/回复请求中带上的附件 id 绑定到刚创建的消息上。
+
+    只允许绑定"本人上传的 temp 附件"，防止把他人刚上传、尚未绑定的附件
+    通过枚举 id 挂进自己的消息。
+    """
     if not att_ids:
         return
     marks = ",".join("?" for _ in att_ids)
     with _conn() as c:
         c.execute(
             f"UPDATE attachments SET owner_kind=?, owner_id=? WHERE id IN ({marks})"
-            " AND owner_kind='temp'", (owner_kind, owner_id, *att_ids))
+            " AND owner_kind='temp' AND owner=?",
+            (owner_kind, owner_id, *att_ids, username))
 
 
 # ---------- blueprint ----------
@@ -348,8 +357,32 @@ def login_page():
 
 
 # ---------- 认证 ----------
+# 登录失败限频（内存态，重启清零）：同一 IP 10 分钟内失败满 8 次后暂时拒绝，
+# 防止对默认口令账号的无限制爆破
+_LOGIN_FAILS = {}
+_LOGIN_FAIL_LIMIT = 8
+_LOGIN_FAIL_WINDOW = 600.0
+
+
+def _login_rate_ok(ip):
+    now = datetime.now().timestamp()
+    fails = [t for t in _LOGIN_FAILS.get(ip, []) if now - t < _LOGIN_FAIL_WINDOW]
+    _LOGIN_FAILS[ip] = fails
+    return len(fails) < _LOGIN_FAIL_LIMIT
+
+
+def _login_record_fail(ip):
+    now = datetime.now().timestamp()
+    fails = [t for t in _LOGIN_FAILS.get(ip, []) if now - t < _LOGIN_FAIL_WINDOW]
+    fails.append(now)
+    _LOGIN_FAILS[ip] = fails
+
+
 @platform_bp.route("/api/auth/login", methods=["POST"])
 def auth_login():
+    ip = request.remote_addr or "?"
+    if not _login_rate_ok(ip):
+        return jsonify({"error": "失败次数过多，请 10 分钟后再试。"}), 429
     data = request.get_json(silent=True) or {}
     username = (data.get("username") or "").strip()
     password = data.get("password") or ""
@@ -358,7 +391,9 @@ def auth_login():
     with _conn() as c:
         row = c.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
     if row is None or not check_password_hash(row["pw_hash"], password):
+        _login_record_fail(ip)
         return jsonify({"error": "用户名或密码错误。"}), 401
+    _LOGIN_FAILS.pop(ip, None)
     session.clear()
     session["uid"] = row["id"]
     session.permanent = True
@@ -522,7 +557,8 @@ def report_grade(u, rid):
     data = request.get_json(silent=True) or {}
     score = data.get("score")
     feedback = (data.get("feedback") or "").strip()
-    if score is None or not isinstance(score, (int, float)) or not (0 <= float(score) <= 100):
+    if score is None or isinstance(score, bool) or not isinstance(score, (int, float)) \
+            or not (0 <= float(score) <= 100):
         return jsonify({"error": "分数须为 0~100 的数字。"}), 400
     with _conn() as c:
         row = c.execute("SELECT * FROM submissions WHERE id=?", (rid,)).fetchone()
@@ -544,11 +580,26 @@ def report_return(u, rid):
         row = c.execute("SELECT * FROM submissions WHERE id=?", (rid,)).fetchone()
         if row is None:
             return jsonify({"error": "报告不存在。"}), 404
-        c.execute("UPDATE submissions SET status='draft', score=NULL, feedback=?,"
+        c.execute("UPDATE submissions SET status='draft', score=NULL, graded_at=NULL, feedback=?,"
                   " updated_at=? WHERE id=?",
                   (("退回修改：" + (request.get_json(silent=True) or {}).get("feedback", "")).strip(),
                    _now(), rid))
     return jsonify({"ok": True, "status": "draft"})
+
+
+@platform_bp.route("/api/reports/<int:rid>/ungrade", methods=["POST"])
+@teacher_required
+def report_ungrade(u, rid):
+    """教师撤销批改：已批改回到待批改，清空分数/评语，学生可重新看到待批改状态。"""
+    with _conn() as c:
+        row = c.execute("SELECT * FROM submissions WHERE id=?", (rid,)).fetchone()
+        if row is None:
+            return jsonify({"error": "报告不存在。"}), 404
+        if row["status"] != "graded":
+            return jsonify({"error": "仅已批改的报告可以撤销批改。"}), 400
+        c.execute("UPDATE submissions SET status='submitted', score=NULL, feedback='',"
+                  " graded_at=NULL, updated_at=? WHERE id=?", (_now(), rid))
+    return jsonify({"ok": True, "status": "submitted"})
 
 
 # ---------- 用户管理（教师） ----------
@@ -639,6 +690,38 @@ def progress_lab(u):
         c.execute("UPDATE progress SET lab_done=1, lab_at=? WHERE username=? AND exp_id=?",
                   (now, u["username"], exp_id))
     return jsonify({"ok": True, "lab_done": 1})
+
+
+@platform_bp.route("/api/progress/pre/undo", methods=["POST"])
+@login_required
+def progress_pre_undo(u):
+    """学生撤销课前预习标记：pre_done 1 -> 0。"""
+    if u["role"] != "student":
+        return jsonify({"error": "仅学生可撤销预习标记。"}), 403
+    data = request.get_json(silent=True) or {}
+    exp_id = data.get("exp_id") or ""
+    if get_experiment(exp_id) is None:
+        return jsonify({"error": f"Unknown experiment: {exp_id}"}), 400
+    with _conn() as c:
+        c.execute("UPDATE progress SET pre_done=0, pre_at=NULL"
+                  " WHERE username=? AND exp_id=?", (u["username"], exp_id))
+    return jsonify({"ok": True, "pre_done": 0})
+
+
+@platform_bp.route("/api/progress/lab/undo", methods=["POST"])
+@login_required
+def progress_lab_undo(u):
+    """学生撤销课中实验标记：lab_done 1 -> 0（视频分析实验自动标记的也可撤销）。"""
+    if u["role"] != "student":
+        return jsonify({"error": "仅学生可撤销课中实验标记。"}), 403
+    data = request.get_json(silent=True) or {}
+    exp_id = data.get("exp_id") or ""
+    if get_experiment(exp_id) is None:
+        return jsonify({"error": f"Unknown experiment: {exp_id}"}), 400
+    with _conn() as c:
+        c.execute("UPDATE progress SET lab_done=0, lab_at=NULL"
+                  " WHERE username=? AND exp_id=?", (u["username"], exp_id))
+    return jsonify({"ok": True, "lab_done": 0})
 
 
 @platform_bp.route("/api/flow")
@@ -740,7 +823,7 @@ def qa_create(u):
             " VALUES(?,?,?,?,?)",
             (u["username"], exp_id, title[:200], body, now))
         qid = cur.lastrowid
-    _bind_attachments(data.get("attachments") or [], "question", qid)
+    _bind_attachments(data.get("attachments") or [], "question", qid, u["username"])
     return jsonify({"ok": True, "id": qid})
 
 
@@ -782,7 +865,7 @@ def qa_reply(u, qid):
         cur = c.execute("INSERT INTO replies(qid,username,body,created_at)"
                         " VALUES(?,?,?,?)", (qid, u["username"], body, _now()))
         rid = cur.lastrowid
-    _bind_attachments(data.get("attachments") or [], "reply", rid)
+    _bind_attachments(data.get("attachments") or [], "reply", rid, u["username"])
     return jsonify({"ok": True, "id": rid})
 
 
@@ -859,19 +942,19 @@ def qa_attachment_upload(u):
     now = _now()
     with _conn() as c:
         cur = c.execute(
-            "INSERT INTO attachments(owner_kind,owner_id,kind,filename,orig_name,mime,size,"
-            " created_at) VALUES('temp',0,?,?,?,?,?,?)",
-            (kind, stored, f.filename, f.mimetype or "", size, now))
+            "INSERT INTO attachments(owner,owner_kind,owner_id,kind,filename,orig_name,mime,size,"
+            " created_at) VALUES(?,'temp',0,?,?,?,?,?,?)",
+            (u["username"], kind, stored, f.filename, f.mimetype or "", size, now))
         aid = cur.lastrowid
     return jsonify({"id": aid, "kind": kind, "orig_name": f.filename,
                     "size": size, "url": f"/api/qas/attachment/{aid}/file"})
 
 
 def _can_access_attachment(username, role, att_row):
-    """附件可见性：temp（未绑定）仅存在于上传请求的生命周期内；绑定到问答
-    线程后属于公共讨论内容，登录用户均可见。"""
+    """附件可见性：temp（未绑定）仅上传者本人可见，避免他人按 id 枚举下载；
+    绑定到问答线程后属于公共讨论内容，登录用户均可见。"""
     if att_row["owner_kind"] == "temp":
-        return True
+        return att_row["owner"] == username
     with _conn() as c:
         if att_row["owner_kind"] == "question":
             q = c.execute("SELECT username FROM questions WHERE id=?",

@@ -5,9 +5,6 @@
 重构以"新 CLI 处理器输出与旧版逐字节一致"为验收标准。
 """
 
-import os as _os
-_os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
-
 import math
 import os
 
@@ -69,7 +66,7 @@ def angle_from_vertical(v_unit, radius_vec, right_positive: bool = True, unit: s
     ang = -ang
     if not right_positive:
         ang = -ang
-    return ang if unit == "rad" else ang
+    return math.radians(ang) if unit == "rad" else ang
 
 
 def best_detection_center(results, target_class_ids=None):

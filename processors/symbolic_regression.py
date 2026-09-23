@@ -50,7 +50,7 @@ def run_sr_danbai(csv_path, output_dir, pendulum_length=0.5):
 
         return {
             "beta": float(beta), "omega0": float(omega0), "zeta": float(zeta),
-            "damping_type": "欠阻尼" if zeta<0.1 else ("欠阻尼" if zeta<1 else "临界阻尼" if abs(zeta-1)<0.05 else "过阻尼"),
+            "damping_type": "欠阻尼" if zeta<1 else ("临界阻尼" if abs(zeta-1)<0.05 else "过阻尼"),
             "r2": float(r2), "plot_path": plot_path, "pendulum_length": pendulum_length,
         }
     except Exception as e:
@@ -141,7 +141,7 @@ def _fit_underdamped(t, y, theta_eq0, output_dir):
     def ode(state, t):
         th, v = state; q = th - theta_eq
         return [v, -omega0**2*q - 2*beta*v]
-    sol = odeint(ode, [y[0], (y[1]-y[0])/(t[1]-t[0]) if len(t)>1 else 0], t)
+    sol = odeint(ode, [y[0], (y[1]-y[0])/(t[1]-t[0]) if len(t)>1 and t[1]>t[0] else 0], t)
     ode_r2 = r2_score(y, sol[:,0])
     ode_rmse = math.sqrt(np.mean((y-sol[:,0])**2))
 
@@ -193,7 +193,7 @@ def _fit_critical(t, y, theta_eq0, output_dir):
     def ode(state, t):
         th, v = state; q = th - theta_eq
         return [v, -lam**2*q - 2*lam*v]
-    sol = odeint(ode, [y[0], (y[1]-y[0])/(t[1]-t[0]) if len(t)>1 else 0], t)
+    sol = odeint(ode, [y[0], (y[1]-y[0])/(t[1]-t[0]) if len(t)>1 and t[1]>t[0] else 0], t)
     ode_r2 = r2_score(y, sol[:,0])
     ode_rmse = math.sqrt(np.mean((y-sol[:,0])**2))
 
@@ -247,7 +247,7 @@ def _fit_overdamped(t, y, theta_eq0, output_dir):
     def ode(state, t):
         th, v = state; q = th - theta_eq
         return [v, -omega0**2*q - 2*beta*v]
-    sol = odeint(ode, [y[0], (y[1]-y[0])/(t[1]-t[0]) if len(t)>1 else 0], t)
+    sol = odeint(ode, [y[0], (y[1]-y[0])/(t[1]-t[0]) if len(t)>1 and t[1]>t[0] else 0], t)
     ode_r2 = r2_score(y, sol[:,0])
     ode_rmse = math.sqrt(np.mean((y-sol[:,0])**2))
 
@@ -280,4 +280,22 @@ def run_sr_ci_overdamped(csv_path, output_dir):
     return _fit_damped_oscillation(csv_path, output_dir, "过阻尼")
 
 def run_sr_niubai(csv_path, output_dir):
-    return _fit_damped_oscillation(csv_path, output_dir, "欠阻尼")
+    """
+    扭摆 CSV 与底层脚本一致：time_s, angle_deg_raw, angle_deg, gap_filled；
+    angle_deg_raw 可能是空串（未检出/长缝隙留 NaN），所以这里按列名挑出
+    [time_s, angle_deg] 并丢掉缺失行，再交给公共的欠阻尼拟合。
+    """
+    try:
+        df = pd.read_csv(csv_path)
+        if "angle_deg" in df.columns and "time_s" in df.columns:
+            sub = df[["time_s", "angle_deg"]].dropna()
+        else:
+            sub = df.iloc[:, [0, 1]].dropna()
+        sub = sub.apply(pd.to_numeric, errors="coerce").dropna()
+        if len(sub) < 8:
+            return {"error": "有效角度数据不足，无法拟合阻尼"}
+        tmp = os.path.join(output_dir, "_sr_niubai_input.csv")
+        sub.to_csv(tmp, index=False)
+        return _fit_damped_oscillation(tmp, output_dir, "欠阻尼")
+    except Exception as e:
+        return {"error": str(e)}

@@ -15,6 +15,7 @@ import sys
 import json
 import uuid
 import base64
+import collections
 import threading
 import traceback
 import time as _time
@@ -23,7 +24,7 @@ from functools import lru_cache
 
 import cv2
 import numpy as np
-from flask import Flask, render_template, request, jsonify, Response, stream_with_context, send_from_directory
+from flask import Flask, render_template, request, jsonify, Response, stream_with_context, send_from_directory, send_file
 
 # Add project root to sys.path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -37,6 +38,7 @@ from processors.symbolic_regression import (
     run_sr_ci_overdamped, run_sr_niubai
 )
 from processors.openmv_manager import openmv_manager, OPENMV_USB_VID, rgb_to_jpeg_bytes
+from processors.pi_manager import pi_manager
 import experiments as experiment_registry
 
 
@@ -81,7 +83,7 @@ app.secret_key = _load_or_create_secret()
 
 # ---------- 师生交互平台（登录 + 实验报告） ----------
 # 注意：模块名不能用 platform（会遮蔽标准库 platform，cv2/torch 都依赖它）
-from platform_hub import init_platform, teacher_required
+from platform_hub import init_platform, teacher_required, login_required
 init_platform(app, Path(os.path.dirname(os.path.abspath(__file__))) / "platform.db")
 
 # ---------- Paths ----------
@@ -161,6 +163,37 @@ def _write_llm_web_config(cfg):
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(cfg, f, ensure_ascii=False, indent=2)
         os.replace(tmp, _LLM_CONFIG_PATH)
+
+
+# ---------- 树莓派地址：记住上次连上的 host/port ----------
+# 换网络/重启路由器后 DHCP 可能换 IP，所以存的是"上次连上的地址"（不是硬件属性），
+# 前端进"实验获取"面板时回填，省得每次手输。手动改了输入框就不覆盖。
+_PI_CONFIG_PATH = BASE_DIR / "pi_config.json"
+_PI_CONFIG_LOCK = threading.RLock()
+PI_DEFAULT_HOST = "raspberrypi.local"
+PI_DEFAULT_PORT = 9000
+
+
+def _read_pi_config():
+    try:
+        with open(_PI_CONFIG_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _write_pi_config(host, port):
+    """原子写入（临时文件 + os.replace，避免写一半损坏）。"""
+    payload = {"host": str(host), "port": int(port)}
+    with _PI_CONFIG_LOCK:
+        tmp = str(_PI_CONFIG_PATH) + ".tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False, indent=2)
+            os.replace(tmp, _PI_CONFIG_PATH)
+        except Exception as exc:
+            print(f"[Pi] 保存树莓派地址失败: {exc}", flush=True)
 
 
 # 占位符密钥视为未配置（防止照抄 .env.example 后带着假 key 去请求，报出难懂的上游 401）
@@ -261,16 +294,16 @@ CALIB_SPECS = {
         "keys": ["vertical_ref_1", "vertical_ref_2", "pivot"],
     },
     "niubai": {
+        # 与底层 analyze_pendulum_fixed.py 一致：3 点 —— 原点 + 竖直方向两点
+        # （摆角 = 框心-原点连线 与 ②->③ 的有符号夹角，不需要标尺/比例尺）
         "name": "扭摆 (Torsional Pendulum)",
-        "num_points": 5,
+        "num_points": 3,
         "points": [
-            {"id": 0, "label": "原点 (Origin)", "color": "#00ffff"},
-            {"id": 1, "label": "+X 轴端点 (+X Axis End)", "color": "#5050ff"},
-            {"id": 2, "label": "+Y 轴端点 (+Y Axis End)", "color": "#32dc32"},
-            {"id": 3, "label": "标尺参考点1 (Scale Ref Point 1)", "color": "#ffb41e"},
-            {"id": 4, "label": "标尺参考点2 (Scale Ref Point 2)", "color": "#ffb41e"},
+            {"id": 0, "label": "原点 (Origin / 转轴)", "color": "#00ffff"},
+            {"id": 1, "label": "竖直方向起点 (Vertical Start)", "color": "#00ffff"},
+            {"id": 2, "label": "竖直方向终点 (Vertical End, 方向 start→end)", "color": "#ff5050"},
         ],
-        "keys": ["origin", "x_axis_end", "y_axis_end", "scale_p1", "scale_p2"],
+        "keys": ["origin", "vertical_start", "vertical_end"],
     },
     "ciliniudun": {
         "name": "磁力牛顿摆 (Magnetic Newton's Cradle)",
@@ -301,11 +334,209 @@ CALIB_SPECS = {
 session_store = {}
 SESSION_TTL = 1800  # 30 minutes
 
+# ---------- 翻帧取帧（网页标定窗口"选计时第一帧"用）----------
+# 4K 慢动作素材按帧号随机读要 seek 到关键帧再解码，实测单帧可达秒级；顺序读约 40ms/帧。
+# 网页翻帧又常常来回拖动，所以每个会话配一个后台解码线程：它只追"最新一次请求"，
+# 向前连着读很快，长距离跳转才 seek 一次；结果按需缩放+JPEG 编码后有界缓存，
+# 再翻回来是瞬时的。请求线程只等一小会儿：等到就返回该帧，等不到就给最近的已缓存帧
+# （避免网页一直白屏），客户端再用 token 丢掉过期响应。
+_frames = {}            # session_id -> _SessionFrames
+_frames_lock = threading.Lock()
+
+_FRAME_FORWARD_SPAN = 240   # 目标在本位置前方这个帧数内就顺序读，否则 seek
+_FRAME_PREFETCH = 12        # 命中目标后顺手向前预取的帧数
+_FRAME_CACHE_MAX = 400      # 每会话缓存帧数上限
+
+
+class _SessionFrames:
+    """会话级预览取帧器：后台解码 + 有界缓存 + 请求合并。"""
+
+    def __init__(self, video_path, total_frames, max_width=1200):
+        self.path = video_path
+        self.max_width = int(max_width)
+        self.total = _probe_frame_total(video_path, total_frames)
+        self.cap = cv2.VideoCapture(video_path)
+        if not self.cap.isOpened():
+            raise RuntimeError("无法打开视频: " + str(video_path))
+        self._cond = threading.Condition()
+        self._cache = collections.OrderedDict()
+        self._want = None
+        self._pos = -1
+        self._stop = False
+        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._thread.start()
+
+    # ---------- 后台解码线程 ----------
+    def _put(self, idx, frame):
+        h, w = frame.shape[:2]
+        if w > self.max_width:
+            sc = self.max_width / w
+            frame = cv2.resize(frame, (int(w * sc), int(h * sc)), interpolation=cv2.INTER_AREA)
+        ok, buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+        if not ok:
+            return
+        with self._cond:
+            self._cache[idx] = buf.tobytes()
+            self._cache.move_to_end(idx)
+            while len(self._cache) > _FRAME_CACHE_MAX:
+                self._cache.popitem(last=False)
+            self._cond.notify_all()
+
+    def _superseded(self):
+        with self._cond:
+            return self._stop or self._want is not None
+
+    def _loop(self):
+        while True:
+            with self._cond:
+                if self._stop:
+                    return
+                want, self._want = self._want, None
+                have = want is not None and want in self._cache
+            if want is None:
+                with self._cond:
+                    self._cond.wait(0.05)
+                continue
+            if have:
+                continue
+            try:
+                self._fulfill(int(want))
+            except Exception:
+                pass
+
+    def _fulfill(self, want):
+        want = max(0, min(want, self.total - 1))
+        if 0 <= self._pos < want <= self._pos + _FRAME_FORWARD_SPAN:
+            while self._pos < want:
+                if self._superseded():
+                    return
+                ok, frame = self.cap.read()
+                if not ok:
+                    return
+                self._pos += 1
+                self._put(self._pos, frame)
+        else:
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, want)
+            self._pos = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1
+            if self._superseded():
+                return
+            ok, frame = self.cap.read()
+            if not ok:
+                return
+            self._pos = want
+            self._put(want, frame)
+        for _ in range(_FRAME_PREFETCH):
+            if self._superseded():
+                return
+            if self._pos + 1 >= self.total:
+                return
+            ok, frame = self.cap.read()
+            if not ok:
+                return
+            self._pos += 1
+            self._put(self._pos, frame)
+
+    # ---------- 供请求线程调用 ----------
+    def get(self, idx, timeout=15.0):
+        idx = max(0, min(int(idx), self.total - 1))
+        with self._cond:
+            if idx in self._cache:
+                return self._cache[idx], idx
+            self._want = idx
+            self._cond.notify_all()
+            deadline = _time.time() + timeout
+            while idx not in self._cache:
+                remain = deadline - _time.time()
+                if remain <= 0:
+                    break
+                self._cond.wait(min(0.25, remain))
+            if idx in self._cache:
+                return self._cache[idx], idx
+            if self._cache:
+                best = min(self._cache.keys(), key=lambda k: abs(k - idx))
+                return self._cache[best], best
+            return None, None
+
+    def close(self):
+        with self._cond:
+            self._stop = True
+            self._cond.notify_all()
+        try:
+            self._thread.join(timeout=10.0)
+        except Exception:
+            pass
+        try:
+            self.cap.release()
+        except Exception:
+            pass
+
+
+def _probe_frame_total(video_path, reported):
+    """容器帧数不可靠时校正一次：跳到片尾看实际落点。
+
+    部分 MP4/MKV 的 CAP_PROP_FRAME_COUNT 会少报甚至报 0；帧数为 0 会让网页
+    滑块直接不可用，所以上传时就先校正。差值 <=1 视为误差不动（避免 off-by-one）。
+    """
+    reported = int(reported or 0)
+    try:
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            return max(1, reported)
+        cap.set(cv2.CAP_PROP_POS_FRAMES, 10 ** 8)
+        last = int(cap.get(cv2.CAP_PROP_POS_FRAMES) or 0)
+        cap.release()
+        if 0 < last < 10 ** 7 and last > reported and (last - reported) >= 2:
+            print(f"[Frame] 帧数校正: 容器报 {reported} -> 实际约 {last}", flush=True)
+            return last
+    except Exception:
+        pass
+    return max(1, reported)
+
+
+def _get_session_frames(session_id):
+    session = session_store.get(session_id)
+    if session is None:
+        return None, "Invalid session. Please re-upload the video."
+    vpath = session.get("video_path", "")
+    if not vpath or not os.path.exists(vpath):
+        return None, "视频不存在或没有可读帧。"
+    with _frames_lock:
+        fr = _frames.get(session_id)
+        if fr is None:
+            try:
+                fr = _SessionFrames(vpath, session.get("total_frames", 0))
+            except Exception as e:
+                return None, f"无法打开视频: {e}"
+            _frames[session_id] = fr
+        return fr, None
+
+
+def _release_frame_cap(sid):
+    with _frames_lock:
+        fr = _frames.pop(sid, None)
+    if fr is not None:
+        fr.close()
+
+
+def read_frame_jpeg(session_id, idx, max_width=1200, quality=85):
+    """返回 (jpeg_bytes, 实际帧号, 总帧数, 错误信息)。
+
+    输出的缩放规则与 get_first_frame_base64 一致（宽 <= max_width），
+    这样网页上标定点坐标与首帧在同一坐标系里，服务端还原时用同一个 scale。
+    """
+    fr, err = _get_session_frames(session_id)
+    if fr is None:
+        return None, None, 0, err
+    data, got = fr.get(idx)
+    if data is None:
+        return None, None, fr.total, "读取该帧失败。"
+    return data, got, fr.total, None
 
 def cleanup_stale_sessions():
     now = _time.time()
     stale = [sid for sid, s in session_store.items() if now - s.get("created_at", now) > SESSION_TTL]
     for sid in stale:
+        _release_frame_cap(sid)
         session = session_store.pop(sid)
         vpath = session.get("video_path", "")
         if vpath and os.path.exists(vpath):
@@ -429,7 +660,8 @@ def too_large(e):
 
 
 @app.route("/api/upload_video", methods=["POST"])
-def upload_video():
+@login_required
+def upload_video(u):
     cleanup_stale_sessions()
     if "video" not in request.files:
         return jsonify({"error": "No video file provided."}), 400
@@ -457,7 +689,9 @@ def upload_video():
 
     cap = cv2.VideoCapture(video_path)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
     cap.release()
+    total_frames = _probe_frame_total(video_path, total_frames)
 
     session_store[session_id] = {
         "video_path": video_path,
@@ -475,6 +709,7 @@ def upload_video():
         "motion_type": motion_type,
         "num_calib_points": CALIB_SPECS[motion_type]["num_points"],
         "total_frames": total_frames,
+        "fps": fps,
     })
 
 
@@ -494,6 +729,16 @@ def _run_processing(session_id, data, progress_callback=None, stage_callback=Non
     except (TypeError, ValueError):
         return None, {"error": "处理参数格式错误：数值参数不能为空或非数字。"}
     flip_angle = bool(data.get("flip_angle", False))
+
+    # 网页"手动标记"窗口选的计时第一帧（帧号，该帧即 t=0）。
+    # 为空则回退到 skip_start_sec（旧行为，保持向后兼容）。
+    _sf_raw = data.get("start_frame", None)
+    start_frame = None
+    if _sf_raw is not None and str(_sf_raw).strip() != "":
+        try:
+            start_frame = max(0, int(float(_sf_raw)))
+        except (TypeError, ValueError):
+            start_frame = None
 
     # ---- 参数护栏：畸形输入要得到清晰报错，而不是处理器深处 500/除零/NaN ----
     if skip_start_sec < 0:
@@ -577,24 +822,28 @@ def _run_processing(session_id, data, progress_callback=None, stage_callback=Non
                 skip_initial_seconds=skip_start_sec,
                 slow_motion_factor=slow_motion_factor,
                 target_cycles=target_cycles,
+                gen_video=bool(data.get("gen_video", True)),
                 model=model, progress_callback=_on_frame)
         elif motion_type == "cizuni":
             result = process_cizuni(
                 video_path, output_dir, MODEL_PATHS[motion_type], calibration,
+                start_frame=start_frame,
                 skip_start_sec=skip_start_sec,
                 skip_end_sec=skip_end_sec,
-                slow_motion_factor=slow_motion_factor,
+                # 允许调用方传 "auto"：自动读 MP4 的 capture.fps 标签推算慢放倍数
+                slow_motion_factor=data.get("slow_motion_factor", "auto"),
                 flip_angle=flip_angle,
+                gen_video=bool(data.get("gen_video", True)),
                 model=model, progress_callback=_on_frame)
         elif motion_type == "niubai":
             result = process_niubai(
                 video_path, output_dir, MODEL_PATHS[motion_type], calibration,
+                start_frame=start_frame,
                 skip_start_sec=skip_start_sec,
                 skip_end_sec=skip_end_sec,
                 slow_motion_factor=slow_motion_factor,
-                known_physical_dist_m=known_physical_dist_m,
-                num_cycles=target_cycles,
-                samples_per_cycle=samples_per_cycle,
+                denoise_method=str(data.get("denoise_method", "savgol") or "savgol"),
+                gen_video=bool(data.get("gen_video", True)),
                 model=model, progress_callback=_on_frame)
         elif motion_type == "ciliniudun":
             result = process_ciliniudun(
@@ -618,6 +867,10 @@ def _run_processing(session_id, data, progress_callback=None, stage_callback=Non
         plot_path = result.get("plot_path", "")
         if plot_path and os.path.exists(plot_path):
             result["plot_preview"] = file_to_base64(plot_path)
+
+        # 结果页"标注视频预览"用：记住本次产物路径，前端按会话内联取流
+        # （拿路径去开文件的是服务端自己，前端只能按 session_id 取，避免任意路径读取）
+        session["output_video_path"] = result.get("video_path") or ""
 
         # Symbolic Regression
         if stage_callback:
@@ -654,17 +907,18 @@ def _run_processing(session_id, data, progress_callback=None, stage_callback=Non
 
 
 @app.route("/api/process", methods=["POST"])
-def process_video():
+@login_required
+def process_video(u):
     data = request.get_json()
     if not data:
         return jsonify({"error": "No JSON data provided."}), 400
 
     session_id = data.get("session_id", "")
-    _progress[session_id] = {"current": 0, "total": 0, "cache": _progress.get(session_id, {}).get("cache", {})}
 
     if not _process_lock.acquire(blocking=False):
         return jsonify({"error": "服务器正忙，请稍后再试。"}), 503
 
+    _progress[session_id] = {"current": 0, "total": 0, "cache": _progress.get(session_id, {}).get("cache", {})}
     try:
         result, error = _run_processing(session_id, data)
         if error:
@@ -676,7 +930,8 @@ def process_video():
 
 
 @app.route("/api/process_stream", methods=["POST"])
-def process_stream():
+@login_required
+def process_stream(u):
     """SSE endpoint: streams progress events + final result."""
     data = request.get_json()
     if not data:
@@ -729,6 +984,7 @@ def cleanup():
     data = request.get_json() or {}
     session_id = data.get("session_id", "")
     if session_id in session_store:
+        _release_frame_cap(session_id)
         session = session_store.pop(session_id)
         vpath = session.get("video_path", "")
         if os.path.exists(vpath):
@@ -737,6 +993,58 @@ def cleanup():
             except Exception:
                 pass
     return jsonify({"success": True})
+
+
+@app.route("/api/video/<session_id>")
+@login_required
+def video_file(u, session_id):
+    """返回会话视频本体（支持 Range 请求）—— 手动标记窗口的实时预览用。"""
+    session = session_store.get(session_id)
+    if session is None:
+        return jsonify({"error": "Invalid session. Please re-upload the video."}), 404
+    vpath = session.get("video_path", "")
+    if not vpath or not os.path.exists(vpath):
+        return jsonify({"error": "视频文件不存在。"}), 404
+    resp = send_file(vpath, conditional=True)
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@app.route("/api/output_video/<session_id>")
+@login_required
+def output_video(u, session_id):
+    """结果页内联预览本次生成的标注视频（H.264 MP4，支持 Range 拖动进度）。
+
+    只按会话取"本次分析写出的那个文件"，前端不能传任意路径。
+    """
+    session = session_store.get(session_id)
+    if session is None:
+        return jsonify({"error": "会话已失效，请重新上传并分析。"}), 404
+    vpath = session.get("output_video_path", "")
+    if not vpath or not os.path.exists(vpath):
+        return jsonify({"error": "标注视频不存在（可能已移动或未生成）。"}), 404
+    resp = send_file(vpath, conditional=True, mimetype="video/mp4")
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@app.route("/api/video_frame/<session_id>")
+@login_required
+def video_frame(u, session_id):
+    """返回会话视频第 idx 帧的 JPEG —— 网页"手动标记"窗口翻帧选计时第一帧用。"""
+    try:
+        idx = int(request.args.get("idx", 0))
+    except (TypeError, ValueError):
+        idx = 0
+    data, got, total, err = read_frame_jpeg(session_id, idx)
+    if err:
+        return jsonify({"error": err}), 404
+    resp = Response(data, mimetype="image/jpeg")
+    resp.headers["Cache-Control"] = "no-store"
+    # 容器帧数可能少报：把校正后的总帧数与实际返回的帧号回给前端
+    resp.headers["X-Total-Frames"] = str(int(total or 0))
+    resp.headers["X-Frame-Index"] = str(int(got if got is not None else idx))
+    return resp
 
 
 # ---------- STM32 serial control (electromagnet release) ----------
@@ -792,7 +1100,8 @@ def _list_usable_ports(extra_label="手动指定"):
 
 
 @app.route("/api/serial/ports")
-def serial_list_ports():
+@login_required
+def serial_list_ports(u):
     if not SERIAL_AVAILABLE:
         return _serial_unavailable()
     try:
@@ -808,7 +1117,8 @@ def serial_list_ports():
 
 
 @app.route("/api/serial/connect", methods=["POST"])
-def serial_connect():
+@login_required
+def serial_connect(u):
     if not SERIAL_AVAILABLE:
         return _serial_unavailable()
     data = request.get_json() or {}
@@ -838,7 +1148,8 @@ def serial_connect():
 
 
 @app.route("/api/serial/command", methods=["POST"])
-def serial_command():
+@login_required
+def serial_command(u):
     if not SERIAL_AVAILABLE:
         return _serial_unavailable()
     data = request.get_json() or {}
@@ -860,7 +1171,8 @@ def serial_command():
 
 
 @app.route("/api/serial/disconnect", methods=["POST"])
-def serial_disconnect():
+@login_required
+def serial_disconnect(u):
     if not SERIAL_AVAILABLE:
         return _serial_unavailable()
     global _serial_conn
@@ -893,7 +1205,8 @@ GRIPPER_COMMANDS = ("U", "D", "L", "R", "O", "C")
 
 
 @app.route("/api/gripper/ports")
-def gripper_list_ports():
+@login_required
+def gripper_list_ports(u):
     if not SERIAL_AVAILABLE:
         return _serial_unavailable()
     try:
@@ -909,7 +1222,8 @@ def gripper_list_ports():
 
 
 @app.route("/api/gripper/connect", methods=["POST"])
-def gripper_connect():
+@login_required
+def gripper_connect(u):
     if not SERIAL_AVAILABLE:
         return _serial_unavailable()
     data = request.get_json() or {}
@@ -936,7 +1250,8 @@ def gripper_connect():
 
 
 @app.route("/api/gripper/command", methods=["POST"])
-def gripper_command():
+@login_required
+def gripper_command(u):
     if not SERIAL_AVAILABLE:
         return _serial_unavailable()
     data = request.get_json() or {}
@@ -956,7 +1271,8 @@ def gripper_command():
 
 
 @app.route("/api/gripper/disconnect", methods=["POST"])
-def gripper_disconnect():
+@login_required
+def gripper_disconnect(u):
     if not SERIAL_AVAILABLE:
         return _serial_unavailable()
     global _gripper_conn
@@ -971,6 +1287,43 @@ def gripper_disconnect():
     return jsonify({"success": True})
 
 
+def _register_video_session(video_path, motion_type, original_filename):
+    """把设备录制的视频登记成处理会话，返回给前端的会话信息。
+
+    上传 / OpenMV 录制 / 树莓派录制最终都汇聚到这里：首帧、总帧数、fps 的取法必须
+    一致，否则标定坐标系与时间轴会各说各话。首帧读取失败会抛异常，由调用方决定怎么报。
+    """
+    if motion_type not in MODEL_PATHS:
+        motion_type = "danbai"
+    session_id = str(uuid.uuid4())
+    frame_b64, disp_w, disp_h = get_first_frame_base64(video_path)
+
+    cap = cv2.VideoCapture(video_path)
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
+    cap.release()
+    total_frames = _probe_frame_total(video_path, total_frames)
+
+    session_store[session_id] = {
+        "video_path": video_path,
+        "motion_type": motion_type,
+        "original_filename": original_filename,
+        "total_frames": total_frames,
+        "created_at": _time.time(),
+    }
+
+    return {
+        "session_id": session_id,
+        "first_frame_base64": frame_b64,
+        "display_width": disp_w,
+        "display_height": disp_h,
+        "motion_type": motion_type,
+        "num_calib_points": CALIB_SPECS[motion_type]["num_points"],
+        "total_frames": total_frames,
+        "fps": fps,
+    }
+
+
 # ---------- OpenMV camera (real-time preview, recording, gimbal) ----------
 # 双串口架构（与 source controller.py 一致）：
 #   串口 1：OpenMV USB-C，USBDBG V1 @ 921600 → 帧采集
@@ -978,7 +1331,8 @@ def gripper_disconnect():
 # OpenMV 与 STM32 电磁铁使用各自独立的串口。
 
 @app.route("/api/openmv/ports")
-def openmv_list_ports():
+@login_required
+def openmv_list_ports(u):
     """List serial ports, highlighting OpenMV devices (bluetooth excluded)."""
     if not SERIAL_AVAILABLE:
         return _serial_unavailable()
@@ -1011,7 +1365,8 @@ def openmv_list_ports():
 
 
 @app.route("/api/openmv/connect", methods=["POST"])
-def openmv_connect():
+@login_required
+def openmv_connect(u):
     """Connect to OpenMV camera and optionally gimbal control port.
 
     Body: {"camera_port": "COM5", "control_port": "COM6"}
@@ -1042,14 +1397,16 @@ def openmv_connect():
 
 
 @app.route("/api/openmv/disconnect", methods=["POST"])
-def openmv_disconnect():
+@login_required
+def openmv_disconnect(u):
     """Disconnect from OpenMV camera and gimbal."""
     result = openmv_manager.disconnect()
     return jsonify(result)
 
 
 @app.route("/api/openmv/frame")
-def openmv_frame():
+@login_required
+def openmv_frame(u):
     """Return a single JPEG frame for canvas-based preview."""
     if not openmv_manager.connected:
         return jsonify({"error": "OpenMV 未连接。"}), 400
@@ -1061,7 +1418,8 @@ def openmv_frame():
 
 
 @app.route("/api/openmv/stream")
-def openmv_stream():
+@login_required
+def openmv_stream(u):
     """MJPEG streaming endpoint for real-time preview.
 
     Returns a multipart/x-mixed-replace stream of JPEG frames.
@@ -1100,7 +1458,8 @@ def openmv_stream():
 
 
 @app.route("/api/openmv/record/start", methods=["POST"])
-def openmv_record_start():
+@login_required
+def openmv_record_start(u):
     """Start recording frames from OpenMV (streamed straight to disk)."""
     result = openmv_manager.start_recording(str(UPLOAD_FOLDER))
     if "error" in result:
@@ -1109,7 +1468,8 @@ def openmv_record_start():
 
 
 @app.route("/api/openmv/record/stop", methods=["POST"])
-def openmv_record_stop():
+@login_required
+def openmv_record_stop(u):
     """Stop recording and save as MP4 video.
 
     Returns the video path and automatically creates a processing session
@@ -1126,41 +1486,19 @@ def openmv_record_stop():
     if motion_type is None:
         motion_type = {}
     motion_type = str(motion_type.get("motion_type", "danbai")).strip()
-    if motion_type not in MODEL_PATHS:
-        motion_type = "danbai"  # default fallback
 
-    session_id = str(uuid.uuid4())
     try:
-        frame_b64, disp_w, disp_h = get_first_frame_base64(video_path)
+        session = _register_video_session(video_path, motion_type,
+                                          result.get("video_name", "openmv_capture.mp4"))
     except Exception as e:
         return jsonify({"error": f"录制成功但读取首帧失败: {e}"}), 500
 
-    cap = cv2.VideoCapture(video_path)
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    cap.release()
-
-    session_store[session_id] = {
-        "video_path": video_path,
-        "motion_type": motion_type,
-        "original_filename": result.get("video_name", "openmv_capture.mp4"),
-        "total_frames": total_frames,
-        "created_at": _time.time(),
-    }
-
-    return jsonify({
-        **result,
-        "session_id": session_id,
-        "first_frame_base64": frame_b64,
-        "display_width": disp_w,
-        "display_height": disp_h,
-        "motion_type": motion_type,
-        "num_calib_points": CALIB_SPECS[motion_type]["num_points"],
-        "total_frames": total_frames,
-    })
+    return jsonify({**result, **session})
 
 
 @app.route("/api/openmv/gimbal", methods=["POST"])
-def openmv_gimbal():
+@login_required
+def openmv_gimbal(u):
     """Send a gimbal command (U/D/L/R/C) to OpenMV via TX_INPUT."""
     data = request.get_json() or {}
     command = str(data.get("command", "")).strip().upper()
@@ -1171,9 +1509,135 @@ def openmv_gimbal():
 
 
 @app.route("/api/openmv/status")
-def openmv_status():
+@login_required
+def openmv_status(u):
     """Query OpenMV connection and recording status."""
     return jsonify(openmv_manager.get_status())
+
+
+# ---------- Raspberry Pi camera (LAN frame stream → local recording → local YOLO) ----------
+# 树莓派只管拍和传（套件 raspberry/capture_stream.py，默认 1280x720@60、端口 9000），
+# 帧到本机后：预览转发原始 JPEG（不再压一遍），录制按传感器时间戳对齐到恒定帧率，
+# YOLO 与标注仍在本机跑 —— 所以标注视频、事后调参这些能力一个都不缺。
+# 上面那一套 OpenMV（USB 串口取帧 / 云台）保留可用但已无硬件，界面入口已撤掉。
+
+@app.route("/api/pi/config")
+@login_required
+def pi_config(u):
+    """上次连上的树莓派地址（前端进面板时回填）。"""
+    cfg = _read_pi_config()
+    try:
+        port = int(cfg.get("port") or PI_DEFAULT_PORT)
+    except (TypeError, ValueError):
+        port = PI_DEFAULT_PORT
+    return jsonify({"host": str(cfg.get("host") or PI_DEFAULT_HOST), "port": port})
+
+
+@app.route("/api/pi/connect", methods=["POST"])
+@login_required
+def pi_connect(u):
+    """连接树莓派视频流。Body: {"host": "raspberrypi.local", "port": 9000}"""
+    data = request.get_json() or {}
+    result = pi_manager.connect(str(data.get("host", "")), data.get("port", 9000))
+    if "error" in result:
+        return jsonify(result), 400
+    _write_pi_config(result["host"], result["port"])
+    return jsonify(result)
+
+
+@app.route("/api/pi/disconnect", methods=["POST"])
+@login_required
+def pi_disconnect(u):
+    """断开树莓派视频流；正在录制则先正常收尾落盘再断。"""
+    return jsonify(pi_manager.disconnect())
+
+
+@app.route("/api/pi/status")
+@login_required
+def pi_status(u):
+    """连接 / 收帧 / 录制 / 云台状态（前端 1s 轮询）。"""
+    return jsonify(pi_manager.get_status())
+
+
+@app.route("/api/pi/gimbal", methods=["POST"])
+@login_required
+def pi_gimbal(u):
+    """二维云台方向键。Body: {"command": "U"|"D"|"L"|"R"|"C"}
+
+    命令不占额外通道：往收帧的那条 TCP 连接反向写一个字节，树莓派端
+    用 GPIO12/13 硬件 PWM 驱动两个 MG90S（方向、步长、软限位都在树莓派侧）。
+    实际到位情况从每帧头部的 pan/tilt 脉宽与限位码读回，见 /api/pi/status。
+    """
+    data = request.get_json() or {}
+    result = pi_manager.send_gimbal_command(str(data.get("command", "")))
+    if "error" in result:
+        return jsonify(result), 400
+    return jsonify(result)
+
+
+@app.route("/api/pi/frame")
+@login_required
+def pi_frame(u):
+    """最新一帧的 JPEG。带 ?w=880 时先降采样再返回（网页预览用）。
+
+    降采样只为让浏览器解码更快、预览更顺；录制和分析用的原始帧不经这里，
+    所以画面清晰度不受影响（预览角标显示的是取图速率，不是相机帧率）。
+    """
+    if not pi_manager.connected:
+        return jsonify({"error": "树莓派未连接。"}), 400
+    jpeg = pi_manager.get_latest_jpeg()
+    if not jpeg:
+        return jsonify({"error": "还没有收到画面。"}), 404
+
+    try:
+        max_w = int(request.args.get("w", 0) or 0)
+    except (TypeError, ValueError):
+        max_w = 0
+    if max_w > 0:
+        frame = cv2.imdecode(np.frombuffer(jpeg, dtype=np.uint8), cv2.IMREAD_COLOR)
+        if frame is not None and frame.shape[1] > max_w:
+            scale = max_w / float(frame.shape[1])
+            frame = cv2.resize(frame, (max_w, int(round(frame.shape[0] * scale))),
+                               interpolation=cv2.INTER_AREA)
+            ok, buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+            if ok:
+                jpeg = buf.tobytes()
+
+    return Response(jpeg, mimetype="image/jpeg",
+                    headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
+
+
+@app.route("/api/pi/record/start", methods=["POST"])
+@login_required
+def pi_record_start(u):
+    """开始录制。Body: {"fps": 30}（录制帧率即视频时间轴的时间格频率）"""
+    data = request.get_json() or {}
+    result = pi_manager.start_recording(str(UPLOAD_FOLDER), data.get("fps", 30))
+    if "error" in result:
+        return jsonify(result), 400
+    return jsonify(result)
+
+
+@app.route("/api/pi/record/stop", methods=["POST"])
+@login_required
+def pi_record_stop(u):
+    """停止录制，登记成处理会话并自动进入标定。
+    Body: {"motion_type": "danbai"}；附带的 samples/filled/trimmed 是时间轴账目。
+    """
+    result = pi_manager.stop_recording(str(UPLOAD_FOLDER))
+    if "error" in result:
+        return jsonify(result), 400
+
+    data = request.get_json(silent=True) or {}
+    motion_type = str(data.get("motion_type", "danbai")).strip()
+
+    try:
+        session = _register_video_session(result["video_path"], motion_type,
+                                          result.get("video_name", "pi_capture.mp4"))
+    except Exception as e:
+        return jsonify({"error": f"录制成功但读取首帧失败: {e}"}), 500
+
+    return jsonify({**result, **session})
 
 
 # ---------- Auto-shutdown watchdog ----------
@@ -1259,6 +1723,10 @@ def _shutdown_safety():
         openmv_manager.disconnect()
     except Exception:
         pass
+    try:
+        pi_manager.disconnect()
+    except Exception:
+        pass
 
 
 def _watchdog_loop():
@@ -1275,7 +1743,9 @@ def _watchdog_loop():
             if not _client_seen.is_set() or not empty:
                 _exit_mark = None
                 continue
-            if _process_lock.locked() or openmv_manager.get_status().get("recording"):
+            if (_process_lock.locked()
+                    or openmv_manager.get_status().get("recording")
+                    or pi_manager.recording):
                 _exit_mark = None  # 处理/录制期间不退出
                 continue
             # 刷新保护：新页面加载后 Worker 首次心跳可能因 CDN 脚本加载而晚到，
@@ -1324,12 +1794,34 @@ def get_experiments():
     return jsonify(experiment_registry.public_list())
 
 
+# AI 对话限频：每用户每分钟最多 15 次（防脚本刷 LLM 费用）
+_ai_chat_rate = {}
+_ai_chat_rate_lock = threading.Lock()
+AI_CHAT_RPM_LIMIT = 15
+
+
+def _ai_chat_rate_ok(username):
+    now = _time.time()
+    with _ai_chat_rate_lock:
+        hits = [t for t in _ai_chat_rate.get(username, []) if now - t < 60]
+        if len(hits) >= AI_CHAT_RPM_LIMIT:
+            _ai_chat_rate[username] = hits
+            return False
+        hits.append(now)
+        _ai_chat_rate[username] = hits
+        return True
+
+
 @app.route("/api/ai_chat", methods=["POST"])
-def ai_chat():
+@login_required
+def ai_chat(u):
     """AI 实验助手 — 轻量 agent（工具调用循环）+ SSE 流式输出。"""
     cfg = get_llm_config()
     if not cfg["api_key"]:
         return jsonify({"error": "AI 服务未配置。教师请登录后点击右侧 AI 面板顶部的「模型配置」按钮进行设置（也可继续使用 .env）。"}), 503
+
+    if not _ai_chat_rate_ok(u["username"]):
+        return jsonify({"error": "提问太频繁了，请稍等一分钟再试。"}), 429
 
     data = request.get_json()
     if not data:
@@ -1340,6 +1832,8 @@ def ai_chat():
         return jsonify({"error": "No messages provided."}), 400
 
     context = data.get("context") or {}
+    # 用户身份由服务端 session 生成并覆盖，防止客户端伪造 role/name 注入系统提示词
+    context["user"] = {"name": u["display_name"] or u["username"], "role": u["role"]}
 
     try:
         from openai import OpenAI
@@ -1351,7 +1845,9 @@ def ai_chat():
                 for payload in run_agent_chat(client, cfg["model"], messages, context, LLM_SYSTEM_PROMPT):
                     yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
             except Exception as e:
-                yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+                # 完整异常只进服务器日志；SSE 下发脱敏信息，避免暴露 base_url 等内部细节
+                print(f"[AI] chat failed: {type(e).__name__}: {e}", flush=True)
+                yield f"data: {json.dumps({'error': 'AI 服务调用失败，请检查模型配置或稍后重试。'}, ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
 
         return Response(stream_with_context(generate()), mimetype="text/event-stream",

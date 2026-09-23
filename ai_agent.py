@@ -16,7 +16,7 @@
 import json
 from pathlib import Path
 
-from experiments import get_experiment
+from experiments import get_experiment, EXPERIMENTS
 
 TEACHING_DIR = Path(__file__).parent / "teaching"
 TEMPLATE_DIR = Path(__file__).parent / "report_templates"
@@ -28,8 +28,7 @@ _MAX_TOOL_ROUNDS = 3
 def _tool_get_experiment_guide(experiment_id=None):
     exp = get_experiment(experiment_id or "")
     if exp is None:
-        known = "、".join(e["id"] for e in
-                          [x for x in __import__("experiments").EXPERIMENTS])
+        known = "、".join(e["id"] for e in EXPERIMENTS)
         return json.dumps({"error": f"未知实验 {experiment_id}", "可选": known}, ensure_ascii=False)
     path = TEACHING_DIR / f"{exp['guide_topic']}.json"
     if not path.exists():
@@ -39,7 +38,13 @@ def _tool_get_experiment_guide(experiment_id=None):
 
 
 def _tool_get_report_template(experiment_id=None):
-    path = TEMPLATE_DIR / f"{experiment_id}.json"
+    # experiment_id 来自 LLM 工具参数（不可信），必须过注册表白名单再用它拼路径，
+    # 否则 "../../" 类输入可读仓库外任意 .json（与 get_experiment_guide 的防护对齐）
+    exp = get_experiment(experiment_id or "")
+    if exp is None:
+        known = "、".join(e["id"] for e in EXPERIMENTS)
+        return json.dumps({"error": f"未知实验 {experiment_id}", "可选": known}, ensure_ascii=False)
+    path = TEMPLATE_DIR / f"{exp['report_template']}.json"
     if not path.exists():
         return json.dumps({"error": "该实验暂无报告模板"}, ensure_ascii=False)
     with open(path, "r", encoding="utf-8") as f:
