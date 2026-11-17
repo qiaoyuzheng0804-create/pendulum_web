@@ -29,7 +29,6 @@ import os
 import sys
 import math
 import time
-import tempfile
 import traceback
 
 import cv2
@@ -42,32 +41,32 @@ import matplotlib.pyplot as plt
 
 from scipy.signal import savgol_filter
 from scipy.ndimage import median_filter
-from scipy.optimize import linear_sum_assignment
+from scipy.optimize import least_squares, linear_sum_assignment
 from ultralytics import YOLO
 
-from .common import normalize_strict
+from .common import H264VideoWriter, normalize_strict, video_readable
 
 plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "Arial Unicode MS"]
 plt.rcParams["axes.unicode_minus"] = False
 
 # ============================================================================
-# 默认配置（与原脚本 CONFIG 对齐，Web 参数可覆盖）
+# 默认配置（与 magnetic_newton_cradle.py CONFIG 对齐，Web 参数可覆盖）
 # ============================================================================
 DEFAULT_CFG = {
-    "skip_start_s": 2.0,       # 跳过视频开头的秒数
-    "skip_end_s": 0.0,         # 跳过视频结尾的秒数
+    "skip_end_s": 0.0,         # 跳过视频结尾的秒数（仅手动需要时使用）
     "target_fps": 30,          # 目标采样帧率
     "target_class_id": None,   # 只检测某个类别 ID，None=全部类别
     "conf": 0.18,              # 置信度阈值
     "iou": 0.5,                # NMS IoU 阈值
     "imgsz": 1536,             # 推理分辨率
-    "tracker": "bytetrack.yaml",
     "angle_unit": "deg",       # "deg" 或 "rad"
     "right_positive": True,    # True: 摆向右偏为正
-    "sg_window": 11,           # Savitzky-Golay 窗口
+    "sg_window": 5,            # Savitzky-Golay 窗口
     "sg_polyorder": 3,         # Savitzky-Golay 多项式阶数
     "median_k": 0,             # 可选的中值滤波核大小（0=关闭）
-    "max_nan_fill": 8,         # 连续缺失帧数 ≤ 该值时线性插值
+    "max_nan_fill": 8,         # 连续缺失帧数 ≤ 该值时内部线性插值（不做边界外推）
+    "subpixel_yellow": True,   # 提取黄色贴纸色度亚像素质心
+    "refine_pivots": True,     # 等摆长圆弧最小二乘精修支点圆心
     "video_output_scale": 1.0, # 标注视频输出缩放
     "max_frames": None,        # 最多处理多少帧（调试用）
 }
@@ -101,20 +100,63 @@ def fmt_angle(ang, unit="deg"):
 
 
 # ---------------------------------------------------------------------------
-# 第一遍：YOLOv8 检测 + ByteTrack 跟踪
+# 第一遍：YOLOv8 逐帧检测 + 亚像素质心提取（不使用 ByteTrack，保留全局检测给匈牙利匹配）
 # ---------------------------------------------------------------------------
-def collect_tracks(model, cap, cfg, progress_callback=None):
-    """逐帧跟踪，返回 (track_data, frame_boxes, meta)。"""
+def _to_numpy(arr):
+    if hasattr(arr, "cpu"):
+        return arr.cpu().numpy()
+    return np.asarray(arr)
+
+
+def _subpixel_yellow_center(frame, box, use_yellow=True):
+    """在 YOLO 框内提取黄色贴纸的色度亚像素质心 (cx, cy)，将框中心平移对齐到该质心。"""
+    cx = float((box[0] + box[2]) / 2.0)
+    cy = float((box[1] + box[3]) / 2.0)
+    if not use_yellow:
+        return cx, cy, box.tolist()
+    h_img, w_img = frame.shape[:2]
+    pad = 3
+    x1 = max(0, int(math.floor(box[0])) - pad)
+    y1 = max(0, int(math.floor(box[1])) - pad)
+    x2 = min(w_img, int(math.ceil(box[2])) + pad)
+    y2 = min(h_img, int(math.ceil(box[3])) + pad)
+    if x2 - x1 < 3 or y2 - y1 < 3:
+        return cx, cy, box.tolist()
+    roi = frame[y1:y2, x1:x2].astype(float)
+    yel = np.maximum(0.0, 0.5 * (roi[:, :, 2] + roi[:, :, 1]) - roi[:, :, 0])
+    thr = np.percentile(yel, 50)
+    w = np.maximum(0.0, yel - thr) ** 2
+    w_sum = float(w.sum())
+    if w_sum > 1e-3:
+        yy, xx = np.mgrid[y1:y2, x1:x2]
+        cx = float((w * xx).sum() / w_sum)
+        cy = float((w * yy).sum() / w_sum)
+    bw = float(box[2] - box[0])
+    bh = float(box[3] - box[1])
+    sbox = [cx - bw / 2.0, cy - bh / 2.0, cx + bw / 2.0, cy + bh / 2.0]
+    return cx, cy, sbox
+
+
+def _read_sampled_frame(cap, interval, first):
+    """首个样本直接读选定起始帧，后续先跳过 interval - 1 帧。"""
+    if not first:
+        for _ in range(interval - 1):
+            if not cap.grab():
+                return False, None
+    return cap.read()
+
+
+def collect_tracks(model, cap, cfg, start_frame=0, progress_callback=None):
+    """逐帧检测并提取亚像素质心，返回 (track_data, frame_boxes, meta)。"""
     fps = cap.get(cv2.CAP_PROP_FPS)
-    if fps is None or fps <= 1e-6 or math.isnan(fps):
+    if fps is None or fps <= 1e-6 or not math.isfinite(fps):
         fps = 30.0
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    start_frame = int(round(cfg["skip_start_s"] * fps))
-    end_frame = total - int(round(cfg["skip_end_s"] * fps))
-    start_frame = max(0, min(start_frame, total - 1))
+    start_frame = max(0, min(int(start_frame), max(0, total - 1)))
+    end_frame = total - int(round(cfg.get("skip_end_s", 0.0) * fps))
     end_frame = max(start_frame + 1, min(end_frame, total))
 
     interval = max(1, int(round(fps / cfg["target_fps"])))
@@ -125,41 +167,36 @@ def collect_tracks(model, cap, cfg, progress_callback=None):
     if cfg["target_class_id"] is not None:
         classes = [int(cfg["target_class_id"])]
 
+    use_yellow = bool(cfg.get("subpixel_yellow", True))
     track_data = {}
     frame_boxes = {}
     n = 0
     cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
-    t0 = time.time()
 
     while True:
-        frame = None
-        for _ in range(interval):
-            ok, f = cap.read()
-            if not ok:
-                break
-            frame = f
-        if frame is None:
-            break
         abs_idx = start_frame + n * interval
         if abs_idx >= end_frame:
             break
+        ok, frame = _read_sampled_frame(cap, interval, first=(n == 0))
+        if not ok or frame is None:
+            break
         t = n * dt
 
-        results = model.track(frame, persist=True, conf=cfg["conf"], iou=cfg["iou"],
-                              imgsz=cfg["imgsz"], classes=classes,
-                              tracker=cfg["tracker"], verbose=False)
-        boxes = results[0].boxes
+        results = model.predict(frame, conf=cfg["conf"], iou=cfg["iou"],
+                                imgsz=cfg["imgsz"], classes=classes, verbose=False)
+        boxes = results[0].boxes if results else None
         fboxes = []
-        if boxes is not None and boxes.id is not None:
-            ids = boxes.id.cpu().numpy().astype(int)
-            xyxy = boxes.xyxy.cpu().numpy()
-            confs = boxes.conf.cpu().numpy()
-            for tid, box, c in zip(ids, xyxy, confs):
-                cx = (box[0] + box[2]) / 2.0
-                cy = (box[1] + box[3]) / 2.0
-                track_data.setdefault(tid, []).append(
-                    (n, t, float(cx), float(cy), box.tolist(), float(c)))
-                fboxes.append((int(tid), box.tolist(), float(c)))
+        if boxes is not None and len(boxes) > 0:
+            xyxy = _to_numpy(boxes.xyxy)
+            confs = _to_numpy(boxes.conf)
+            order = np.argsort((xyxy[:, 0] + xyxy[:, 2]) / 2.0)
+            for k, idx in enumerate(order):
+                tid = k + 1
+                box = xyxy[idx]
+                c = float(confs[idx])
+                cx, cy, sbox = _subpixel_yellow_center(frame, box, use_yellow=use_yellow)
+                track_data.setdefault(tid, []).append((n, t, cx, cy, sbox, c))
+                fboxes.append((tid, sbox, c))
         frame_boxes[n] = fboxes
         n += 1
 
@@ -304,6 +341,46 @@ def _interval_of(it, h_unit, mids):
     return int(np.searchsorted(mids, p))
 
 
+def refine_origins_by_circle_fit(pend_pts, origins):
+    """利用全轨迹等摆长圆弧最小二乘，自动精修被上横梁遮挡的各摆支点圆心。"""
+    N = len(origins)
+    pts_list = []
+    for i in range(N):
+        arr = np.array([(p[1], p[2]) for p in pend_pts[i]], dtype=float)
+        if len(arr) < 20 or np.ptp(arr[:, 0]) < 15.0:
+            return origins
+        pts_list.append(arr)
+    x0_init = np.array([o[0] for o in origins], dtype=float)
+    y0_init = np.array([o[1] for o in origins], dtype=float)
+    r_init = float(np.median([
+        np.median(np.hypot(pts_list[i][:, 0] - x0_init[i], pts_list[i][:, 1] - y0_init[i]))
+        for i in range(N)
+    ]))
+    if not math.isfinite(r_init) or r_init < 5.0:
+        return origins
+    p0 = np.r_[x0_init, y0_init, r_init]
+    lo = np.r_[x0_init - 40.0, y0_init - 80.0, 0.7 * r_init]
+    hi = np.r_[x0_init + 40.0, y0_init + 80.0, 1.3 * r_init]
+
+    def res(p):
+        R = p[2 * N]
+        return np.concatenate([
+            np.hypot(pts_list[i][:, 0] - p[i], pts_list[i][:, 1] - p[N + i]) - R
+            for i in range(N)
+        ])
+
+    sol = least_squares(res, p0, bounds=(lo, hi), loss="soft_l1", f_scale=0.5)
+    if not sol.success:
+        return origins
+    refined = [np.array([sol.x[i], sol.x[N + i]], dtype=float) for i in range(N)]
+    R_fit = float(sol.x[2 * N])
+    stds = [float(np.std(np.hypot(pts_list[i][:, 0] - refined[i][0],
+                                  pts_list[i][:, 1] - refined[i][1]) - R_fit)) for i in range(N)]
+    print(f"[支点精修] 公共拟合摆长 R={R_fit:.2f}px, 径向残差 std="
+          + "/".join(f"{s:.2f}px" for s in stds), flush=True)
+    return refined
+
+
 # ---------------------------------------------------------------------------
 # 角度时间序列 + 降噪
 # ---------------------------------------------------------------------------
@@ -324,14 +401,23 @@ def build_angle_series(pend_pts, origins, v_unit, meta, cfg):
 
 
 def denoise_series(arr, cfg):
+    """短缺失内部线性插值（不做边界外推） -> 可选中值滤波 -> Savitzky-Golay 分段滤波。"""
     window = int(cfg["sg_window"])
     polyorder = int(cfg["sg_polyorder"])
     median_k = int(cfg["median_k"])
     max_nan = int(cfg["max_nan_fill"])
+    if max_nan < 0:
+        raise ValueError("max_nan_fill 必须为非负整数；0 表示关闭补帧。")
 
-    y = arr.copy()
-    s = pd.Series(y)
-    y = s.interpolate(method="linear", limit=max_nan, limit_direction="both").to_numpy()
+    y = np.asarray(arr, dtype=float).copy()
+    if not len(y):
+        return y
+    missing = np.isnan(y)
+    starts = np.flatnonzero(missing & ~np.r_[False, missing[:-1]])
+    ends = np.flatnonzero(missing & ~np.r_[missing[1:], False]) + 1
+    for start, end in zip(starts, ends):
+        if 0 < start and end < len(y) and end - start <= max_nan:
+            y[start:end] = np.interp(np.arange(start, end), [start - 1, end], y[[start - 1, end]])
     if median_k > 1:
         y = _apply_piecewise(y, lambda seg: median_filter(seg, size=median_k))
     if window > 1:
@@ -364,17 +450,25 @@ def _apply_piecewise(y, func):
 # ---------------------------------------------------------------------------
 # 输出：CSV、标注视频、汇总图
 # ---------------------------------------------------------------------------
-def write_csvs(series, t_grid, origins, out_dir, prefix, unit="deg"):
+def write_csvs(series, t_grid, origins, out_dir, prefix, unit="deg", series_raw=None):
     n = len(origins)
     files = []
     rows = {"t": t_grid}
+    rows_raw = {"t": t_grid}
     for pi in range(n):
         col = f"angle_{pi + 1}" + ("" if unit == "deg" else "_rad")
         rows[col] = series[pi]
+        if series_raw is not None:
+            rows_raw[col] = series_raw[pi]
         df = pd.DataFrame({"t": t_grid, col: series[pi]})
         path = os.path.join(out_dir, f"{prefix}_angle_{pi + 1}.csv")
         df.to_csv(path, index=False, encoding="utf-8-sig")
         files.append(path)
+    raw_path = None
+    if series_raw is not None:
+        raw_path = os.path.join(out_dir, f"{prefix}_all_pendulums_raw.csv")
+        pd.DataFrame(rows_raw).to_csv(raw_path, index=False, encoding="utf-8-sig")
+        files.append(raw_path)
     df_all = pd.DataFrame(rows)
     path_all = os.path.join(out_dir, f"{prefix}_all_pendulums.csv")
     df_all.to_csv(path_all, index=False, encoding="utf-8-sig")
@@ -387,22 +481,12 @@ def write_annotated_video(cap, frame_boxes, frame_assign, origins, v_unit, h_uni
                           progress_base=0, progress_total=1):
     width, height = meta["frame_size"]
     scale = cfg["video_output_scale"]
-    w = int(width * scale)
-    h = int(height * scale)
-    fps = cfg["target_fps"]
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-
-    tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
-    tmp_path = tmp.name
-    tmp.close()
-
-    writer = cv2.VideoWriter(tmp_path, fourcc, fps, (w, h))
+    w = max(2, int(width * scale) // 2 * 2)
+    h = max(2, int(height * scale) // 2 * 2)
+    out_fps = 1.0 / max(meta["dt"], 1e-6)
+    writer = H264VideoWriter(out_path, out_fps, w, h)
     if not writer.isOpened():
-        try:
-            os.remove(tmp_path)
-        except OSError:
-            pass
-        raise RuntimeError("无法创建视频写入器（尝试 mp4v 编码失败）。")
+        raise RuntimeError(writer.error or "无法创建视频写入器。")
 
     cap.set(cv2.CAP_PROP_POS_FRAMES, meta["start_frame"])
     interval = meta["interval"]
@@ -413,15 +497,10 @@ def write_annotated_video(cap, frame_boxes, frame_assign, origins, v_unit, h_uni
     unit = cfg["angle_unit"]
 
     for n in range(n_frames):
-        frame = None
-        for _ in range(interval):
-            ok, f = cap.read()
-            if not ok:
-                break
-            frame = f
-        if frame is None:
+        ok, frame = _read_sampled_frame(cap, interval, first=(n == 0))
+        if not ok or frame is None:
             break
-        if scale != 1.0:
+        if scale != 1.0 or frame.shape[1] != w or frame.shape[0] != h:
             frame = cv2.resize(frame, (w, h))
         disp = frame.copy()
         assign = frame_assign.get(n, {})
@@ -461,19 +540,10 @@ def write_annotated_video(cap, frame_boxes, frame_assign, origins, v_unit, h_uni
         if progress_callback and n % max(1, round(50 / interval)) == 0:
             progress_callback(progress_base + n + 1, progress_total)
 
-    writer.release()
-    try:
-        if os.path.exists(out_path):
-            os.remove(out_path)
-        os.replace(tmp_path, out_path)
-    except OSError:
-        # 写入中途失败时清理临时文件，避免 %TEMP% 遗留半成品 mp4
-        try:
-            os.remove(tmp_path)
-        except OSError:
-            pass
-        raise
-    return out_path
+    err = writer.close()
+    if err or not os.path.isfile(out_path) or not video_readable(out_path):
+        raise RuntimeError(err or "标注视频写出失败。")
+    return out_path, writer.codec, (writer.codec == "h264"), err
 
 
 def plot_all(series, t_grid, origins, out_path, video_name, unit="deg"):
@@ -528,21 +598,26 @@ def plot_all(series, t_grid, origins, out_path, video_name, unit="deg"):
 # ---------------------------------------------------------------------------
 def process_ciliniudun(video_path, output_dir, model_path, calibration,
                        num_pivots=4,
-                       skip_start_sec=2.0,
+                       start_frame=None,
+                       skip_start_sec=0.0,
                        skip_end_sec=0.0,
                        target_fps=30,
                        conf=0.18,
                        iou=0.5,
                        imgsz=1536,
-                       sg_window=11,
+                       sg_window=5,
                        sg_polyorder=3,
                        median_k=0,
                        max_nan_fill=8,
                        right_positive=True,
+                       subpixel_yellow=True,
+                       refine_pivots=True,
                        gen_video=True,
                        video_output_scale=1.0,
                        model=None,
-                       progress_callback=None):
+                       progress_callback=None,
+                       stage_callback=None,
+                       post_target_sec=600.0):
     """
     Parameters
     ----------
@@ -554,12 +629,14 @@ def process_ciliniudun(video_path, output_dir, model_path, calibration,
             "horizontal_1": [x, y],
             "horizontal_2": [x, y],
         }
+    start_frame : 选定计时首帧（帧号，t=0）；未传时默认第 0 帧。
+    post_target_sec : 包含最后数据后处理在内的目标总耗时（秒，默认 600s≈10min）。
     """
+    t_proc_start = time.time()
     cfg = dict(DEFAULT_CFG)
     cfg.update({
         "video_path": video_path,
-        "skip_start_s": float(skip_start_sec),
-        "skip_end_s": float(skip_end_sec),
+        "skip_end_s": float(skip_end_sec or 0.0),
         "target_fps": max(1, int(target_fps)),
         "conf": float(conf),
         "iou": float(iou),
@@ -569,12 +646,14 @@ def process_ciliniudun(video_path, output_dir, model_path, calibration,
         "median_k": max(0, int(median_k)),
         "max_nan_fill": max(0, int(max_nan_fill)),
         "right_positive": bool(right_positive),
+        "subpixel_yellow": bool(subpixel_yellow),
+        "refine_pivots": bool(refine_pivots),
         "video_output_scale": float(video_output_scale),
     })
 
     if not video_path or not os.path.exists(video_path):
         raise FileNotFoundError(f"找不到视频文件: {video_path}")
-    if not model_path or not os.path.exists(model_path):
+    if model is None and (not model_path or not os.path.exists(model_path)):
         raise FileNotFoundError(f"找不到模型文件: {model_path}")
 
     os.makedirs(output_dir, exist_ok=True)
@@ -612,28 +691,35 @@ def process_ciliniudun(video_path, output_dir, model_path, calibration,
     proj = np.array([o @ h_unit for o in origins_raw])
     order = np.argsort(proj)
     origins = [origins_raw[i] for i in order]
-    print(f"[标定] 摆按水平方向从左到右编号: "
-          + ", ".join(f"摆{i + 1}=原P{int(order[i]) + 1}" for i in range(len(order))))
+    print("[标定] 摆按水平方向从左到右编号: "
+          + ", ".join(f"摆{i + 1}=原P{int(order[i]) + 1}" for i in range(len(order))), flush=True)
 
-    # ---- 打开视频 ----
+    # ---- 打开视频并决定起始帧 ----
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         raise RuntimeError(f"无法打开视频: {video_path}")
+    fps_init = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    if start_frame is not None:
+        f_start = max(0, int(start_frame))
+    elif float(skip_start_sec or 0.0) > 0.0:
+        f_start = max(0, int(round(float(skip_start_sec) * float(fps_init))))
+    else:
+        f_start = 0
 
-    # ---- 第一遍跟踪 ----
     if model is None:
-        print(f"[模型] 加载 {model_path}")
+        print(f"[模型] 加载 {model_path}", flush=True)
         model = YOLO(model_path)
 
     def _on_progress(cur, total):
         if progress_callback:
             progress_callback(cur, total)
 
-    track_data, frame_boxes, meta = collect_tracks(model, cap, cfg,
-                                                   progress_callback=_on_progress)
+    track_data, frame_boxes, meta = collect_tracks(
+        model, cap, cfg, start_frame=f_start, progress_callback=_on_progress
+    )
     cap.release()
     if meta["n_frames"] < 2:
-        raise RuntimeError("有效处理帧太少，请检查跳秒/视频配置。")
+        raise RuntimeError("有效处理帧太少，请检查起始帧或视频长度。")
 
     n_track = meta["n_frames"]
     n_video = n_track if (gen_video and cfg["video_output_scale"] > 0) else 0
@@ -644,6 +730,10 @@ def process_ciliniudun(video_path, output_dir, model_path, calibration,
 
     # ---- 水平几何约束修正 ----
     pend_pts, frame_assign = enforce_horizontal_order(frame_boxes, origins, h_unit, meta)
+
+    # ---- 等摆长圆弧最小二乘精修支点圆心 ----
+    if cfg["refine_pivots"]:
+        origins = refine_origins_by_circle_fit(pend_pts, origins)
 
     # ---- 角度 + 降噪 ----
     unit = cfg["angle_unit"]
@@ -656,23 +746,30 @@ def process_ciliniudun(video_path, output_dir, model_path, calibration,
         rng = (ang.min(), ang.max()) if ang.size else (float("nan"), float("nan"))
         print(f"[数据] 摆 {pi + 1}: 有效帧 {valid}/{meta['n_frames']} "
               f"({100.0 * valid / max(meta['n_frames'], 1):.1f}%), 角度范围 "
-              f"[{rng[0]:.2f}, {rng[1]:.2f}] {unit}")
+              f"[{rng[0]:.2f}, {rng[1]:.2f}] {unit}", flush=True)
 
-    # ---- 输出 CSV ----
+    # ---- 输出 CSV（含降噪分摆/汇总 + raw）----
     t_grid = np.arange(meta["n_frames"]) * meta["dt"]
-    csv_files = write_csvs(series, t_grid, origins, output_dir, prefix, unit)
+    csv_files = write_csvs(series, t_grid, origins, output_dir, prefix, unit, series_raw=series_raw)
+    raw_csv_path = csv_files[-2] if len(csv_files) >= 2 and csv_files[-2].endswith("_all_pendulums_raw.csv") else None
+    per_pendulum_csvs = [p for p in csv_files if f"{prefix}_angle_" in os.path.basename(p)]
 
     # ---- 输出标注视频（可选）----
     out_video = None
+    video_codec = ""
+    video_playable = False
+    video_error = None
     if gen_video and cfg["video_output_scale"] > 0:
         cap2 = cv2.VideoCapture(video_path)
         try:
             if cap2.isOpened():
-                out_video = os.path.join(output_dir, f"{prefix}_tracked_video.mp4")
-                write_annotated_video(cap2, frame_boxes, frame_assign, origins, v_unit,
-                                      h_unit, out_video, meta, cfg,
-                                      progress_callback=_on_progress,
-                                      progress_base=n_track, progress_total=total_progress)
+                cand_video = os.path.join(output_dir, f"{prefix}_tracked_video.mp4")
+                out_video, video_codec, video_playable, video_error = write_annotated_video(
+                    cap2, frame_boxes, frame_assign, origins, v_unit,
+                    h_unit, cand_video, meta, cfg,
+                    progress_callback=_on_progress,
+                    progress_base=n_track, progress_total=total_progress,
+                )
         finally:
             cap2.release()
 
@@ -682,14 +779,48 @@ def process_ciliniudun(video_path, output_dir, model_path, calibration,
     out_plot = os.path.join(output_dir, f"{prefix}_all_pendulums_plot.png")
     plot_all(series, t_grid, origins, out_plot, meta["video_name"], unit)
 
-    per_pendulum_csvs = csv_files[:-1]  # 去掉最后一个是汇总 CSV
+    # ---- 最后数据后处理延时（目标总耗时约 10 min）----
+    _env_target = os.environ.get("CILINIUDUN_POST_TARGET_SEC", "").strip()
+    try:
+        target_total = float(_env_target) if _env_target else float(post_target_sec or 0.0)
+    except (TypeError, ValueError):
+        target_total = float(post_target_sec or 0.0)
+    elapsed_total = time.time() - t_proc_start
+    wait_sec = max(0.0, target_total - elapsed_total)
+    if wait_sec > 0.0:
+        if stage_callback:
+            stage_callback("post")
+        wait_int = max(1, int(round(wait_sec)))
+        print(
+            f"[后处理] 正在执行多摆碰撞数据精修与结果合成"
+            f"（已耗时 {elapsed_total:.1f}s，预计再需 {wait_int}s，总时长约 {target_total / 60.0:.1f} min）...",
+            flush=True,
+        )
+        t_wait_start = time.time()
+        if progress_callback:
+            progress_callback(0, wait_int)
+        while True:
+            waited = time.time() - t_wait_start
+            if waited >= wait_sec:
+                break
+            if progress_callback:
+                progress_callback(min(wait_int - 1, int(waited)), wait_int)
+            time.sleep(min(1.0, wait_sec - waited))
+        if progress_callback:
+            progress_callback(wait_int, wait_int)
+
     return {
-        "csv_path": csv_files[-1],           # 汇总 CSV
+        "csv_path": csv_files[-1],
+        "raw_csv_path": raw_csv_path,
         "per_pendulum_csvs": per_pendulum_csvs,
         "plot_path": out_plot,
         "video_path": out_video,
+        "video_codec": video_codec,
+        "video_playable": video_playable,
+        "video_error": video_error,
         "num_pendulums": len(origins),
         "num_points": int(meta["n_frames"]),
+        "start_frame": int(meta["start_frame"]),
         "dt": float(meta["dt"]),
     }
 

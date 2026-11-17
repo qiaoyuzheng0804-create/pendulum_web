@@ -29,7 +29,7 @@ from flask import Blueprint, render_template, request, jsonify, session, send_fr
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from experiments import get_experiment, EXPERIMENTS
-from demo_reports import build_demo_content, is_old_demo_content
+from demo_reports import build_demo_content, build_demo_feedback, is_old_demo_content
 
 BASE_DIR_MARKER = "platform"
 _db_path = None  # 由 init_platform(app) 注入
@@ -69,17 +69,17 @@ _DEMO_SUBS = [
     ("s240101", "danbai", "graded", 92), ("s240101", "sanxianbai", "submitted", None),
     ("s240102", "cizuni", "graded", 85), ("s240102", "yangshi", "submitted", None),
     ("s240103", "niubai", "graded", 78), ("s240103", "sanxianbai", "draft", None),
-    ("s240104", "ciliniudun", "graded", 66), ("s240104", "yangshi", "submitted", None),
+    ("s240104", "ciliniudun", "graded", 82), ("s240104", "yangshi", "submitted", None),
     # 物电 2402
     ("s240201", "danbai", "graded", 88), ("s240201", "niudunhuan", "submitted", None),
-    ("s240202", "cizuni", "graded", 74), ("s240202", "sanxianbai", "submitted", None),
-    ("s240203", "sanxianbai", "graded", 81), ("s240203", "danbai", "draft", None),
-    ("s240204", "yangshi", "graded", 69), ("s240204", "mikesun", "submitted", None),
+    ("s240202", "cizuni", "graded", 77), ("s240202", "sanxianbai", "submitted", None),
+    ("s240203", "sanxianbai", "graded", 86), ("s240203", "danbai", "draft", None),
+    ("s240204", "yangshi", "graded", 79), ("s240204", "mikesun", "submitted", None),
     # 应物 2401
-    ("s240301", "shiboqi", "graded", 90), ("s240301", "luoqiu", "submitted", None),
-    ("s240302", "luoqiu", "graded", 84), ("s240302", "shiboqi", "submitted", None),
-    ("s240303", "mikesun", "graded", 63), ("s240303", "niudunhuan", "submitted", None),
-    ("s240304", "niudunhuan", "graded", 76), ("s240304", "cizuni", "draft", None),
+    ("s240301", "shiboqi", "graded", 91), ("s240301", "luoqiu", "submitted", None),
+    ("s240302", "luoqiu", "graded", 87), ("s240302", "shiboqi", "submitted", None),
+    ("s240303", "mikesun", "graded", 76), ("s240303", "niudunhuan", "submitted", None),
+    ("s240304", "niudunhuan", "graded", 83), ("s240304", "cizuni", "draft", None),
 ]
 
 _DEMO_FLOW_EXPS = ["danbai", "cizuni", "niubai", "sanxianbai", "yangshi",
@@ -103,11 +103,11 @@ def _seed_demo_if_empty():
                     (username, generate_password_hash("123456"), "student", dname, cls_name))
         # 演示报告（完整内容：6 分节 + 数据表格，见 demo_reports.py）
         for username, exp_id, status, score in _DEMO_SUBS:
-            content = json.dumps(build_demo_content(exp_id) or {}, ensure_ascii=False)
+            content = json.dumps(build_demo_content(exp_id, score=score) or {}, ensure_ascii=False)
             graded_at = None
             if status == "graded":
                 graded_at = now
-                feedback = "（演示评语）实验步骤完整，误差分析可再深入。"
+                feedback = build_demo_feedback(exp_id, score)
             elif status == "submitted":
                 feedback = ""
             else:
@@ -152,15 +152,58 @@ def _seed_demo_if_empty():
                               " VALUES(?,?,?,?)", (qid, author, text, now))
 
 
+_REQ_SECTIONS = ("purpose", "principle", "apparatus", "data", "analysis", "conclusion")
+
+
+def _is_incomplete_content(content_json):
+    """检查报告 JSON 是否存在未填写的必填分节或缺失数据表格。"""
+    try:
+        d = json.loads(content_json or "{}")
+    except Exception:
+        return True
+    if not isinstance(d, dict):
+        return True
+    for sec in _REQ_SECTIONS:
+        if not str(d.get(sec) or "").strip():
+            return True
+    return False
+
+
 def _upgrade_demo_reports(c):
-    """把旧版占位演示报告升级为完整内容（按旧标记识别，幂等：升级后不再含标记）。"""
-    rows = c.execute("SELECT id, exp_id, content FROM submissions").fetchall()
+    """把旧版占位演示报告、不完整演示报告或通用占位评语升级为完整自洽内容（幂等）。"""
+    spec_map = {(u, e): (st, sc) for u, e, st, sc in _DEMO_SUBS}
+    rows = c.execute(
+        "SELECT id, username, exp_id, content, status, score, feedback FROM submissions"
+    ).fetchall()
     for r in rows:
-        if is_old_demo_content(r["content"]):
-            new = build_demo_content(r["exp_id"])
-            if new:
-                c.execute("UPDATE submissions SET content=? WHERE id=?",
-                          (json.dumps(new, ensure_ascii=False), r["id"]))
+        rid = r["id"]
+        exp_id = r["exp_id"]
+        status = r["status"]
+        score = r["score"]
+        fb = r["feedback"] or ""
+        # 若属于预设演示报告且分值/状态与最新规范不同，同步校正分值
+        key = (r["username"], exp_id)
+        if key in spec_map and status == "graded":
+            target_st, target_sc = spec_map[key]
+            if target_sc is not None and score != target_sc:
+                score = float(target_sc)
+        need_content = is_old_demo_content(r["content"]) or (
+            status in ("submitted", "graded") and _is_incomplete_content(r["content"])
+        )
+        need_fb = status == "graded" and (
+            not fb.strip() or "（演示评语）" in fb or need_content
+        )
+        if need_content or need_fb or (score != r["score"]):
+            new_content = (
+                json.dumps(build_demo_content(exp_id, score=score), ensure_ascii=False)
+                if need_content and build_demo_content(exp_id, score=score)
+                else r["content"]
+            )
+            new_fb = build_demo_feedback(exp_id, score) if need_fb else fb
+            c.execute(
+                "UPDATE submissions SET content=?, score=?, feedback=? WHERE id=?",
+                (new_content, score, new_fb, rid),
+            )
 
 
 def init_platform(app, db_path):
@@ -517,6 +560,8 @@ def report_submit(u, rid):
             return jsonify({"error": "报告不存在。"}), 404
         if row["status"] != "draft":
             return jsonify({"error": "该报告已提交。"}), 400
+        if _is_incomplete_content(row["content"]):
+            return jsonify({"error": "报告尚有未填写的分节（如实验仪器、误差分析或结论），请填写完整后再提交。"}), 400
         c.execute("UPDATE submissions SET status='submitted', updated_at=?, graded_at=NULL,"
                   " score=NULL, feedback='' WHERE id=?", (_now(), rid))
     return jsonify({"ok": True, "status": "submitted"})

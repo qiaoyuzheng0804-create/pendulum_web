@@ -1,393 +1,152 @@
+# -*- coding: utf-8 -*-
 """
 单摆 (Simple Pendulum) 处理器
-Adapted from danbai_ultimate_version.py — GUI calibration replaced with programmatic API.
+==============================
+对齐 yolov8/src/单摆/danbai_ultimate_version.py + observation_pipeline.py：
+
+  · 标定 3 点：center（悬点）、vertical_start（竖直起点）、vertical_end（竖直终点）
+  · 网页选定起始帧 start_frame（t=0，不再按固定秒数跳过开头、不再按目标周期早停截断）
+  · 按真实解码 PTS 时间轴 (decoder_time - t0) / slow_motion_factor 还原物理时间
+  · 保留真实逐帧观测角度（不自动归零、不对 raw 做平滑、不填补漏检）
+  · 输出 <basename>_angle_time.csv / <basename>_frame_audit.csv / 提取清单.json /
+         <basename>_angle_time.png / annotated_video.mp4
 """
 
+from dataclasses import dataclass
+import math
 import os
-import numpy as np
-import pandas as pd
+from pathlib import Path
+from typing import Optional, Tuple
+
+import cv2
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from dataclasses import dataclass
-from typing import List, Tuple, Optional, Dict
+import numpy as np
 
-import cv2
-from scipy.signal import savgol_filter, find_peaks
-from ultralytics import YOLO
-
-# 共享工具（KMP 环境变量在 common 导入时设置，须先于 torch/ultralytics 导入）
-from .common import ensure_dir, normalize, make_odd, valid_savgol_window, angle_from_vertical
+from .common import normalize, setup_matplotlib_chinese
+from .observation_pipeline import extract
 
 
 @dataclass
 class DanbaiConfig:
+    model_path: str = ""
+    video_path: str = ""
+    output_dir: str = ""
+    calibration_path: str = ""
+    timestamp_mode: str = "decoder_pts"
+    confirmed_fps: Optional[float] = None
+    cfr_confirmed: bool = False
+    allow_fps_fallback: bool = True
+    allow_nonempty_output: bool = True
+    time_calibration_confirmed: bool = False
+    release_end_s: Optional[float] = None
+    release_id: Optional[str] = None
+    configuration_id: Optional[str] = None
+    bob_class_id: Optional[int] = None
+    max_center_jump_px: Optional[float] = None
+    tracking_reset_after_misses: int = 5
+
+    # YOLO 推理配置
     conf_thres: float = 0.25
     iou_thres: float = 0.45
     imgsz: int = 1280
     max_det: int = 5
-    device: str = "cpu"
+    device: str = "auto"
     use_tracking_like_selection: bool = True
-    skip_initial_seconds: float = 3.0
-    savgol_window: int = 21
+
+    # 时间 / 帧选择
+    start_frame_index: Optional[int] = None
+    end_frame_index: Optional[int] = None
+    skip_initial_seconds: float = 0.0
+    slow_motion_factor: float = 1.0
+    flip_angle: bool = False
+    target_cycles: Optional[int] = None  # 仅兼容旧参数，不再用于早停截断
+
+    # 诊断平滑与绘图（仅用于展示/预览，绝不覆盖原始 raw_angle_deg）
+    savgol_window: int = 15
     savgol_polyorder: int = 3
-    max_jump_after_filter_deg: float = 0.45
-    zero_cross_abs_angle_gate_deg: float = 1.0
-    zero_cross_min_index: int = 40
-    target_cycles: int = 400
-    min_cycles: int = 398
-    fallback_to_available_cycles: bool = True
-    enable_early_stop_by_cycles: bool = True
-    online_smooth_window: int = 7
-    online_zero_cross_abs_gate_deg: float = 1.2
-    early_stop_extra_frames: int = 8
-    angle_step_deg: float = 0.15
-    min_frame_gap_between_samples: int = 1
-    resample_use_filtered_angle: bool = True
-    enable_global_zero_offset_correction: bool = True
-    enable_local_zero_offset_correction: bool = True
-    zero_offset_percentile_low: float = 5.0
-    zero_offset_percentile_high: float = 95.0
-    force_zero_point_at_start: bool = True
-    enable_envelope_extraction: bool = True
-    peak_min_distance: int = 8
-    peak_prominence: float = 0.08
-    envelope_savgol_window: int = 11
-    envelope_savgol_polyorder: int = 2
-    csv_float_format: str = "%.8f"
     save_angle_time_plot: bool = True
-    plot_dpi: int = 150
-    plot_figsize: Tuple[float, float] = (10, 6)
+    plot_figsize: Tuple[float, float] = (12.0, 5.0)
+    plot_dpi: int = 180
+    output_video_max_side: int = 1280
 
 
-def moving_linear_fill_nan(arr: np.ndarray) -> np.ndarray:
-    x = np.arange(len(arr))
-    mask = np.isfinite(arr)
-    if mask.sum() == 0:
-        return arr.copy()
-    out = arr.copy()
-    out[~mask] = np.interp(x[~mask], x[mask], out[mask])
-    return out
+def resolve_device(cfg: DanbaiConfig):
+    if cfg.device == "auto":
+        try:
+            import torch
+            cfg.device = "0" if torch.cuda.is_available() else "cpu"
+        except Exception:
+            cfg.device = "cpu"
+    return cfg.device
 
 
-def moving_average_tail(arr: List[float], window: int) -> float:
-    if len(arr) == 0:
-        return np.nan
-    w = max(1, min(window, len(arr)))
-    vals = np.array(arr[-w:], dtype=np.float64)
-    vals = vals[np.isfinite(vals)]
-    if len(vals) == 0:
-        return np.nan
-    return float(np.mean(vals))
+def _normalize_danbai_calibration(calibration: dict) -> dict:
+    cal = dict(calibration)
+    if "center" not in cal:
+        for alt in ("origin", "pivot"):
+            if alt in cal:
+                cal["center"] = cal[alt]
+                break
+    if "vertical_start" not in cal and "vertical_ref_1" in cal:
+        cal["vertical_start"] = cal["vertical_ref_1"]
+    if "vertical_end" not in cal and "vertical_ref_2" in cal:
+        cal["vertical_end"] = cal["vertical_ref_2"]
+    return cal
 
 
-def remove_spikes_deg(angle_deg: np.ndarray, max_jump_deg: float) -> np.ndarray:
-    a = angle_deg.copy()
-    n = len(a)
-    if n < 3:
-        return a
-    for i in range(1, n - 1):
-        if not np.isfinite(a[i - 1]) or not np.isfinite(a[i]) or not np.isfinite(a[i + 1]):
-            continue
-        if abs(a[i] - a[i - 1]) > max_jump_deg and abs(a[i] - a[i + 1]) > max_jump_deg:
-            a[i] = 0.5 * (a[i - 1] + a[i + 1])
-    return a
+def make_pendulum_frame_annotator(vunit_override=None):
+    """生成单摆/磁阻尼摆共用的标注视频帧回调（坐标系 + 检测框 + θ/t 读数）。"""
 
-
-def percentile_zero_offset(arr: np.ndarray, low: float, high: float) -> float:
-    upper = np.nanpercentile(arr, high)
-    lower = np.nanpercentile(arr, low)
-    return 0.5 * (upper + lower)
-
-
-def interp_zero_crossing_time(t1: float, a1: float, t2: float, a2: float) -> float:
-    if abs(a2 - a1) < 1e-12:
-        return t1
-    return t1 - a1 * (t2 - t1) / (a2 - a1)
-
-
-def is_valid_zero_cross(a1: float, a2: float, gate_deg: float) -> bool:
-    crossed = (a1 == 0.0) or (a2 == 0.0) or (a1 < 0 < a2) or (a1 > 0 > a2)
-    if not crossed:
-        return False
-    return (min(abs(a1), abs(a2)) <= gate_deg) or ((abs(a1) + abs(a2)) <= 2 * gate_deg)
-
-
-# 与 common.angle_from_vertical 逐位等价（相同 normalize → cross/dot → clip → atan2 序列），
-# 保留原名以维持函数签名与内部调用不变
-def signed_angle_deg_right_positive(vertical_unit: np.ndarray, radius_vec: np.ndarray) -> float:
-    return angle_from_vertical(vertical_unit, radius_vec)
-
-
-def centers_to_angles(centers: np.ndarray, origin: np.ndarray, vertical_unit: np.ndarray) -> np.ndarray:
-    angles = []
-    for c in centers:
-        if np.any(~np.isfinite(c)):
-            angles.append(np.nan)
-            continue
-        radius_vec = c - origin
-        if np.linalg.norm(radius_vec) < 1e-12:
-            angles.append(np.nan)
-            continue
-        angles.append(signed_angle_deg_right_positive(vertical_unit, radius_vec))
-    return np.array(angles, dtype=np.float64)
-
-
-def detect_first_bottom_crossing(times, angle_deg, abs_gate_deg, min_index):
-    n = len(angle_deg)
-    if n < 2:
-        return None
-    for i in range(max(0, min_index), n - 1):
-        a1, a2 = angle_deg[i], angle_deg[i + 1]
-        if not np.isfinite(a1) or not np.isfinite(a2):
-            continue
-        crossed = (a1 == 0.0) or (a2 == 0.0) or (a1 < 0 < a2) or (a1 > 0 > a2)
-        if not crossed:
-            continue
-        if min(abs(a1), abs(a2)) <= abs_gate_deg or abs(a1) + abs(a2) <= 2 * abs_gate_deg:
-            t0 = interp_zero_crossing_time(times[i], a1, times[i + 1], a2)
-            return i, t0
-    # 兜底：门限内没找到过零点时，退而取最接近零的角度位置。
-    # 切片可能全为 NaN（检测连续失败），nanargmin 会直接抛异常，这里显式降级成清晰报错
-    seg = angle_deg[min_index:] if n > min_index else angle_deg
-    offset = min_index if n > min_index else 0
-    if not np.any(np.isfinite(seg)):
-        raise RuntimeError("角度序列全为无效值（YOLO 检测连续失败），无法定位零点。请检查视频画质与标定。")
-    idx = int(np.nanargmin(np.abs(seg))) + offset
-    return max(0, idx - 1), float(times[idx])
-
-
-def detect_bottom_crossing_times(times, angle_deg, abs_gate_deg):
-    zt = []
-    n = len(angle_deg)
-    for i in range(n - 1):
-        a1, a2 = angle_deg[i], angle_deg[i + 1]
-        if not np.isfinite(a1) or not np.isfinite(a2):
-            continue
-        if is_valid_zero_cross(a1, a2, abs_gate_deg):
-            zt.append(interp_zero_crossing_time(times[i], a1, times[i + 1], a2))
-    return zt
-
-
-def choose_end_time_by_cycles(zero_times, t0, target_cycles, min_cycles, fallback_to_available):
-    future_zeros = [z for z in zero_times if z > t0 + 1e-9]
-    need_target = 2 * target_cycles
-    need_min = 2 * min_cycles
-    if len(future_zeros) >= need_target:
-        return future_zeros[need_target - 1]
-    if len(future_zeros) >= need_min:
-        return future_zeros[need_min - 1]
-    if fallback_to_available and len(future_zeros) > 0:
-        return future_zeros[-1]
-    return None
-
-
-def angle_uniform_resample(times, angles_deg, angle_step_deg, min_frame_gap=1):
-    if len(times) == 0:
-        return times, angles_deg, np.array([], dtype=int)
-    keep_idx = [0]
-    last_angle = angles_deg[0]
-    last_idx = 0
-    for i in range(1, len(angles_deg)):
-        if i - last_idx < min_frame_gap:
-            continue
-        if abs(angles_deg[i] - last_angle) >= angle_step_deg:
-            keep_idx.append(i)
-            last_angle = angles_deg[i]
-            last_idx = i
-    if keep_idx[-1] != len(angles_deg) - 1:
-        keep_idx.append(len(angles_deg) - 1)
-    keep_idx = np.array(keep_idx, dtype=int)
-    return times[keep_idx], angles_deg[keep_idx], keep_idx
-
-
-def extract_peak_envelope(times, angle_deg, peak_min_distance, peak_prominence,
-                          env_savgol_window, env_savgol_polyorder):
-    n = len(angle_deg)
-    empty_result = {
-        "peak_idx": np.array([], dtype=int),
-        "peak_time": np.array([], dtype=float),
-        "peak_angle": np.array([], dtype=float),
-        "peak_abs_angle": np.array([], dtype=float),
-        "peak_type": np.array([], dtype=object),
-        "envelope": np.abs(angle_deg.copy())
-    }
-    if n < 5:
-        return empty_result
-
-    pos_idx, _ = find_peaks(angle_deg, distance=max(1, peak_min_distance), prominence=peak_prominence)
-    neg_idx, _ = find_peaks(-angle_deg, distance=max(1, peak_min_distance), prominence=peak_prominence)
-    all_idx = np.sort(np.unique(np.concatenate([pos_idx, neg_idx])))
-    if len(all_idx) == 0:
-        return empty_result
-
-    peak_time = times[all_idx]
-    peak_angle = angle_deg[all_idx]
-    peak_abs_angle = np.abs(peak_angle)
-    pos_set = set(pos_idx.tolist())
-    peak_type = np.array(["pos" if idx in pos_set else "neg" for idx in all_idx], dtype=object)
-
-    envelope = np.interp(times, peak_time, peak_abs_angle,
-                         left=peak_abs_angle[0], right=peak_abs_angle[-1])
-    win = valid_savgol_window(len(envelope), env_savgol_window, env_savgol_polyorder)
-    if win > 0:
-        envelope = savgol_filter(envelope, window_length=win, polyorder=env_savgol_polyorder, mode="interp")
-    envelope = np.maximum(envelope, 0.0)
-
-    return {
-        "peak_idx": all_idx,
-        "peak_time": peak_time,
-        "peak_angle": peak_angle,
-        "peak_abs_angle": peak_abs_angle,
-        "peak_type": peak_type,
-        "envelope": envelope
-    }
-
-
-def process_angle_series(times, raw_angles_deg, cfg):
-    angles = moving_linear_fill_nan(raw_angles_deg)
-    angles = remove_spikes_deg(angles, max_jump_deg=cfg.max_jump_after_filter_deg)
-
-    win = valid_savgol_window(len(angles), cfg.savgol_window, cfg.savgol_polyorder)
-    if win > 0:
-        filt_angles = savgol_filter(angles, window_length=win, polyorder=cfg.savgol_polyorder, mode="interp")
-    else:
-        filt_angles = angles.copy()
-
-    if cfg.enable_global_zero_offset_correction and len(filt_angles) > 0:
-        zero_bias_global = percentile_zero_offset(
-            filt_angles, cfg.zero_offset_percentile_low, cfg.zero_offset_percentile_high)
-        filt_angles = filt_angles - zero_bias_global
-        angles = angles - zero_bias_global
-
-    zc = detect_first_bottom_crossing(
-        times=times, angle_deg=filt_angles,
-        abs_gate_deg=cfg.zero_cross_abs_angle_gate_deg,
-        min_index=cfg.zero_cross_min_index)
-    if zc is None:
-        raise RuntimeError("未能检测到第一次通过最低点（angle=0）的时刻。")
-    _, t0 = zc
-
-    zero_times = detect_bottom_crossing_times(
-        times=times, angle_deg=filt_angles,
-        abs_gate_deg=cfg.zero_cross_abs_angle_gate_deg)
-    t_end = choose_end_time_by_cycles(
-        zero_times=zero_times, t0=t0,
-        target_cycles=cfg.target_cycles, min_cycles=cfg.min_cycles,
-        fallback_to_available=cfg.fallback_to_available_cycles)
-    if t_end is None or t_end <= t0:
-        t_end = times[-1]
-
-    mask = (times >= t0) & (times <= t_end)
-    times_cut = times[mask]
-    raw_cut = angles[mask]
-    filt_cut = filt_angles[mask]
-
-    times_seg = times_cut - t0
-    raw_seg = raw_cut.copy()
-    filt_seg = filt_cut.copy()
-
-    if cfg.force_zero_point_at_start:
-        if len(times_seg) == 0 or abs(times_seg[0]) > 1e-12:
-            times_seg = np.insert(times_seg, 0, 0.0)
-            raw_seg = np.insert(raw_seg, 0, 0.0)
-            filt_seg = np.insert(filt_seg, 0, 0.0)
+    def _annotate(disp, row, chosen, t_disp, calibration, scale, frame_idx, total_frames):
+        ox = int(round(float(calibration["center"][0]) * scale))
+        oy = int(round(float(calibration["center"][1]) * scale))
+        if vunit_override is not None:
+            vx, vy = float(vunit_override[0]), float(vunit_override[1])
         else:
-            times_seg[0] = 0.0
-            raw_seg[0] = 0.0
-            filt_seg[0] = 0.0
+            vx, vy = normalize(
+                np.asarray(calibration["vertical_end"], dtype=float)
+                - np.asarray(calibration["vertical_start"], dtype=float)
+            )
 
-    if cfg.enable_local_zero_offset_correction and len(filt_seg) > 1:
-        zero_bias_local = percentile_zero_offset(
-            filt_seg[1:], cfg.zero_offset_percentile_low, cfg.zero_offset_percentile_high)
-        filt_seg[1:] = filt_seg[1:] - zero_bias_local
-        raw_seg[1:] = raw_seg[1:] - zero_bias_local
-        if cfg.force_zero_point_at_start:
-            times_seg[0] = 0.0
-            raw_seg[0] = 0.0
-            filt_seg[0] = 0.0
+        h, w = disp.shape[:2]
+        axis_len = int(max(60, min(w, h) * 0.35))
+        ax_end = (int(round(ox + vx * axis_len)), int(round(oy + vy * axis_len)))
+        cv2.arrowedLine(disp, (ox, oy), ax_end, (255, 229, 0), 2, cv2.LINE_AA, tipLength=0.14)
+        cv2.circle(disp, (ox, oy), 6, (59, 235, 255), -1, cv2.LINE_AA)
+        cv2.circle(disp, (ox, oy), 9, (255, 255, 255), 1, cv2.LINE_AA)
 
-    envelope = np.abs(filt_seg.copy())
-    peak_idx = np.array([], dtype=int)
-    peak_time = np.array([], dtype=float)
-    peak_angle = np.array([], dtype=float)
-    peak_abs_angle = np.array([], dtype=float)
-    peak_type = np.array([], dtype=object)
-
-    if cfg.enable_envelope_extraction and len(filt_seg) > 5:
-        env_info = extract_peak_envelope(
-            times=times_seg, angle_deg=filt_seg,
-            peak_min_distance=cfg.peak_min_distance,
-            peak_prominence=cfg.peak_prominence,
-            env_savgol_window=cfg.envelope_savgol_window,
-            env_savgol_polyorder=cfg.envelope_savgol_polyorder)
-        envelope = env_info["envelope"]
-        peak_idx = env_info["peak_idx"]
-        peak_time = env_info["peak_time"]
-        peak_angle = env_info["peak_angle"]
-        peak_abs_angle = env_info["peak_abs_angle"]
-        peak_type = env_info["peak_type"]
-
-    resample_angles = filt_seg if cfg.resample_use_filtered_angle else raw_seg
-    sample_t, _, keep_idx = angle_uniform_resample(
-        times=times_seg, angles_deg=resample_angles,
-        angle_step_deg=cfg.angle_step_deg,
-        min_frame_gap=cfg.min_frame_gap_between_samples)
-
-    if len(sample_t) == 0:
-        raise RuntimeError("均匀采样后无有效数据。")
-
-    sample_raw = raw_seg[keep_idx]
-    sample_filt = filt_seg[keep_idx]
-    sample_env = envelope[keep_idx]
-
-    if cfg.force_zero_point_at_start:
-        if abs(sample_t[0]) > 1e-12:
-            sample_t = np.insert(sample_t, 0, 0.0)
-            sample_raw = np.insert(sample_raw, 0, 0.0)
-            sample_filt = np.insert(sample_filt, 0, 0.0)
-            sample_env = np.insert(sample_env, 0, 0.0)
+        if row.get("observed") and chosen is not None and math.isfinite(row.get("raw_angle_deg", float("nan"))):
+            x1, y1, x2, y2 = [int(round(v * scale)) for v in chosen["box"]]
+            cx = int(round(float(chosen["center"][0]) * scale))
+            cy = int(round(float(chosen["center"][1]) * scale))
+            cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 196, 255), 2, cv2.LINE_AA)
+            cv2.line(disp, (ox, oy), (cx, cy), (235, 235, 235), 2, cv2.LINE_AA)
+            cv2.circle(disp, (cx, cy), 5, (0, 196, 255), -1, cv2.LINE_AA)
+            ang = float(row["raw_angle_deg"])
+            msg = f"theta = {ang:+.2f} deg"
+            col = (3, 255, 118)
         else:
-            sample_t[0] = 0.0
-            sample_raw[0] = 0.0
-            sample_filt[0] = 0.0
-            sample_env[0] = 0.0
+            msg = "NO DETECTION"
+            col = (60, 60, 255)
 
-    df = pd.DataFrame({
-        "time_s": sample_t,
-        "angle_deg": sample_filt,
-        "raw_angle_deg": sample_raw,
-        "filtered_angle_deg": sample_filt,
-        "peak_envelope_deg": sample_env
-    })
+        t_msg = f"t = {t_disp:.4f} s   frame {frame_idx}"
+        for text, org, c in ((msg, (14, h - 42), col), (t_msg, (14, h - 16), (245, 245, 245))):
+            cv2.putText(disp, text, org, cv2.FONT_HERSHEY_SIMPLEX, 0.72, (0, 0, 0), 4, cv2.LINE_AA)
+            cv2.putText(disp, text, org, cv2.FONT_HERSHEY_SIMPLEX, 0.72, c, 2, cv2.LINE_AA)
+        return disp
 
-    peaks_df = pd.DataFrame({
-        "peak_time_s": peak_time,
-        "peak_angle_deg": peak_angle,
-        "peak_abs_angle_deg": peak_abs_angle,
-        "peak_type": peak_type
-    })
-
-    return {
-        "times_seg": times_seg, "raw_seg": raw_seg, "filt_seg": filt_seg,
-        "envelope_seg": envelope, "peak_idx": peak_idx, "peak_time": peak_time,
-        "peak_angle": peak_angle, "peak_abs_angle": peak_abs_angle,
-        "peak_type": peak_type, "sample_t": sample_t, "sample_raw": sample_raw,
-        "sample_filt": sample_filt, "sample_env": sample_env,
-        "df": df, "peaks_df": peaks_df
-    }
+    return _annotate
 
 
 def plot_angle_time(result_dict, save_path, cfg, title):
+    setup_matplotlib_chinese()
     plt.figure(figsize=cfg.plot_figsize)
-    plt.plot(result_dict["times_seg"], result_dict["raw_seg"], label="Raw Angle", linewidth=0.9, alpha=0.5)
-    plt.plot(result_dict["times_seg"], result_dict["filt_seg"], label="Filtered Angle", linewidth=1.5)
-    plt.plot(result_dict["times_seg"], result_dict["envelope_seg"], label="Peak Envelope", linewidth=1.3, linestyle="--")
-    plt.plot(result_dict["times_seg"], -result_dict["envelope_seg"], linewidth=1.3, linestyle="--")
-    if len(result_dict["peak_time"]) > 0:
-        plt.scatter(result_dict["peak_time"], result_dict["peak_angle"], s=18, label="Detected Peaks")
-    plt.scatter(result_dict["sample_t"], result_dict["sample_filt"], s=10, label="Sampled Points")
-    plt.axhline(0.0, linestyle="--", linewidth=1.0)
+    plt.plot(result_dict["times_seg"], result_dict["raw_seg"], label="Raw Angle", linewidth=0.9, alpha=0.55)
+    plt.plot(result_dict["times_seg"], result_dict["filt_seg"], label="Diagnostic Filtered", linewidth=1.6)
+    plt.scatter(result_dict["sample_t"], result_dict["sample_raw"], s=8, alpha=0.35, label="Observed Frames")
+    plt.axhline(0.0, linestyle="--", linewidth=1.0, color="gray")
     plt.xlabel("Time (s)")
     plt.ylabel("Angle (deg)")
     plt.title(title)
@@ -398,215 +157,66 @@ def plot_angle_time(result_dict, save_path, cfg, title):
     plt.close()
 
 
-def draw_text(img, txt, org, scale=0.6, color=(0, 255, 255), thick=1):
-    """带黑色描边的 putText（标注视频用；cv2 画不了中文，文案一律 ASCII）。"""
-    cv2.putText(img, txt, org, cv2.FONT_HERSHEY_SIMPLEX, scale, (0, 0, 0), thick + 3, cv2.LINE_AA)
-    cv2.putText(img, txt, org, cv2.FONT_HERSHEY_SIMPLEX, scale, color, thick, cv2.LINE_AA)
+def process_danbai(
+    video_path,
+    output_dir,
+    model_path,
+    calibration,
+    start_frame=None,
+    end_frame=None,
+    skip_initial_seconds=0.0,
+    slow_motion_factor=1.0,
+    target_cycles=None,
+    flip_angle=False,
+    gen_video=True,
+    model=None,
+    progress_callback=None,
+    cfg=None,
+):
+    """单摆处理入口：基于选定起始帧逐帧提取真实角度与时间戳。"""
+    base_cfg = DanbaiConfig()
+    if cfg is not None:
+        for k, v in vars(cfg).items():
+            if hasattr(base_cfg, k):
+                setattr(base_cfg, k, v)
+    cfg = base_cfg
 
-
-def process_danbai(video_path, output_dir, model_path, calibration,
-                   skip_initial_seconds=3.0, slow_motion_factor=1.0,
-                   target_cycles=400, model=None, progress_callback=None,
-                   gen_video=True, output_video_max_side=1280):
-    cfg = DanbaiConfig()
-    cfg.skip_initial_seconds = skip_initial_seconds
+    cfg.video_path = str(video_path)
+    cfg.output_dir = str(output_dir)
+    cfg.model_path = str(model_path or "")
+    cfg.flip_angle = bool(flip_angle)
     cfg.target_cycles = target_cycles
-    cfg.min_cycles = max(1, target_cycles - 2)
+    cfg.slow_motion_factor = float(slow_motion_factor) if slow_motion_factor is not None else 1.0
 
-    try:
-        import torch
-        cfg.device = "0" if torch.cuda.is_available() else "cpu"
-    except Exception:
-        cfg.device = "cpu"
+    if start_frame is not None:
+        cfg.start_frame_index = max(0, int(start_frame))
+        cfg.end_frame_index = max(cfg.start_frame_index + 2, int(end_frame)) if end_frame is not None else None
+        cfg.skip_initial_seconds = 0.0
+    elif float(skip_initial_seconds or 0.0) > 0.0:
+        cfg.start_frame_index = None
+        cfg.end_frame_index = int(end_frame) if end_frame is not None else None
+        cfg.skip_initial_seconds = float(skip_initial_seconds)
+    else:
+        cfg.start_frame_index = 0
+        cfg.end_frame_index = int(end_frame) if end_frame is not None else None
+        cfg.skip_initial_seconds = 0.0
 
-    ensure_dir(output_dir)
+    resolve_device(cfg)
+    cal = _normalize_danbai_calibration(calibration)
+    annotator = make_pendulum_frame_annotator() if gen_video else None
 
-    center_origin = np.array(calibration["center"], dtype=np.float64)
-    vertical_start = np.array(calibration["vertical_start"], dtype=np.float64)
-    vertical_end = np.array(calibration["vertical_end"], dtype=np.float64)
-    vertical_vec = vertical_end - vertical_start
-    vertical_unit = normalize(vertical_vec)
-    if np.linalg.norm(vertical_unit) < 1e-12:
-        raise RuntimeError("Vertical direction vector is zero.")
-
-    if model is None:
-        model = YOLO(model_path)
-
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        raise RuntimeError(f"Cannot open video: {video_path}")
-
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    if fps is None or fps <= 1e-6:
-        fps = 30.0
-
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    basename = os.path.splitext(os.path.basename(video_path))[0]
-    vw = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    vh = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-    # ---- 标注视频：与源视频同帧率、从第 0 帧起逐帧写 ----
-    # 跳过段原样写入（不画标注），提前停帧时视频也同步截断，这样视频的帧号/时间轴
-    # 与 CSV 里的 time_s 严格对齐；缺检测的帧画 NO DETECTION，不丢帧。
-    vid_path = os.path.join(output_dir, "annotated_video.mp4")
-    out_scale = min(1.0, float(output_video_max_side) / max(1, max(vw, vh)))
-    out_w = int(round(vw * out_scale))
-    out_h = int(round(vh * out_scale))
-    out_fps = max(1.0, min(240.0, fps))
-    writer = None
-    if gen_video and out_w > 0 and out_h > 0:
-        writer = cv2.VideoWriter(vid_path, cv2.VideoWriter_fourcc(*"mp4v"), out_fps, (out_w, out_h))
-        if not writer.isOpened():
-            print("[WARN] VideoWriter 打不开，标注视频将不会生成。", flush=True)
-            writer = None
-
-    times, centers, confs = [], [], []
-    prev_center = None
-    frame_idx = 0
-    slow_motion_factor = max(1.0, float(slow_motion_factor))  # 0/负数会触发除零
-    skip_frames = int(round(cfg.skip_initial_seconds / slow_motion_factor * fps))
-
-    online_raw_angles = []
-    online_smooth_angles = []
-    first_cross_found = False
-    post_start_cross_count = 0
-    extra_frames_left = -1
-
-    while True:
-        ok, frame = cap.read()
-        if not ok:
-            break
-
-        t = frame_idx / fps * slow_motion_factor
-
-        # 跳过段直接不跑推理：此前 predict 在跳过判断之前，白烧 GPU
-        #（跳 3 秒 × 30fps ≈ 90 次无效推理/视频）
-        if frame_idx < skip_frames:
-            if writer is not None:
-                writer.write(frame if out_scale >= 1.0
-                             else cv2.resize(frame, (out_w, out_h), interpolation=cv2.INTER_AREA))
-            frame_idx += 1
-            continue
-
-        results = model.predict(
-            source=frame, conf=cfg.conf_thres, iou=cfg.iou_thres,
-            imgsz=cfg.imgsz, max_det=cfg.max_det, device=cfg.device, verbose=False)
-
-        det_centers, det_scores, det_boxes = [], [], []
-        if len(results) > 0 and results[0].boxes is not None and len(results[0].boxes) > 0:
-            boxes_xyxy = results[0].boxes.xyxy.cpu().numpy()
-            scores = results[0].boxes.conf.cpu().numpy()
-            for box, sc in zip(boxes_xyxy, scores):
-                x1, y1, x2, y2 = box[:4]
-                cx = 0.5 * (x1 + x2)
-                cy = 0.5 * (y1 + y2)
-                det_centers.append(np.array([cx, cy], dtype=np.float64))
-                det_scores.append(float(sc))
-                det_boxes.append((float(x1), float(y1), float(x2), float(y2)))
-
-        chosen_center = np.array([np.nan, np.nan], dtype=np.float64)
-        chosen_box = None
-        chosen_score = 0.0
-        if len(det_centers) > 0:
-            if cfg.use_tracking_like_selection and prev_center is not None and np.all(np.isfinite(prev_center)):
-                dists = [np.linalg.norm(c - prev_center) for c in det_centers]
-                best_idx = int(np.argmin(dists))
-            else:
-                best_idx = int(np.argmax(det_scores))
-            chosen_center = det_centers[best_idx]
-            chosen_box = det_boxes[best_idx]
-            chosen_score = det_scores[best_idx]
-            prev_center = chosen_center.copy()
-
-        times.append(t)
-        centers.append(chosen_center)
-
-        if np.all(np.isfinite(chosen_center)):
-            raw_ang = signed_angle_deg_right_positive(vertical_unit, chosen_center - center_origin)
-        else:
-            raw_ang = np.nan
-
-        online_raw_angles.append(raw_ang)
-        smooth_ang = moving_average_tail(online_raw_angles, cfg.online_smooth_window)
-        online_smooth_angles.append(smooth_ang)
-
-        if writer is not None:
-            disp = frame if out_scale >= 1.0 else cv2.resize(frame, (out_w, out_h), interpolation=cv2.INTER_AREA)
-            s = out_scale
-
-            def P(p):
-                return (int(round(p[0] * s)), int(round(p[1] * s)))
-
-            o_px = P(center_origin)
-            e_up = P((center_origin[0] + 400 * vertical_unit[0], center_origin[1] + 400 * vertical_unit[1]))
-            e_dn = P((center_origin[0] - 400 * vertical_unit[0], center_origin[1] - 400 * vertical_unit[1]))
-            cv2.line(disp, e_up, e_dn, (80, 80, 255), 1, cv2.LINE_AA)
-            cv2.circle(disp, o_px, 6, (0, 255, 255), -1)
-            draw_text(disp, "origin", (o_px[0] + 8, o_px[1] - 8), 0.5, (0, 255, 255), 1)
-            if chosen_box is not None:
-                x1, y1, x2, y2 = chosen_box
-                cv2.rectangle(disp, P((x1, y1)), P((x2, y2)), (0, 215, 255), 2)
-                c_px = P(chosen_center)
-                cv2.circle(disp, c_px, 5, (0, 215, 255), -1)
-                cv2.line(disp, o_px, c_px, (0, 215, 255), 2, cv2.LINE_AA)
-                draw_text(disp, "%.2f deg" % raw_ang, (c_px[0] + 8, c_px[1] + 22), 0.62, (0, 215, 255), 2)
-            else:
-                draw_text(disp, "NO DETECTION", (10, 100), 0.7, (0, 0, 255), 2)
-            draw_text(disp, "frame %d / %d    t %.3f s    conf %s"
-                      % (frame_idx, max(0, total_frames - 1), t,
-                         "%.2f" % chosen_score if chosen_box is not None else "--"),
-                      (10, 26), 0.55, (230, 230, 230))
-            writer.write(disp)
-
-        if cfg.enable_early_stop_by_cycles and len(online_smooth_angles) >= max(3, cfg.zero_cross_min_index + 2):
-            a1 = online_smooth_angles[-2]
-            a2 = online_smooth_angles[-1]
-            if is_valid_zero_cross(a1, a2, cfg.online_zero_cross_abs_gate_deg):
-                if not first_cross_found:
-                    first_cross_found = True
-                else:
-                    post_start_cross_count += 1
-                    if post_start_cross_count >= 2 * cfg.target_cycles and extra_frames_left < 0:
-                        extra_frames_left = cfg.early_stop_extra_frames
-
-        if extra_frames_left >= 0:
-            extra_frames_left -= 1
-            if extra_frames_left < 0:
-                frame_idx += 1
-                break
-
-        frame_idx += 1
-        if progress_callback and frame_idx % 50 == 0:
-            progress_callback(frame_idx, total_frames)
-
-    cap.release()
-    if writer is not None:
-        writer.release()
-    if progress_callback:
-        progress_callback(total_frames, total_frames)
-
-    times = np.array(times, dtype=np.float64)
-    centers = np.array(centers, dtype=np.float64)
-
-    raw_angles_deg = centers_to_angles(centers, center_origin, vertical_unit)
-    result = process_angle_series(times, raw_angles_deg, cfg)
-
-    out_csv = os.path.join(output_dir, f"{basename}_angle_time.csv")
-    result["df"].to_csv(out_csv, index=False, float_format=cfg.csv_float_format, encoding="utf-8-sig")
-
-    peaks_csv = os.path.join(output_dir, f"{basename}_peaks.csv")
-    result["peaks_df"].to_csv(peaks_csv, index=False, float_format=cfg.csv_float_format, encoding="utf-8-sig")
-
-    plot_path = os.path.join(output_dir, f"{basename}_angle_time.png")
-    plot_angle_time(result_dict=result, save_path=plot_path, cfg=cfg,
-                    title=f"{basename} Angle-Time Curve")
-
-    out = {
-        "csv_path": out_csv,
-        "peaks_csv": peaks_csv,
-        "plot_path": plot_path,
-        "num_points": len(result["df"]),
-    }
-    if writer is not None:
-        out["video_path"] = vid_path
-    return out
+    res = extract(
+        video_path=video_path,
+        output_dir=output_dir,
+        model_path=model_path,
+        calibration=cal,
+        cfg=cfg,
+        model=model,
+        progress_callback=progress_callback,
+        plotter=plot_angle_time,
+        frame_annotator=annotator,
+        write_video=bool(gen_video),
+        video_filename="annotated_video.mp4",
+        extra_metadata={"experiment": "simple_pendulum"},
+    )
+    return res

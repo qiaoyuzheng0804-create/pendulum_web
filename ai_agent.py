@@ -141,6 +141,11 @@ def build_system_prompt(base_prompt, context):
                      f"标定点={context.get('calib_points','')}")
         if step in STEP_GUIDE:
             lines.append(f"- 当前阶段的辅导重点：{STEP_GUIDE[step]}")
+    rs = context.get("result_summary")
+    if isinstance(rs, dict) and rs:
+        parts = [f"{k}={v}" for k, v in rs.items() if v is not None and v != ""]
+        if parts:
+            lines.append(f"- 本次视频分析与方程反演结果摘要：{', '.join(parts)}")
     lines.append("- 你是学生的实验全流程助教：主动结合当前进度回答，"
                  "学生问实验相关问题时优先调用 get_experiment_guide / get_report_template / "
                  "analyze_numeric_data 工具获取平台内的准确资料，再组织回答。")
@@ -148,26 +153,50 @@ def build_system_prompt(base_prompt, context):
 
 
 # ---------- agent 主循环 ----------
+def _call_chat_completion(client, **kwargs):
+    """调用 chat.completions.create；若本机系统代理异常导致连接失败，自动绕过环境代理重试。"""
+    try:
+        return client.chat.completions.create(**kwargs)
+    except Exception as e:
+        err_name = type(e).__name__
+        if "Connection" in err_name or "Proxy" in err_name or "ConnectError" in str(e):
+            import httpx
+            from openai import OpenAI
+            direct_client = OpenAI(
+                api_key=client.api_key,
+                base_url=str(client.base_url),
+                http_client=httpx.Client(trust_env=False, timeout=45.0),
+                max_retries=1,
+            )
+            return direct_client.chat.completions.create(**kwargs)
+        raise
+
+
 def run_agent_chat(client, model, messages, context, base_system_prompt):
     """generator：逐个产出 SSE payload dict（{'tool'} / {'content'} / {'error'}）。"""
     msgs = [{"role": "system", "content": build_system_prompt(base_system_prompt, context)}]
     msgs += list(messages)
 
     for _ in range(_MAX_TOOL_ROUNDS):
-        resp = client.chat.completions.create(
-            model=model, messages=msgs, tools=TOOLS_SPEC,
-            max_tokens=1024, temperature=0.3,
+        resp = _call_chat_completion(
+            client, model=model, messages=msgs, tools=TOOLS_SPEC,
+            max_tokens=4096, temperature=0.3,
         )
         m = resp.choices[0].message
         if not m.tool_calls:
-            if m.content:
-                yield {"content": m.content}
+            text = m.content or getattr(m, "reasoning_content", None) or ""
+            if text:
+                yield {"content": text}
             return
-        msgs.append({
+        assistant_msg = {
             "role": "assistant",
             "content": m.content or "",
             "tool_calls": [tc.model_dump() for tc in m.tool_calls],
-        })
+        }
+        rc = getattr(m, "reasoning_content", None)
+        if rc is not None:
+            assistant_msg["reasoning_content"] = rc
+        msgs.append(assistant_msg)
         for tc in m.tool_calls:
             name = tc.function.name
             yield {"tool": f"查询 {name} …"}
@@ -179,8 +208,8 @@ def run_agent_chat(client, model, messages, context, base_system_prompt):
             msgs.append({"role": "tool", "tool_call_id": tc.id, "content": result[:6000]})
 
     # 工具轮次用尽后的最终回答（流式）
-    stream = client.chat.completions.create(
-        model=model, messages=msgs, stream=True, max_tokens=2048, temperature=0.7,
+    stream = _call_chat_completion(
+        client, model=model, messages=msgs, stream=True, max_tokens=4096, temperature=0.7,
     )
     for chunk in stream:
         if chunk.choices and chunk.choices[0].delta.content:

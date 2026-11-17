@@ -60,10 +60,16 @@ def run_sr_danbai(csv_path, output_dir, pendulum_length=0.5):
 # 磁阻尼摆 / 扭摆：最小二乘欠阻尼/过阻尼拟合 + ODE验证
 # ============================================================
 def _library_fit(t, y, theta_eq):
-    """扩展物理项库拟合：alpha = a*q + b*v + c*q³ + d*v|v| + e"""
-    dt = np.median(np.diff(t))
-    v = np.gradient(y, dt)
-    alpha = np.gradient(v, dt)
+    """扩展物理项库拟合：alpha = a*q + b*v + c*q³ + d*v|v| + e（支持非均匀采样 t）"""
+    t = np.asarray(t, dtype=float)
+    y = np.asarray(y, dtype=float)
+    if len(t) >= 3 and np.all(np.diff(t) > 0):
+        v = np.gradient(y, t)
+        alpha = np.gradient(v, t)
+    else:
+        dt = float(np.median(np.diff(t)))
+        v = np.gradient(y, dt)
+        alpha = np.gradient(v, dt)
     q = y - theta_eq
     X = np.column_stack([q, v, q**3, v*np.abs(v), np.ones_like(q)])
     coef, _, _, _ = np.linalg.lstsq(X, alpha, rcond=None)

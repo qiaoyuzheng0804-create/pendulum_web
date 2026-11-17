@@ -24,22 +24,21 @@ import csv
 import json
 import math
 import os
-import shutil
-import subprocess
-import tempfile
-import uuid
+from pathlib import Path
 
 import cv2
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from scipy.signal import find_peaks, savgol_filter, butter, filtfilt
+from scipy.signal import savgol_filter, butter, filtfilt
 from scipy.ndimage import median_filter
 from ultralytics import YOLO
 
-plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "Arial Unicode MS"]
-plt.rcParams["axes.unicode_minus"] = False
+from .common import H264VideoWriter as _AnnotatedVideoWriter, setup_matplotlib_chinese, video_readable
+from . import torsion_signal
+
+setup_matplotlib_chinese()
 
 
 # ---------- 默认配置（与底层 CONFIG 对齐） ----------
@@ -48,6 +47,7 @@ DEFAULT_CONFIG = {
     "yolo_conf": 0.40,
     "yolo_iou": 0.45,
     "target_class": 0,
+    "video_orientation_auto": True,
     "denoise_method": "savgol",          # "savgol" | "butter" | "median" | "none"
     "savgol_window_ratio": 0.20,
     "savgol_polyorder": 3,
@@ -394,36 +394,8 @@ def fill_gaps(angles, max_gap):
 
 
 def find_cycle_peaks(t, angles, rel_prom=0.25, min_prom_deg=0.03):
-    """
-    找每个摆动周期的极大点；阈值随局部包络衰减（不能用全局固定阈值）。
-    返回 (极值点索引, prominence)。
-    """
-    y = np.asarray(angles, dtype=float)
-    tt = np.asarray(t, dtype=float)
-    good = np.isfinite(y)
-    out_idx = np.array([], dtype=int)
-    out_prom = np.array([])
-    if good.sum() < 8:
-        return out_idx, out_prom
-
-    yg = y[good]
-    tg = tt[good]
-    ymax = float(np.max(np.abs(yg)))
-    if ymax <= 0:
-        return out_idx, out_prom
-
-    coarse, _ = find_peaks(yg, prominence=max(0.10 * ymax, 2.0 * min_prom_deg))
-    if len(coarse) < 3:
-        return out_idx, out_prom
-    env = np.interp(tg, tg[coarse], yg[coarse])
-    prom_thr = np.maximum(rel_prom * env, min_prom_deg)
-
-    pk, props = find_peaks(yg, prominence=min_prom_deg)
-    keep = (yg[pk] > 0) & (props["prominences"] >= prom_thr[pk])
-    orig = np.nonzero(good)[0]
-    out_idx = orig[pk[keep]]
-    out_prom = props["prominences"][keep]
-    return out_idx, out_prom
+    """找每个摆动周期的极大点；支持负值局部极大，不假定平衡角为 0。"""
+    return torsion_signal.find_cycle_peaks(t, angles, rel_prom, min_prom_deg)
 
 
 def _noise_floor_deg(a_raw, a_dn):
@@ -436,87 +408,24 @@ def _noise_floor_deg(a_raw, a_dn):
 
 
 def cycle_amplitudes(t, angles, pk):
-    """逐周期幅度：极大点与其后极小点配对，取 (峰-谷)/2。返回 (时间, 幅度)。"""
-    y = np.asarray(angles, float)
-    tr, _ = find_peaks(-y, prominence=0.02)
-    tt, aa = [], []
-    ti = 0
-    for k in pk:
-        while ti < len(tr) and tr[ti] < k:
-            ti += 1
-        if ti >= len(tr):
-            break
-        tt.append(t[k])
-        aa.append((y[k] - y[tr[ti]]) / 2.0)
-    return np.asarray(tt, float), np.asarray(aa, float)
+    """逐周期半峰谷差（上包络插值与谷值对比）。"""
+    return torsion_signal.cycle_amplitudes(t, angles, pk)
 
 
 def decay_report(t, angles, pk, n_blocks=4, min_pts=6):
-    """把周期序列等分 n_blocks 段，每段单独拟合 ln(A) ~ -beta t，报局部衰减率。"""
-    tt, aa = cycle_amplitudes(t, angles, pk)
-    out = {"segments": [], "amp_t": tt, "amp": aa}
-    if len(tt) < min_pts:
-        return out
-    T = float(np.median(np.diff(np.asarray(t, float)[pk]))) if len(pk) >= 3 else 0.0
-    edges = np.linspace(0, len(tt), n_blocks + 1).astype(int)
-    for i in range(n_blocks):
-        sl = slice(edges[i], edges[i + 1])
-        ts, as_ = tt[sl], aa[sl]
-        m = as_ > 0
-        if m.sum() < min_pts:
-            continue
-        co = np.polyfit(ts[m], np.log(as_[m]), 1)
-        beta = max(-float(co[0]), 0.0)
-        out["segments"].append({
-            "t_mid": float(np.median(ts[m])),
-            "beta": beta,
-            "decay_per_cycle_pct": 100.0 * (1.0 - math.exp(-beta * T)) if T > 0 else None,
-            "n": int(m.sum()),
-            "amp_mid": float(np.median(as_[m])),
-        })
-    return out
+    """把周期序列分段拟合 ln(A) ~ -beta t，保留负斜率。"""
+    return torsion_signal.decay_report(t, angles, pk, n_blocks, min_pts)
 
 
 def _decay_rate(t, angles, pk):
-    """全局指数衰减率 beta（1/s），仅作量级参考（真实衰减随幅度变化）。"""
-    tt, aa = cycle_amplitudes(t, angles, pk)
-    if len(tt) < 5:
-        return 0.0
-    m = aa > 0
-    if m.sum() < 5:
-        return 0.0
-    try:
-        slope = float(np.polyfit(tt[m], np.log(aa[m]), 1)[0])
-    except Exception:
-        return 0.0
-    return max(-slope, 0.0)
+    """全局指数衰减率 beta（1/s），仅作量级参考。"""
+    val = torsion_signal.decay_rate(t, angles, pk)
+    return 0.0 if val is None else val
 
 
 def estimate_period_fft(t, angles, min_cycles=3):
     """FFT 找主频，返回 (周期 s, 主频 Hz, 观测到的周期个数)。"""
-    y = np.asarray(angles, float)
-    m = np.isfinite(y)
-    if m.sum() < 32:
-        return None, None, 0
-    y = y[m]
-    t = np.asarray(t, float)[m]
-    dt = float(np.median(np.diff(t)))
-    if not np.isfinite(dt) or dt <= 0:
-        return None, None, 0
-
-    y = y - y.mean()
-    if not np.any(y):
-        return None, None, 0
-    y = y * np.hanning(len(y))
-    spec = np.abs(np.fft.rfft(y))
-    freq = np.fft.rfftfreq(len(y), dt)
-    spec[0] = 0.0
-    k = int(np.argmax(spec))
-    if k <= 0 or freq[k] <= 0:
-        return None, None, 0
-    T = 1.0 / float(freq[k])
-    n_cycles = (t[-1] - t[0]) / T if T > 0 else 0
-    return T, float(freq[k]), float(n_cycles)
+    return torsion_signal.estimate_period_fft(t, angles, min_cycles)
 
 
 def choose_savgol_window(n, t, angles, cfg):
@@ -658,287 +567,129 @@ def denoise(t, angles, method, cfg, log=True):
     return filled, info
 
 
-def make_plot(t, a_raw, a_dn, pk, path, slow, cfg, dec=None):
-    """角度-时间图（与底层 make_plot 一致：原始/降噪对比 + 极大点 + 幅度包络）。"""
-    fig, axes = plt.subplots(2, 1, figsize=(14, 8.5), sharex=True)
+def _save_calibration_preview(frame, origin, va, vb, path):
+    vis = frame.copy()
+    o = (int(round(origin[0])), int(round(origin[1])))
+    pa = (int(round(va[0])), int(round(va[1])))
+    pb = (int(round(vb[0])), int(round(vb[1])))
+    cv2.line(vis, pa, pb, COL_Y, 2, cv2.LINE_AA)
+    cv2.circle(vis, o, 7, COL_ORIGIN, -1, cv2.LINE_AA)
+    cv2.circle(vis, pa, 6, (0, 200, 255), -1, cv2.LINE_AA)
+    cv2.circle(vis, pb, 6, (0, 200, 255), -1, cv2.LINE_AA)
+    draw_text(vis, "1:origin", (o[0] + 8, o[1] - 8), 0.55, COL_ORIGIN, 1)
+    draw_text(vis, "2", (pa[0] + 8, pa[1] - 6), 0.55, (0, 200, 255), 1)
+    draw_text(vis, "3", (pb[0] + 8, pb[1] + 18), 0.55, (0, 200, 255), 1)
+    ok, enc = cv2.imencode(".png", vis)
+    if ok:
+        enc.tofile(path)
 
-    title = "扭摆角度-时间曲线（真实时间）"
+
+def center_diagnostic(t, envelope):
+    """仅在受支持的相邻周期之间插值估计中心角，不在长缺口上跨接。"""
+    t = np.asarray(t, float)
+    center = np.full(len(t), np.nan)
+    for i in range(len(envelope["amp_t"]) - 1):
+        left, right = envelope["amp_t"][i:i + 2]
+        period = max(envelope["period_s"][i:i + 2])
+        if right - left > 1.8 * period:
+            continue
+        mask = (t >= left) & (t <= right)
+        center[mask] = np.interp(t[mask], [left, right], envelope["center"][i:i + 2])
+    return center
+
+
+def write_raw_csv(path, t, raw, slow, frame_indices=None, centers=None, confidences=None):
+    """主 CSV 仅保留真实逐帧测角；angle_deg 为 angle_deg_raw 的别名，gap_filled 恒为 0。"""
+    t, raw = np.asarray(t, float), np.asarray(raw, float)
+    if t.shape != raw.shape:
+        raise ValueError("时间与原始角度长度不一致。")
+    indices = np.arange(len(t)) if frame_indices is None else np.asarray(frame_indices)
+    xy = np.full((len(t), 2), np.nan) if centers is None else np.asarray(centers, float)
+    confidence = np.full(len(t), np.nan) if confidences is None else np.asarray(confidences, float)
+
+    def number(value):
+        return format(float(value), ".15g") if np.isfinite(value) else ""
+
+    with open(path, "w", newline="", encoding="utf-8-sig") as stream:
+        writer = csv.writer(stream)
+        writer.writerow([
+            "time_s", "angle_deg_raw", "angle_deg", "gap_filled",
+            "frame_index", "video_elapsed_s", "center_x_px", "center_y_px",
+            "confidence", "observed",
+        ])
+        for i in range(len(t)):
+            writer.writerow([
+                number(t[i]),
+                number(raw[i]),
+                number(raw[i]),
+                0,
+                int(indices[i]),
+                number(t[i] * slow),
+                number(xy[i, 0]),
+                number(xy[i, 1]),
+                number(confidence[i]),
+                int(np.isfinite(raw[i])),
+            ])
+
+
+def make_plot(t, a_raw, a_dn, pk, path, slow, cfg, dec=None):
+    """角度-时间图（单面板摆角—时间曲线）。"""
+    t, a_raw, a_dn = np.asarray(t), np.asarray(a_raw), np.asarray(a_dn)
+    dec = decay_report(t, a_dn, pk) if dec is None else dec
+    setup_matplotlib_chinese()
+    fig, ax = plt.subplots(figsize=(14, 5.4))
+    title = "摆角—时间曲线"
     if abs(slow - 1.0) > 1e-9:
         title += "   [慢放 x%g]" % slow
-    fig.suptitle(title, fontsize=14, fontweight="bold")
-
-    ax = axes[0]
-    ax.plot(t, a_raw, "-", lw=0.8, color="#b0bec5", alpha=0.9,
-            label="原始测量（%d 点）" % len(a_raw))
-    ax.plot(t, a_dn, "-", lw=1.6, color="#e53935",
-            label="降噪后（%s）" % cfg["denoise_method"])
-    ax.set_ylabel("摆角 (deg)")
-    ax.set_title("原始与降噪对比", fontsize=11)
-    ax.grid(True, alpha=0.3)
-    ax.legend(fontsize=9, loc="upper right")
-
-    ax = axes[1]
-    ax.plot(t, a_dn, "-", lw=1.3, color="#1e88e5", label="降噪后")
+    ax.set_title(title, fontsize=13, fontweight="bold")
+    ax.plot(t, a_raw, lw=0.65, color="#78909c", alpha=0.7, label="原始角度（CSV 保留此列）")
+    ax.plot(t, a_dn, lw=1.0, color="#1565c0", label="降噪诊断 (%s)" % cfg["denoise_method"])
     if len(pk):
-        ax.plot(t[pk], a_dn[pk], "v", ms=5, color="#d81b60", label="极大点 (%d)" % len(pk))
-    if dec is not None and len(dec.get("amp_t", [])):
-        at, aa = dec["amp_t"], dec["amp"]
-        ax.plot(at, aa, "--", lw=1.0, color="#6d4c41", alpha=0.85,
-                label="幅度包络 +A(t)（%d 周期）" % len(at))
-        ax.plot(at, -aa, "--", lw=1.0, color="#6d4c41", alpha=0.85)
-    ax.axhline(0.0, color="gray", ls="--", lw=0.8)
-    ax.set_ylabel("摆角 (deg)")
+        ax.plot(t[pk], a_dn[pk], ".", ms=4, color="#c2185b", label="极大点 %d" % len(pk))
+    if len(dec.get("amp_t", [])):
+        at = dec["amp_t"]
+        ax.plot(at, dec["upper"], color="#e67e22", lw=1.2, label="上/下包络：中心 ± 幅度")
+        ax.plot(at, dec["lower"], color="#e67e22", lw=1.2)
+        ax.plot(at, dec["center"], "--", color="#212121", lw=1.2, label="逐周期估计中心（未扣除）")
+    ax.axhline(0, color="gray", ls=":", lw=0.8, label="所选竖直参考方向的零度")
+    ax.set_ylabel("测量角度 (deg)")
     ax.set_xlabel("真实时间 (s)")
-    ax.set_title("降噪结果、极大点与幅度包络", fontsize=11)
-    ax.grid(True, alpha=0.3)
-    ax.legend(fontsize=9)
-
+    ax.legend(fontsize=8.5, loc="upper right")
+    ax.grid(True, alpha=0.25)
     fig.tight_layout()
     fig.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)
 
 
-# ================================================================
-#  标注视频写盘（优先浏览器能内联播放的 H.264）
-# ================================================================
-# 结果页要内联预览标注视频，就必须是浏览器认的编码：OpenCV 的 FFmpeg 后端在
-# Windows 上多半没有 H.264 编码器（缺 libopenh264），只能写 mp4v，而 mp4v 浏览器
-# 播不了（一片黑）。所以按能力降级：
-#   ① imageio-ffmpeg 管道（跨平台，路径不限）      → H.264
-#   ② Windows Media Foundation（系统自带编码器）   → H.264（只认 ASCII 路径，
-#      非 ASCII 目标先写临时文件，收尾时搬过去——实验结果目录常带中文）
-#   ③ 其它后端的 H.264（先探针试写再读回）         → H.264
-#   ④ cv2 mp4v 兜底                                → codec 记 mp4v，前端改提示不放播放器
-_ffmpeg_cache = None
-_ffmpeg_probed = False
-_probe_cache = {}
-
-
-def _ffmpeg_exe():
-    """本机可用的 ffmpeg 可执行文件；没有则返回 None（与 pi_manager 同一套探测）。"""
-    global _ffmpeg_cache, _ffmpeg_probed
-    if not _ffmpeg_probed:
-        _ffmpeg_probed = True
-        try:
-            import imageio_ffmpeg
-            _ffmpeg_cache = imageio_ffmpeg.get_ffmpeg_exe()
-        except Exception:
-            _ffmpeg_cache = None
-    return _ffmpeg_cache
-
-
-def video_readable(path):
-    """视频能不能解码：写盘后自检用（打不开或读不出首帧都算坏）。"""
-    try:
-        cap = cv2.VideoCapture(path)
-        if not cap.isOpened():
-            return False
-        ok = bool(cap.read()[0])
-        cap.release()
-        return ok
-    except Exception:
-        return False
-
-
-def _probe_cv_h264(api, fourcc, tag):
-    """在临时文件上试写几帧再读回，判断某后端能否真的写出 H.264。
-
-    只信 isOpened() 会翻车：OpenCV 的 FFmpeg 后端缺 libopenh264 时照样返回 True，
-    但一帧都写不进去（生成的文件播放器打不开）。探针结果按后端缓存，只做一次。
-    """
-    key = (api, tag)
-    if key in _probe_cache:
-        return _probe_cache[key]
-    ok = False
-    tmp = os.path.join(tempfile.gettempdir(), "pendulum_probe_%s.mp4" % uuid.uuid4().hex)
-    writer = None
-    try:
-        writer = cv2.VideoWriter(tmp, api, cv2.VideoWriter_fourcc(*fourcc), 30.0, (320, 240))
-        if writer.isOpened():
-            for _ in range(3):
-                writer.write(np.full((240, 320, 3), 90, np.uint8))
-            writer.release()
-            writer = None
-            ok = os.path.getsize(tmp) > 512 and video_readable(tmp)
-    except Exception:
-        ok = False
-    finally:
-        if writer is not None:
-            try:
-                writer.release()
-            except Exception:
-                pass
-        try:
-            if os.path.exists(tmp):
-                os.remove(tmp)
-        except Exception:
-            pass
-    _probe_cache[key] = ok
-    if not ok:
-        print("[扭摆] 后端 %s 写不出 H.264（探针未通过）" % tag, flush=True)
-    return ok
-
-
-def _is_ascii_path(path):
-    try:
-        path.encode("ascii")
-        return True
-    except UnicodeEncodeError:
-        return False
-
-
-class _AnnotatedVideoWriter:
-    """逐帧写标注视频；codec 为 "h264"（浏览器可播放）或 "mp4v"（播不了，仅落盘）。"""
-
-    def __init__(self, path, fps, width, height):
-        self.path = path
-        self.fps = float(fps)
-        self.width, self.height = int(width), int(height)
-        self.codec = ""
-        self.backend = ""
-        self.error = None
-        self.written = 0
-        self._proc = None
-        self._writer = None
-        self._tmp_path = None
-        self._errlog_path = None
-        self._errlog = None
-
-        exe = _ffmpeg_exe()
-        if exe:
-            try:
-                self._errlog_path = self.path + ".ffmpeg.log"
-                # stderr 落文件（PIPE 满了会卡死写盘），日志在收尾时删掉
-                self._errlog = open(self._errlog_path, "wb")
-                flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
-                self._proc = subprocess.Popen(
-                    [exe, "-hide_banner", "-loglevel", "error", "-y",
-                     "-f", "rawvideo", "-pix_fmt", "bgr24",
-                     "-s", "%dx%d" % (self.width, self.height),
-                     "-framerate", "%.6f" % self.fps, "-i", "pipe:0",
-                     "-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "20",
-                     "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-                     # 奇数边长会让 libx264 直接报错，偶数化一下
-                     "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
-                     self.path],
-                    stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
-                    stderr=self._errlog, creationflags=flags)
-                self.backend, self.codec = "ffmpeg/libx264", "h264"
-                return
-            except Exception as exc:
-                self._proc = None
-                self._close_errlog()
-                print("[扭摆] ffmpeg 启动失败（%s），改用其他编码器" % exc, flush=True)
-
-        # Windows Media Foundation：系统自带 H.264，但只认 ASCII 路径
-        if os.name == "nt":
-            api = getattr(cv2, "CAP_MSMF", None)
-            if api is not None and _probe_cv_h264(api, "avc1", "MSMF/avc1"):
-                target = self.path if _is_ascii_path(self.path) else \
-                    os.path.join(tempfile.gettempdir(), "pendulum_annot_%s.mp4" % uuid.uuid4().hex)
-                w = cv2.VideoWriter(target, api, cv2.VideoWriter_fourcc(*"avc1"),
-                                    self.fps, (self.width, self.height))
-                if w.isOpened():
-                    self._writer = w
-                    self._tmp_path = None if target == self.path else target
-                    self.backend, self.codec = "MSMF/avc1", "h264"
-                    return
-                w.release()
-
-        for fcc in ("avc1", "H264", "X264"):
-            if _probe_cv_h264(cv2.CAP_ANY, fcc, "cv2/%s" % fcc):
-                w = cv2.VideoWriter(self.path, cv2.CAP_ANY, cv2.VideoWriter_fourcc(*fcc),
-                                    self.fps, (self.width, self.height))
-                if w.isOpened():
-                    self._writer = w
-                    self.backend, self.codec = "cv2/%s" % fcc, "h264"
-                    return
-                w.release()
-
-        self._writer = cv2.VideoWriter(self.path, cv2.VideoWriter_fourcc(*"mp4v"),
-                                       self.fps, (self.width, self.height))
-        self.backend, self.codec = "cv2/mp4v", "mp4v"
-        if not self._writer.isOpened():
-            self._writer = None
-            self.error = "找不到可用的视频编码器"
-            print("[扭摆] %s，标注视频将不会生成。" % self.error, flush=True)
-
-    def write(self, frame):
-        """写一帧（BGR）；失败返回 False 并把原因记进 self.error。"""
-        if self._proc is not None:
-            try:
-                self._proc.stdin.write(np.ascontiguousarray(frame).tobytes())
-                self.written += 1
-                return True
-            except Exception as exc:
-                self.error = "写入 ffmpeg 失败: %s" % exc
-                return False
-        if self._writer is not None:
-            try:
-                self._writer.write(frame)
-                self.written += 1
-                return True
-            except Exception as exc:
-                self.error = "写入视频失败: %s" % exc
-                return False
-        return False
-
-    def close(self):
-        """收尾；返回错误信息（None 表示正常）。"""
-        if self._proc is not None:
-            proc, self._proc = self._proc, None
-            try:
-                if proc.stdin is not None:
-                    proc.stdin.close()
-                code = proc.wait(timeout=120)
-            except Exception as exc:
-                try:
-                    proc.kill()
-                except Exception:
-                    pass
-                self._close_errlog()
-                return "ffmpeg 收尾失败: %s" % exc
-            detail = "" if code == 0 else self._read_errlog()
-            self._close_errlog()
-            if code != 0:
-                return "ffmpeg 退出码 %s%s" % (code, ("：" + detail) if detail else "")
-            return None
-
-        if self._writer is not None:
-            self._writer.release()
-            self._writer = None
-            if self._tmp_path:
-                tmp, self._tmp_path = self._tmp_path, None
-                try:
-                    # MSMF 只认 ASCII 路径：临时文件搬回真实目标（跨盘由 shutil 复制+删除）
-                    shutil.move(tmp, self.path)
-                except Exception as exc:
-                    self.error = "临时视频搬回 %s 失败: %s" % (self.path, exc)
-                    self.path = tmp
-                    return self.error
-            return None
-        return self.error
-
-    def _read_errlog(self):
-        try:
-            with open(self._errlog_path, "r", encoding="utf-8", errors="replace") as f:
-                text = f.read()
-        except Exception:
-            return ""
-        return " / ".join(ln.strip() for ln in text.splitlines() if ln.strip())[-400:]
-
-    def _close_errlog(self):
-        if self._errlog is not None:
-            try:
-                self._errlog.close()
-            except Exception:
-                pass
-            self._errlog = None
-        try:
-            if self._errlog_path and os.path.exists(self._errlog_path):
-                os.remove(self._errlog_path)
-        except Exception:
-            pass
+def make_detail_plot(t, raw, filtered, peaks, path, slow, dec):
+    setup_matplotlib_chinese()
+    period, _, _ = estimate_period_fft(t, filtered)
+    span = min(float(t[-1] - t[0]), 5 * period if period is not None else 2.0)
+    span = max(span, 1e-3)
+    windows = [
+        (t[0], t[0] + span),
+        ((t[0] + t[-1] - span) / 2.0, (t[0] + t[-1] + span) / 2.0),
+        (max(t[0], t[-1] - span), t[-1]),
+    ]
+    fig, axes = plt.subplots(3, 1, figsize=(12, 9))
+    center = center_diagnostic(t, dec)
+    for ax, title, (left, right) in zip(axes, ["起始段", "中段", "尾段"], windows):
+        mask = (t >= left) & (t <= right)
+        ax.plot(t[mask], raw[mask], color="#78909c", lw=0.8, label="原始角度")
+        ax.plot(t[mask], filtered[mask], color="#1565c0", lw=1.0, label="降噪诊断")
+        if len(peaks):
+            selected = peaks[(t[peaks] >= left) & (t[peaks] <= right)]
+            ax.plot(t[selected], filtered[selected], "v", ms=4, color="#c2185b", label="极大点")
+        ax.plot(t[mask], center[mask], "--", color="#6d4c41", label="估计振动中心")
+        ax.axhline(0, color="gray", ls=":", lw=0.8)
+        ax.set_title(title)
+        ax.set_ylabel("测量角度 (deg)")
+        ax.grid(True, alpha=0.25)
+        ax.legend(fontsize=8, ncol=4)
+    axes[-1].set_xlabel("按慢放 x%g 换算的时间 (s)" % slow)
+    fig.tight_layout()
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
 
 
 # ================================================================
@@ -965,7 +716,7 @@ def process_niubai(video_path, output_dir, model_path, calibration,
         "vertical_start": [x, y],   # ② 竖直方向起点
         "vertical_end":   [x, y],   # ③ 竖直方向终点（②->③ 定义竖直方向）
     }  均为原图坐标。
-    start_frame: 网页"计时第一帧"，该帧即 t=0；为空则回退 skip_start_sec。
+    start_frame: 网页"计时第一帧"，该帧即 t=0；未传时默认第 0 帧。
     """
     out_dir = os.path.abspath(output_dir)
     os.makedirs(out_dir, exist_ok=True)
@@ -995,6 +746,7 @@ def process_niubai(video_path, output_dir, model_path, calibration,
     src = cv2.VideoCapture(video_path)
     if not src.isOpened():
         raise RuntimeError("无法打开视频: %s" % video_path)
+    src.set(cv2.CAP_PROP_ORIENTATION_AUTO, float(cfg.get("video_orientation_auto", True)))
     fps = float(src.get(cv2.CAP_PROP_FPS) or 0.0)
     if fps <= 1e-6:
         fps = 30.0
@@ -1004,13 +756,14 @@ def process_niubai(video_path, output_dir, model_path, calibration,
 
     slow = float(slow_motion_factor)
     if slow <= 0:
+        src.release()
         raise RuntimeError("慢放倍数必须 > 0（N 倍慢动作就填 N）。")
     real_fps = fps * slow
 
     if start_frame is not None:
         f_start = max(0, min(int(start_frame), max(0, total_frames - 1)))
     else:
-        f_start = int(skip_start_sec * real_fps)
+        f_start = 0
     f_end = total_frames - int(skip_end_sec * real_fps)
     f_end = max(f_start + 1, min(f_end, total_frames))
     print("[扭摆] 起始帧=%d（t=0）  真实采样率=%.3f Hz  分析 %d..%d 帧"
@@ -1023,7 +776,7 @@ def process_niubai(video_path, output_dir, model_path, calibration,
     out_scale = min(1.0, float(cfg["output_video_max_side"]) / max(1, max(vw, vh)))
     out_w = max(2, int(round(vw * out_scale)))
     out_h = max(2, int(round(vh * out_scale)))
-    sx = out_w / float(vw)          # 实际缩放（含取整误差，逐轴分开算更准）
+    sx = out_w / float(vw)
     sy = out_h / float(vh)
     out_fps = max(1.0, min(240.0, fps))
     vid_path = os.path.join(out_dir, "annotated_video.mp4")
@@ -1031,18 +784,26 @@ def process_niubai(video_path, output_dir, model_path, calibration,
 
     # ---- 逐帧检测 + 算角 ----
     src.set(cv2.CAP_PROP_POS_FRAMES, f_start)
-    times, ang_raw, n_det = [], [], 0
+    times, ang_raw, cx_list, cy_list, conf_list = [], [], [], [], []
+    n_det = 0
     prev_angle = None
+    last_disp_angle = 0.0
+    calib_preview_path = os.path.join(out_dir, "calibration_preview.png")
+    saved_calib_preview = False
     total = max(1, f_end - f_start)
 
     for fidx in range(f_start, f_end):
         ok, frame = src.read()
         if not ok:
             break
+        if not saved_calib_preview:
+            _save_calibration_preview(frame, origin, va, vb, calib_preview_path)
+            saved_calib_preview = True
         t_real = (fidx - f_start) / max(real_fps, 1e-9)
 
-        res = model(frame, conf=cfg["yolo_conf"], iou=cfg["yolo_iou"],
-                    imgsz=cfg["imgsz"], verbose=False)[0]
+        _infer = model.predict if hasattr(model, "predict") else model
+        res = _infer(frame, conf=cfg["yolo_conf"], iou=cfg["yolo_iou"],
+                     imgsz=cfg["imgsz"], verbose=False)[0]
         best_box, best_conf = None, 0.0
         for box in res.boxes:
             if int(box.cls[0]) == cfg["target_class"]:
@@ -1051,30 +812,47 @@ def process_niubai(video_path, output_dir, model_path, calibration,
                     best_conf, best_box = c, box
 
         ang = np.nan
+        cx_val = cy_val = np.nan
         x1 = y1 = x2 = y2 = cx = cy = None
         if best_box is not None:
             x1, y1, x2, y2 = [float(vv) for vv in best_box.xyxy[0]]
             cx, cy = (x1 + x2) / 2.0, (y1 + y2) / 2.0
+            cx_val, cy_val = cx, cy
             a_now = signed_angle_deg(vunit, (cx - origin[0], cy - origin[1]))
             if prev_angle is not None:
                 d = (a_now - prev_angle + 180.0) % 360.0 - 180.0
                 a_now = prev_angle + d
             ang = a_now
             prev_angle = a_now
+            last_disp_angle = a_now
             n_det += 1
+        else:
+            # 漏检期间转过的圈数未知，不把前一段的展开角强加到下一段。
+            prev_angle = None
 
         times.append(t_real)
         ang_raw.append(ang)
+        cx_list.append(cx_val)
+        cy_list.append(cy_val)
+        conf_list.append(best_conf if best_box is not None else np.nan)
 
         if writer is not None:
-            disp = frame if out_scale >= 1.0 else cv2.resize(frame, (out_w, out_h), interpolation=cv2.INTER_AREA)
+            disp = frame.copy() if out_scale >= 1.0 else cv2.resize(frame, (out_w, out_h), interpolation=cv2.INTER_AREA)
             det_disp = None
             if best_box is not None:
                 det_disp = (x1 * sx, y1 * sy, x2 * sx, y2 * sy, cx * sx, cy * sy)
-            draw_overlay(disp, (origin[0] * sx, origin[1] * sy), vunit, ang if np.isfinite(ang) else prev_angle or 0.0,
-                         t_real, det=det_disp, conf=best_conf if best_box is not None else None,
-                         frame_idx=fidx, frame_total=total_frames,
-                         det_lost=best_box is None)
+            draw_overlay(
+                disp,
+                (origin[0] * sx, origin[1] * sy),
+                vunit,
+                ang if np.isfinite(ang) else last_disp_angle,
+                t_real,
+                det=det_disp,
+                conf=best_conf if best_box is not None else None,
+                frame_idx=fidx,
+                frame_total=total_frames,
+                det_lost=best_box is None,
+            )
             writer.write(disp)
 
         if progress_callback and (fidx - f_start) % 50 == 0:
@@ -1094,7 +872,6 @@ def process_niubai(video_path, output_dir, model_path, calibration,
                      "，浏览器可内联播放" if video_playable else "，mp4v 浏览器播不了（仅落盘）"),
                   flush=True)
         else:
-            # 坏文件不要留在结果目录里冒充产物
             print("[扭摆] 标注视频写盘失败，已删除：%s" % (video_error or video_codec or "未知原因"),
                   flush=True)
             try:
@@ -1118,7 +895,7 @@ def process_niubai(video_path, output_dir, model_path, calibration,
     t = np.array(times, dtype=float)
     a_raw = unwrap_deg(np.array(ang_raw, dtype=float))[0]
 
-    # ---- 降噪 ----
+    # ---- 降噪（仅作诊断，不改主 CSV 的 raw 观测列）----
     method = cfg["denoise_method"]
     a_dn, info = denoise(t, a_raw, method, cfg)
     print("[扭摆] 降噪: %s   %s" % (method, "; ".join(info.get("steps", []))), flush=True)
@@ -1143,20 +920,48 @@ def process_niubai(video_path, output_dir, model_path, calibration,
     print("[扭摆] FFT周期=%s s (%s Hz, %s 个周期)  峰值周期=%s s  极大点=%d"
           % (fmt(T, 5), fmt(f0, 4), fmt(ncyc, 1), fmt(period_peaks, 5), len(pk)), flush=True)
 
-    # ---- 导出 CSV（列与底层一致）----
+    # ---- 导出 CSV（主 CSV 仅保留真实观测 + gap_filled=0；诊断与周期指标分文件保存）----
     csv_path = os.path.join(out_dir, "angle_time_data.csv")
-    gap_flag = info.get("gap_filled", np.zeros(n_frames))
-    with open(csv_path, "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.writer(f)
-        w.writerow(["time_s", "angle_deg_raw", "angle_deg", "gap_filled"])
-        for i in range(n_frames):
-            w.writerow(["%.6f" % t[i],
-                        "" if not np.isfinite(a_raw[i]) else "%.4f" % a_raw[i],
-                        "" if not np.isfinite(a_dn[i]) else "%.4f" % a_dn[i],
-                        int(gap_flag[i])])
+    write_raw_csv(
+        csv_path,
+        t,
+        a_raw,
+        slow,
+        frame_indices=np.arange(f_start, f_start + n_frames),
+        centers=np.column_stack([cx_list, cy_list]),
+        confidences=np.asarray(conf_list, dtype=float),
+    )
+
+    estimated_center = center_diagnostic(t, dec)
+    flags = info.get("gap_filled", np.zeros(n_frames, dtype=int))
+    diag_csv_path = os.path.join(out_dir, "angle_time_diagnostics.csv")
+    with open(diag_csv_path, "w", newline="", encoding="utf-8-sig") as stream:
+        writer_csv = csv.writer(stream)
+        writer_csv.writerow([
+            "time_s", "filtered_angle_deg", "diagnostic_gap_filled",
+            "estimated_center_deg", "raw_minus_estimated_center_deg",
+        ])
+        for values in zip(t, a_dn, flags, estimated_center, a_raw - estimated_center):
+            writer_csv.writerow([format(float(v), ".15g") if np.isfinite(v) else "" for v in values])
+
+    cycle_csv_path = os.path.join(out_dir, "cycle_metrics.csv")
+    with open(cycle_csv_path, "w", newline="", encoding="utf-8-sig") as stream:
+        writer_cyc = csv.writer(stream)
+        names = [
+            "amp_t", "amp", "center", "upper", "lower", "period_s",
+            "peak_left_index", "trough_index", "peak_right_index",
+        ]
+        writer_cyc.writerow([
+            "time_s", "amplitude_deg", "estimated_center_deg", "upper_deg",
+            "lower_deg", "period_s", *names[6:],
+        ])
+        if len(dec.get("amp_t", [])):
+            writer_cyc.writerows(zip(*(dec[name] for name in names)))
 
     plot_path = os.path.join(out_dir, "angle_time_plot.png")
     make_plot(t, a_raw, a_dn, pk, plot_path, slow, cfg, dec=dec)
+    detail_plot_path = os.path.join(out_dir, "angle_time_detail.png")
+    make_detail_plot(t, a_raw, a_dn, pk, detail_plot_path, slow, dec=dec)
 
     meta = {
         "video": video_path,
@@ -1168,9 +973,12 @@ def process_niubai(video_path, output_dir, model_path, calibration,
         "detections": n_det,
         "detection_rate_percent": rate,
         "slow_motion_factor": slow,
+        "video_orientation_auto": bool(cfg.get("video_orientation_auto", True)),
+        "decoded_frame_size_px": [vw, vh],
         "real_fps": real_fps,
         "origin_px": [float(origin[0]), float(origin[1])],
         "vertical_unit": [float(vunit[0]), float(vunit[1])],
+        "calibration_preview": calib_preview_path if saved_calib_preview else None,
         "denoise_method": method,
         "denoise_steps": info.get("steps", []),
         "savgol_window": info.get("savgol_window"),
@@ -1186,10 +994,16 @@ def process_niubai(video_path, output_dir, model_path, calibration,
         "fft_period_trusted": bool(T is not None and ncyc >= 3),
         "period_peaks_s": period_peaks,
         "peaks_found": int(len(pk)),
+        "last_peak_time_s": float(t[pk[-1]]) if len(pk) else None,
+        "cycle_center_median_deg": float(np.median(dec["center"])) if len(dec.get("center", [])) else None,
+        "raw_csv_columns": {"angle_deg_raw": "unfiltered measured reference angle",
+                            "angle_deg": "alias of angle_deg_raw"},
+        "raw_csv_smoothing": False,
+        "raw_csv_gap_interpolation": False,
+        "raw_csv_automatic_zero_correction": False,
         "decay_blocks": dec.get("segments", []),
         "decay_global_beta_per_s": _decay_rate(t, a_dn, pk),
-        "decay_note": "衰减率随幅度变化（钟摆二次阻力特征），"
-                      "decay_blocks 是分段的局部衰减率，比单一 beta 可信",
+        "decay_note": "仅为对数振幅的经验斜率，不据此确定阻尼机制或物理阻尼系数。",
         "gap_filled_frames": gs.get("n_filled", 0),
         "gap_left_frames": gs.get("n_left", 0),
     }
@@ -1199,15 +1013,20 @@ def process_niubai(video_path, output_dir, model_path, calibration,
 
     return {
         "csv_path": csv_path,
+        "diagnostics_csv": diag_csv_path,
+        "cycle_metrics_csv": cycle_csv_path,
         "plot_path": plot_path,
-        "video_path": vid_path if (writer is not None and writer.written
-                                   and os.path.exists(vid_path)) else None,
+        "detail_plot_path": detail_plot_path,
+        "calibration_preview_path": calib_preview_path if saved_calib_preview else None,
+        "video_path": vid_path if (writer is not None and writer.written and os.path.exists(vid_path)) else None,
         "video_codec": video_codec,
         "video_playable": video_playable,
         "video_error": video_error,
         "video_frames": writer.written if writer is not None else 0,
         "meta_path": meta_path,
         "num_points": n_frames,
+        "start_frame": int(f_start),
+        "real_fps": real_fps,
         "period_s": T,
         "period_peaks_s": period_peaks,
         "decay_blocks": dec.get("segments", []),

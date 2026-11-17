@@ -441,7 +441,11 @@ class PiCameraManager:
             self._cleanup_receiver()
             if reached:
                 return {"error": f"已连上 {host}:{port} 但没收到画面，请确认树莓派端已开始传输。"}
-            return {"error": f"无法连接 {host}:{port}：{err}"}
+            hint = ""
+            low = err.lower()
+            if "10061" in err or "refused" in low or "积极拒绝" in err:
+                hint = f"（网络已通但对端 {port} 端口未开启推流，请先在树莓派端运行 sudo ~/raspberry5_camera/start_stream.sh）"
+            return {"error": f"无法连接 {host}:{port}：{err}{hint}"}
 
     def disconnect(self) -> dict:
         """断开视频流；正在录制的话先正常收尾落盘，不丢已收到的数据。"""

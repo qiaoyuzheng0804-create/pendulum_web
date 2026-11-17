@@ -534,7 +534,15 @@ def read_frame_jpeg(session_id, idx, max_width=1200, quality=85):
 
 def cleanup_stale_sessions():
     now = _time.time()
-    stale = [sid for sid, s in session_store.items() if now - s.get("created_at", now) > SESSION_TTL]
+    with _tasks_lock:
+        protected = {
+            sid for sid, t in _tasks.items()
+            if t.get("status") == "running" or (now - (t.get("finished_at") or now) < 1800)
+        }
+    stale = [
+        sid for sid, s in session_store.items()
+        if sid not in protected and now - s.get("created_at", now) > SESSION_TTL
+    ]
     for sid in stale:
         _release_frame_cap(sid)
         session = session_store.pop(sid)
@@ -614,8 +622,11 @@ def file_to_base64(path):
         return base64.b64encode(f.read()).decode("utf-8")
 
 
-# ---------- Progress tracking ----------
+# ---------- Progress & active-task tracking ----------
 _progress = {}  # session_id -> {"current": int, "total": int}
+_tasks_lock = threading.Lock()
+_tasks = {}  # session_id -> persistent background task state & result
+_latest_task_id = None
 
 
 # ---------- Routes ----------
@@ -819,9 +830,11 @@ def _run_processing(session_id, data, progress_callback=None, stage_callback=Non
         if motion_type == "danbai":
             result = process_danbai(
                 video_path, output_dir, MODEL_PATHS[motion_type], calibration,
+                start_frame=start_frame,
                 skip_initial_seconds=skip_start_sec,
                 slow_motion_factor=slow_motion_factor,
                 target_cycles=target_cycles,
+                flip_angle=flip_angle,
                 gen_video=bool(data.get("gen_video", True)),
                 model=model, progress_callback=_on_frame)
         elif motion_type == "cizuni":
@@ -849,17 +862,19 @@ def _run_processing(session_id, data, progress_callback=None, stage_callback=Non
             result = process_ciliniudun(
                 video_path, output_dir, MODEL_PATHS[motion_type], calibration,
                 num_pivots=num_pivots,
+                start_frame=start_frame,
                 skip_start_sec=skip_start_sec,
                 skip_end_sec=skip_end_sec,
                 target_fps=float(data.get("target_fps", 30)),
                 conf=float(data.get("conf", 0.18)),
                 iou=float(data.get("iou", 0.5)),
                 imgsz=int(data.get("imgsz", 1536)),
-                sg_window=int(data.get("sg_window", 11)),
+                sg_window=int(data.get("sg_window", 5)),
                 sg_polyorder=int(data.get("sg_polyorder", 3)),
                 right_positive=not flip_angle,
                 gen_video=bool(data.get("gen_video", True)),
-                model=model, progress_callback=_on_frame)
+                model=model, progress_callback=_on_frame,
+                stage_callback=stage_callback)
         else:
             return None, {"error": f"Unknown motion type: {motion_type}"}
 
@@ -897,6 +912,9 @@ def _run_processing(session_id, data, progress_callback=None, stage_callback=Non
             sr_result = {"error": str(e)}
 
         if sr_result:
+            sp = sr_result.get("plot_path") if isinstance(sr_result, dict) else None
+            if sp and os.path.exists(sp):
+                sr_result["plot_preview"] = file_to_base64(sp)
             result["sr_result"] = sr_result
 
         return result, None
@@ -904,6 +922,155 @@ def _run_processing(session_id, data, progress_callback=None, stage_callback=Non
     except Exception as e:
         traceback.print_exc()
         return None, {"error": f"Processing failed: {str(e)}"}
+
+
+def _calc_pct(current, total):
+    return min(int(current / total * 100), 100) if total > 0 else 0
+
+
+def _task_snapshot(t, include_result=False):
+    now = _time.time()
+    mtype = t.get("motion_type", "")
+    out = {
+        "session_id": t["session_id"],
+        "username": t.get("username", ""),
+        "motion_type": mtype,
+        "motion_name": CALIB_SPECS.get(mtype, {}).get("name", mtype),
+        "original_filename": t.get("original_filename", ""),
+        "output_dir": t.get("output_dir", ""),
+        "total_frames": t.get("total_frames", 0),
+        "start_frame": t.get("start_frame"),
+        "calibration_points": t.get("calibration_points", []),
+        "status": t.get("status", "running"),
+        "stage": t.get("stage", ""),
+        "current": t.get("current", 0),
+        "total": t.get("total", 0),
+        "percent": _calc_pct(t.get("current", 0), t.get("total", 0)),
+        "started_at": t.get("started_at", now),
+        "finished_at": t.get("finished_at"),
+        "elapsed_sec": round((t.get("finished_at") or now) - t.get("started_at", now), 1),
+        "error": t.get("error"),
+        "acked": bool(t.get("acked", False)),
+    }
+    if include_result and t.get("result") is not None:
+        out["result"] = t["result"]
+    return out
+
+
+def _prune_old_tasks():
+    now = _time.time()
+    if len(_tasks) <= 12:
+        return
+    removable = [
+        sid for sid, t in _tasks.items()
+        if t.get("status") != "running" and (now - (t.get("finished_at") or now) > 3600)
+    ]
+    for sid in removable:
+        _tasks.pop(sid, None)
+
+
+def _start_processing_task(session_id, data, username=""):
+    """Launch _run_processing in a daemon worker thread so page navigation never aborts it."""
+    global _latest_task_id
+    if not _process_lock.acquire(blocking=False):
+        return None, ("服务器正忙，请稍后再试。", 503)
+
+    sess = session_store.get(session_id, {})
+    prev_cache = _progress.get(session_id, {}).get("cache", {})
+    _progress[session_id] = {"current": 0, "total": 0, "stage": "detect", "cache": prev_cache}
+
+    done_event = threading.Event()
+    task_rec = {
+        "session_id": session_id,
+        "username": username or "",
+        "motion_type": sess.get("motion_type", ""),
+        "original_filename": sess.get("original_filename", ""),
+        "output_dir": data.get("output_dir", ""),
+        "total_frames": sess.get("total_frames", 0),
+        "start_frame": data.get("start_frame"),
+        "calibration_points": data.get("calibration_points", []),
+        "status": "running",
+        "stage": "detect",
+        "current": 0,
+        "total": 0,
+        "started_at": _time.time(),
+        "finished_at": None,
+        "result": None,
+        "error": None,
+        "acked": False,
+        "done_event": done_event,
+    }
+    with _tasks_lock:
+        _prune_old_tasks()
+        _tasks[session_id] = task_rec
+        _latest_task_id = session_id
+
+    def on_progress(current, total):
+        p = _progress.get(session_id)
+        if p is not None:
+            p["current"] = current
+            p["total"] = total
+        with _tasks_lock:
+            t = _tasks.get(session_id)
+            if t:
+                t["current"] = int(current)
+                t["total"] = int(total)
+
+    def on_stage(stage):
+        p = _progress.get(session_id)
+        if p is not None:
+            p["stage"] = stage
+            p["current"] = 0
+            p["total"] = 0
+        with _tasks_lock:
+            t = _tasks.get(session_id)
+            if t:
+                t["stage"] = stage
+                t["current"] = 0
+                t["total"] = 0
+
+    def worker():
+        try:
+            result, error = _run_processing(
+                session_id, data,
+                progress_callback=on_progress,
+                stage_callback=on_stage,
+            )
+            with _tasks_lock:
+                t = _tasks.get(session_id)
+                if t:
+                    t["finished_at"] = _time.time()
+                    if error:
+                        t["status"] = "error"
+                        t["error"] = error.get("error", "处理失败")
+                    else:
+                        t["status"] = "done"
+                        t["stage"] = "done"
+                        t["result"] = result
+        except Exception as exc:
+            traceback.print_exc()
+            with _tasks_lock:
+                t = _tasks.get(session_id)
+                if t:
+                    t["finished_at"] = _time.time()
+                    t["status"] = "error"
+                    t["error"] = f"Processing failed: {exc}"
+        finally:
+            done_event.set()
+            _process_lock.release()
+            _progress.pop(session_id, None)
+
+    threading.Thread(target=worker, daemon=True, name=f"proc-{session_id[:8]}").start()
+    return task_rec, None
+
+
+def _row_username(u):
+    if not u:
+        return ""
+    try:
+        return u["username"] or ""
+    except Exception:
+        return ""
 
 
 @app.route("/api/process", methods=["POST"])
@@ -914,56 +1081,46 @@ def process_video(u):
         return jsonify({"error": "No JSON data provided."}), 400
 
     session_id = data.get("session_id", "")
+    task_rec, busy = _start_processing_task(session_id, data, _row_username(u))
+    if busy:
+        return jsonify({"error": busy[0]}), busy[1]
 
-    if not _process_lock.acquire(blocking=False):
-        return jsonify({"error": "服务器正忙，请稍后再试。"}), 503
-
-    _progress[session_id] = {"current": 0, "total": 0, "cache": _progress.get(session_id, {}).get("cache", {})}
-    try:
-        result, error = _run_processing(session_id, data)
-        if error:
-            return jsonify(error), 400
-        return jsonify({"success": True, "result": result, "output_dir": data.get("output_dir", "")})
-    finally:
-        _process_lock.release()
-        _progress.pop(session_id, None)
+    task_rec["done_event"].wait()
+    with _tasks_lock:
+        t = _tasks.get(session_id, task_rec)
+        if t.get("error"):
+            return jsonify({"error": t["error"]}), 400
+        res = t.get("result")
+    return jsonify({"success": True, "result": res, "output_dir": data.get("output_dir", "")})
 
 
 @app.route("/api/process_stream", methods=["POST"])
 @login_required
 def process_stream(u):
-    """SSE endpoint: streams progress events + final result."""
+    """SSE endpoint: runs work in background thread so navigation/reload does not abort."""
     data = request.get_json()
     if not data:
         return jsonify({"error": "No JSON data provided."}), 400
 
     session_id = data.get("session_id", "")
-
-    if not _process_lock.acquire(blocking=False):
-        return jsonify({"error": "服务器正忙，请稍后再试。"}), 503
+    task_rec, busy = _start_processing_task(session_id, data, _row_username(u))
+    if busy:
+        return jsonify({"error": busy[0]}), busy[1]
 
     def generate():
-        try:
-            _progress[session_id] = {"current": 0, "total": 0, "cache": _progress.get(session_id, {}).get("cache", {})}
-
-            def on_progress(current, total):
-                _progress[session_id]["current"] = current
-                _progress[session_id]["total"] = total
-
-            def on_stage(stage):
-                _progress[session_id]["stage"] = stage
-
-            result, error = _run_processing(session_id, data,
-                                            progress_callback=on_progress,
-                                            stage_callback=on_stage)
-
-            if error:
-                yield f"data: {json.dumps({'type': 'error', 'message': error['error']})}\n\n"
-            else:
-                yield f"data: {json.dumps({'type': 'result', 'result': result, 'output_dir': data.get('output_dir', '')})}\n\n"
-        finally:
-            _process_lock.release()
-            _progress.pop(session_id, None)
+        # 立即输出注释心跳刷新 HTTP 200 响应头，避免长耗时（如 10 分钟）触发浏览器/代理超时
+        yield ": connected\n\n"
+        ev = task_rec["done_event"]
+        while not ev.wait(timeout=1.0):
+            yield ": keepalive\n\n"
+        with _tasks_lock:
+            t = _tasks.get(session_id, task_rec)
+            err = t.get("error")
+            res = t.get("result")
+        if err:
+            yield f"data: {json.dumps({'type': 'error', 'message': err})}\n\n"
+        else:
+            yield f"data: {json.dumps({'type': 'result', 'result': res, 'output_dir': data.get('output_dir', '')})}\n\n"
 
     return Response(stream_with_context(generate()), mimetype="text/event-stream",
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
@@ -971,12 +1128,75 @@ def process_stream(u):
 
 @app.route("/api/progress/<session_id>")
 def get_progress(session_id):
-    p = _progress.get(session_id, {})
-    current = p.get("current", 0)
-    total = p.get("total", 1)
-    pct = min(int(current / total * 100), 100) if total > 0 else 0
-    return jsonify({"current": current, "total": total, "percent": pct,
-                    "stage": p.get("stage", "")})
+    p = _progress.get(session_id)
+    if p is not None:
+        cur = p.get("current", 0)
+        tot = p.get("total", 0)
+        with _tasks_lock:
+            t = _tasks.get(session_id)
+            elapsed = round(_time.time() - t["started_at"], 1) if t else 0.0
+        return jsonify({
+            "current": cur, "total": tot, "percent": _calc_pct(cur, tot),
+            "stage": p.get("stage", ""), "status": "running", "elapsed_sec": elapsed,
+        })
+    with _tasks_lock:
+        t = _tasks.get(session_id)
+        if t:
+            return jsonify(_task_snapshot(t, include_result=False))
+    return jsonify({"current": 0, "total": 0, "percent": 0, "stage": "", "status": "unknown", "elapsed_sec": 0.0})
+
+
+@app.route("/api/process_active")
+@login_required
+def get_active_process(u):
+    """查询当前登录用户的运行中或最新完成（未确认关闭）的分析任务，供跳转/刷新后恢复进度与结果。"""
+    req_sid = request.args.get("session_id", "").strip()
+    uname = _row_username(u)
+    now = _time.time()
+    with _tasks_lock:
+        # 1. 优先返回当前用户正在运行的任务
+        running = [
+            t for t in _tasks.values()
+            if t.get("status") == "running" and t.get("username") == uname
+        ]
+        if running:
+            t = running[-1]
+            return jsonify({"task": _task_snapshot(t, include_result=False)})
+        # 2. 若指定了 session_id（如刷新前正在跑的任务），返回其最新状态（含结果）
+        if req_sid and req_sid in _tasks:
+            t = _tasks[req_sid]
+            if t.get("username") == uname and not t.get("acked"):
+                return jsonify({"task": _task_snapshot(t, include_result=True)})
+        # 3. 兜底：返回 30 分钟内尚未关闭提示的最新完成/失败任务
+        recent = [
+            t for t in _tasks.values()
+            if t.get("username") == uname
+            and not t.get("acked")
+            and t.get("status") in ("done", "error")
+            and (now - (t.get("finished_at") or now) < 1800)
+        ]
+        if recent:
+            recent.sort(key=lambda x: x.get("finished_at") or 0, reverse=True)
+            return jsonify({"task": _task_snapshot(recent[0], include_result=True)})
+    return jsonify({"task": None})
+
+
+@app.route("/api/process_active/ack", methods=["POST"])
+@login_required
+def ack_active_process(u):
+    data = request.get_json(silent=True) or {}
+    sid = str(data.get("session_id", "")).strip()
+    uname = _row_username(u)
+    with _tasks_lock:
+        if sid and sid in _tasks:
+            t = _tasks[sid]
+            if t.get("username") == uname and t.get("status") != "running":
+                t["acked"] = True
+        elif not sid:
+            for t in _tasks.values():
+                if t.get("username") == uname and t.get("status") != "running":
+                    t["acked"] = True
+    return jsonify({"ok": True})
 
 
 @app.route("/api/cleanup", methods=["POST"])
@@ -1914,25 +2134,27 @@ def api_llm_config_test(u):
         return jsonify({"ok": False, "error": "尚未配置 API Key。"})
     try:
         from openai import OpenAI
-        client = OpenAI(api_key=api_key, base_url=base_url, timeout=20, max_retries=0)
+        from ai_agent import _call_chat_completion
+        client = OpenAI(api_key=api_key, base_url=base_url, timeout=25, max_retries=1)
         kwargs = {"model": model,
                   "messages": [{"role": "user", "content": "请只回复两个字：连通"}],
-                  "max_tokens": 16}
+                  "max_tokens": 256}
         t0 = _time.time()
         try:
-            resp = client.chat.completions.create(**kwargs)
+            resp = _call_chat_completion(client, **kwargs)
         except Exception as e:
             # 部分新模型（o 系 / gpt-5 系等）不接受 max_tokens，去掉后重试一次
             if "max_tokens" in str(e) or "max_completion_tokens" in str(e):
                 kwargs.pop("max_tokens", None)
-                resp = client.chat.completions.create(**kwargs)
+                resp = _call_chat_completion(client, **kwargs)
             else:
                 raise
         elapsed = round(_time.time() - t0, 1)
         reply = ""
         if getattr(resp, "choices", None):
-            reply = (resp.choices[0].message.content or "").strip()
-        return jsonify({"ok": True, "elapsed": elapsed, "model": model, "reply": reply[:60]})
+            msg = resp.choices[0].message
+            reply = (msg.content or getattr(msg, "reasoning_content", "") or "").strip()
+        return jsonify({"ok": True, "elapsed": elapsed, "model": model, "reply": reply[:60] or "连通"})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)[:400]})
 

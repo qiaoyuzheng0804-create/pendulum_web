@@ -1,0 +1,20 @@
+{
+  "motion_type": "danbai",
+  "output_dir": "D:\\实验结果\\danbai_demo",
+  "result": {
+    "csv_path": "D:\\实验结果\\danbai_demo\\danbai_angle_time.csv",
+    "peaks_csv": "D:\\实验结果\\danbai_demo\\danbai_peaks.csv",
+    "plot_path": "D:\\实验结果\\danbai_demo\\danbai_angle_time.png",
+    "video_path": "D:\\实验结果\\danbai_demo\\annotated_video.mp4",
+    "num_points": 1520,
+    "sr_result": {
+      "beta": 0.00412,
+      "omega0": 4.4272,
+      "zeta": 0.000931,
+      "damping_type": "欠阻尼",
+      "r2": 0.9934,
+      "plot_path": "D:\\实验结果\\danbai_demo\\sr_damping_fit.png",
+      "pendulum_length": 0.5
+    }
+  }
+}

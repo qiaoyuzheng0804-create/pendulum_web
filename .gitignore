@@ -31,3 +31,6 @@ platform.db
 
 llm_config.json
 pi_config.json
+
+# 前端截图回归产物
+tools/_shots/

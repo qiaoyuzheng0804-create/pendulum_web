@@ -1,0 +1,14 @@
+{
+  "motion_type": "niubai",
+  "output_dir": "D:\\实验结果\\niubai_err",
+  "result": {
+    "csv_path": "D:\\实验结果\\niubai_err\\angle_time_data.csv",
+    "plot_path": "D:\\实验结果\\niubai_err\\angle_time_plot.png",
+    "video_path": null,
+    "num_points": 42,
+    "period_s": null,
+    "sr_result": {
+      "error": "有效角度数据不足，无法拟合阻尼"
+    }
+  }
+}

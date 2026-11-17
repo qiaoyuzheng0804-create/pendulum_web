@@ -1,0 +1,41 @@
+{
+  "motion_type": "cizuni",
+  "output_dir": "D:\\实验结果\\cizuni_demo",
+  "result": {
+    "csv_path": "D:\\实验结果\\cizuni_demo\\pendulum_angle.csv",
+    "plot_path": "D:\\实验结果\\cizuni_demo\\angle_time_plot.png",
+    "video_path": "D:\\实验结果\\cizuni_demo\\annotated_video.mp4",
+    "num_points": 960,
+    "slow_motion_factor": 8.0,
+    "slow_motion_source": "com.android.capture.fps (240 fps)",
+    "real_fps": 240.0,
+    "start_frame": 18,
+    "sample_step": 1,
+    "time_range_s": [0.0, 4.0],
+    "angle_range_deg": [-24.5, 28.2],
+    "sr_result": {
+      "beta": 0.684,
+      "omega0": 6.912,
+      "zeta": 0.09896,
+      "omega_d": 6.878,
+      "theta_eq_deg": -0.08,
+      "damping_type": "欠阻尼",
+      "ode_r2": 0.9942,
+      "ode_rmse_deg": 0.38,
+      "r2_fit": 0.9965,
+      "plot_path": "D:\\实验结果\\cizuni_demo\\sr_analysis.png",
+      "library_coef": {
+        "a_q": -47.775,
+        "b_v": -1.368,
+        "c_q3": 1.12,
+        "d_vabs": -0.042,
+        "e_const": -0.015,
+        "omega0": 6.912,
+        "beta": 0.684,
+        "zeta": 0.099,
+        "accel_r2": 0.951
+      },
+      "final_source": "欠阻尼解析解时域拟合 + ODE验证"
+    }
+  }
+}
